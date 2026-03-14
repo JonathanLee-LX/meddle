@@ -31,7 +31,7 @@ export function useLogs(maxRecords: number = 1000) {
 
     const connectWebSocket = () => {
       const protocol = location.protocol === 'https:' ? 'wss://' : 'ws://'
-      const ws = new WebSocket(protocol + location.host + '/')
+      const ws = new WebSocket(protocol + location.host + '/ws')
 
       ws.addEventListener('message', (ev) => {
         try {

@@ -522,7 +522,13 @@ proxyServer.on('connect', async (req, socket, header) => {
     }
 })
 
-proxyServer.on('upgrade', (req, socket, header) => {})
+proxyServer.on('upgrade', (req, socket, header) => {
+    if (req.url === '/ws' || req.url.startsWith('/ws?')) {
+        localWSServer.handleUpgrade(req, socket, header)
+    } else {
+        socket.destroy()
+    }
+})
 
 process.on('uncaughtException', function (err) {
     console.error(err.stack)
