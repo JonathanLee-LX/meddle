@@ -25,6 +25,7 @@ export async function decideRoute(options: RouteDecisionOptions): Promise<RouteD
             target: decision.target,
             shortCircuited: !!decision.shortCircuited,
             response: decision.response || null,
+            meta: decision.meta,
         };
     }
 

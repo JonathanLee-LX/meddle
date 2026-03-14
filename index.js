@@ -187,6 +187,8 @@ const proxyServer = http.createServer((req, res) => {
                     if (removed.id !== undefined) ctx.proxyRecordDetailMap.delete(removed.id)
                 }
                 const responseEncoding = proxyRes.headers && proxyRes.headers['content-encoding']
+                // 获取 inspection 信息
+                const inspectionStages = routeDecision.meta?._inspectionStages || []
                 const detail = {
                     requestHeaders: req.headers,
                     requestBody: safeBodyToString(reqBody, ctx.MAX_BODY_SIZE),
@@ -194,6 +196,12 @@ const proxyServer = http.createServer((req, res) => {
                     responseBody: safeBodyToString(resBody, ctx.MAX_BODY_SIZE, responseEncoding),
                     statusCode: proxyRes.statusCode, statusMessage: proxyRes.statusMessage,
                     method: req.method, url: source,
+                    inspection: inspectionStages.length > 0 ? {
+                        url: source,
+                        method: req.method,
+                        stages: inspectionStages,
+                        totalDuration: inspectionStages.reduce(function(sum, s) { return sum + s.duration }, 0),
+                    } : undefined,
                 }
                 ctx.proxyRecordDetailMap.set(recordId, detail)
                 if (ctx.proxyRecordDetailMap.size > ctx.MAX_DETAIL_SIZE) {
@@ -349,6 +357,8 @@ proxyServer.on('connect', async (req, socket, header) => {
                                     if (removed.id !== undefined) ctx.proxyRecordDetailMap.delete(removed.id)
                                 }
                                 const responseEncoding = proxyRes.headers && proxyRes.headers['content-encoding']
+                                // 获取 inspection 信息
+                                const inspectionStages = routeDecision.meta?._inspectionStages || []
                                 const detail = {
                                     requestHeaders: req.headers,
                                     requestBody: safeBodyToString(reqBody, ctx.MAX_BODY_SIZE),
@@ -356,13 +366,18 @@ proxyServer.on('connect', async (req, socket, header) => {
                                     responseBody: safeBodyToString(resBody, ctx.MAX_BODY_SIZE, responseEncoding),
                                     statusCode: proxyRes.statusCode, statusMessage: proxyRes.statusMessage,
                                     method: req.method, url: source,
+                                    inspection: inspectionStages.length > 0 ? {
+                                        url: source,
+                                        method: req.method,
+                                        stages: inspectionStages,
+                                        totalDuration: inspectionStages.reduce(function(sum, s) { return sum + s.duration }, 0),
+                                    } : undefined,
                                 }
                                 ctx.proxyRecordDetailMap.set(recordId, detail)
                                 if (ctx.proxyRecordDetailMap.size > ctx.MAX_DETAIL_SIZE) {
-                                    const ids = Array.from(ctx.proxyRecordDetailMap.keys()).sort((a, b) => a - b)
+                                    const ids = Array.from(ctx.proxyRecordDetailMap.keys()).sort(function(a, b) { return a - b })
                                     ctx.proxyRecordDetailMap.delete(ids[0])
                                 }
-                                console.table(logData)
                             })
                         } catch (err) {
                             const code = err.code || ''

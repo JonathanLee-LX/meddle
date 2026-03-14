@@ -10,9 +10,9 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Loader2, Wand2, RotateCw } from 'lucide-react'
+import { Loader2, Wand2, RotateCw, Activity, CheckCircle2, XCircle, AlertCircle, ArrowRight, Clock } from 'lucide-react'
 import { highlightCode } from '@/lib/syntax-highlight'
-import type { RecordDetail, ProxyRecord } from '@/types'
+import type { RecordDetail, ProxyRecord, InspectionStage } from '@/types'
 
 interface DetailPanelProps {
   open: boolean
@@ -63,6 +63,148 @@ function BodyView({ body }: { body: string }) {
   return (
     <div className="font-mono text-xs bg-muted/30 rounded p-2">
       <pre className="whitespace-pre-wrap break-all">{highlightedBody}</pre>
+    </div>
+  )
+}
+
+function getStatusIcon(status: InspectionStage['status']) {
+  switch (status) {
+    case 'ok':
+      return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+    case 'error':
+      return <XCircle className="h-3.5 w-3.5 text-red-500" />
+    case 'skipped':
+      return <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
+    case 'short-circuited':
+      return <ArrowRight className="h-3.5 w-3.5 text-blue-500" />
+    default:
+      return null
+  }
+}
+
+function getStatusBadgeVariant(status: InspectionStage['status']) {
+  switch (status) {
+    case 'ok':
+      return 'bg-green-100 text-green-800 border-green-200'
+    case 'error':
+      return 'bg-red-100 text-red-800 border-red-200'
+    case 'skipped':
+      return 'bg-amber-100 text-amber-800 border-amber-200'
+    case 'short-circuited':
+      return 'bg-blue-100 text-blue-800 border-blue-200'
+    default:
+      return ''
+  }
+}
+
+function InspectionView({ inspection }: { inspection: NonNullable<RecordDetail['inspection']> }) {
+  return (
+    <div className="space-y-4 pt-3">
+      {/* 请求基本信息 */}
+      <div className="flex items-center gap-4 text-sm">
+        <Badge variant="outline" className="font-mono">
+          {inspection.method}
+        </Badge>
+        <span className="font-mono text-muted-foreground truncate flex-1">
+          {inspection.url}
+        </span>
+        <div className="flex items-center gap-1 text-muted-foreground">
+          <Clock className="h-3.5 w-3.5" />
+          <span className="text-xs">{inspection.totalDuration}ms</span>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* 处理阶段列表 */}
+      {inspection.stages.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-4 text-center">
+          无处理阶段信息（插件模式可能未开启）
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {inspection.stages.map((stage, index) => (
+            <div
+              key={`${stage.name}-${index}`}
+              className="border rounded-lg p-3 space-y-2"
+            >
+              {/* 阶段头部 */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {getStatusIcon(stage.status)}
+                  <span className="font-medium text-sm">{stage.name}</span>
+                  <Badge variant="outline" className="text-xs font-normal">
+                    {stage.hook}
+                  </Badge>
+                  {stage.type !== 'system' && (
+                    <Badge variant="outline" className="text-xs font-normal">
+                      {stage.type}
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge className={`text-xs border ${getStatusBadgeVariant(stage.status)}`}>
+                    {stage.status}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {stage.duration}ms
+                  </span>
+                </div>
+              </div>
+
+              {/* Target 变化 */}
+              {stage.target && (
+                <div className="text-xs">
+                  <span className="text-muted-foreground">Target: </span>
+                  <span className="font-mono">{stage.target}</span>
+                </div>
+              )}
+
+              {/* 变化详情 */}
+              {stage.changes && (
+                <div className="bg-muted/50 rounded p-2 space-y-1.5">
+                  {stage.changes.target && (
+                    <div className="text-xs">
+                      <span className="text-muted-foreground">Target changed: </span>
+                      <span className="font-mono">{stage.changes.target}</span>
+                    </div>
+                  )}
+                  {stage.changes.responseStatusCode && (
+                    <div className="text-xs">
+                      <span className="text-muted-foreground">Status: </span>
+                      <span className="font-mono">{stage.changes.responseStatusCode}</span>
+                    </div>
+                  )}
+                  {stage.changes.responseHeaders && (
+                    <div className="text-xs">
+                      <span className="text-muted-foreground">Headers: </span>
+                      <span className="font-mono">
+                        {Object.keys(stage.changes.responseHeaders).join(', ')}
+                      </span>
+                    </div>
+                  )}
+                  {stage.changes.responseBody && (
+                    <div className="text-xs">
+                      <span className="text-muted-foreground">Body: </span>
+                      <span className="font-mono truncate block max-w-xs">
+                        {stage.changes.responseBody.substring(0, 50)}
+                        {stage.changes.responseBody.length > 50 ? '...' : ''}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 错误信息 */}
+              {stage.error && (
+                <div className="text-xs text-red-600">
+                  Error: {stage.error}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -154,6 +296,10 @@ export function DetailPanel({ open, onClose, detail, loading, selectedRecord, on
             <TabsList className="mx-4 mt-2 w-fit">
               <TabsTrigger value="request">请求</TabsTrigger>
               <TabsTrigger value="response">响应</TabsTrigger>
+              <TabsTrigger value="inspect">
+                <Activity className="h-3.5 w-3.5 mr-1" />
+                Inspect
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="request" className="flex-1 min-h-0 mt-0">
               <ScrollArea className="h-full px-4 pb-4">
@@ -183,6 +329,21 @@ export function DetailPanel({ open, onClose, detail, loading, selectedRecord, on
                     <BodyView body={detail.responseBody} />
                   </div>
                 </div>
+              </ScrollArea>
+            </TabsContent>
+            <TabsContent value="inspect" className="flex-1 min-h-0 mt-0">
+              <ScrollArea className="h-full px-4 pb-4">
+                {detail.inspection ? (
+                  <InspectionView inspection={detail.inspection} />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full py-12 text-muted-foreground">
+                    <Activity className="h-12 w-12 mb-4 opacity-50" />
+                    <p className="text-sm">无 Inspect 信息</p>
+                    <p className="text-xs mt-1">
+                      需要开启插件模式（on/shadow）才能查看请求生命周期
+                    </p>
+                  </div>
+                )}
               </ScrollArea>
             </TabsContent>
           </Tabs>

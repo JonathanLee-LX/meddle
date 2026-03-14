@@ -192,7 +192,9 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
                     id: recordId, method: logInfo.method, source: logInfo.source,
                     target: `[MOCK: ${rule.name || rule.urlPattern}]`,
                     time: new Date().toLocaleTimeString(), mock: true as const,
-                    statusCode: finalStatusCode, duration
+                    statusCode: finalStatusCode, duration,
+                    mockRuleId: rule.id,
+                    mockRuleName: rule.name,
                 }
                 try {
                     if (ctx.localWSServer) ctx.localWSServer.clients.forEach((client: any) => client.send(JSON.stringify(logData)))
@@ -206,6 +208,27 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
                     requestHeaders: req.headers || {}, requestBody: '',
                     responseHeaders, responseBody, statusCode: finalStatusCode,
                     statusMessage, method: logInfo.method, url: logInfo.source,
+                    // 添加 mock 相关的 inspection 信息
+                    inspection: {
+                        url: logInfo.source,
+                        method: logInfo.method,
+                        stages: [
+                            {
+                                name: 'builtin.mock',
+                                type: 'builtin',
+                                hook: 'onBeforeProxy',
+                                status: 'ok',
+                                duration: 0,
+                                shortCircuited: true,
+                                changes: {
+                                    responseStatusCode: finalStatusCode,
+                                    responseHeaders,
+                                    responseBody: typeof responseBody === 'string' ? responseBody : '',
+                                },
+                            },
+                        ],
+                        totalDuration: duration,
+                    },
                 }
                 ctx.proxyRecordDetailMap.set(recordId, detail)
                 if (ctx.proxyRecordDetailMap.size > ctx.MAX_DETAIL_SIZE) {

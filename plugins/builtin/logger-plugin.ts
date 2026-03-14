@@ -48,7 +48,22 @@ export function createBuiltinLoggerPlugin(options: LoggerPluginOptions = {}): Lo
             const duration = Date.now() - startAt;
             const statusCode = ctx.response.statusCode;
             const method = String(ctx.request.method || 'UNKNOWN').toUpperCase();
-            
+
+            // 获取路由匹配信息
+            const matchedRule = ctx.meta.matchedRule;
+            const matchedTarget = ctx.meta.matchedTarget;
+            const mockRuleId = ctx.meta.mockRuleId;
+            const mockRuleName = ctx.meta.mockRuleName;
+            const routerMatched = ctx.meta.routerMatched;
+
+            // 判断命中类型
+            let hitType: 'route' | 'mock' | 'direct' = 'direct';
+            if (mockRuleId) {
+                hitType = 'mock';
+            } else if (routerMatched) {
+                hitType = 'route';
+            }
+
             entries.push({
                 type: 'response',
                 method,
@@ -56,6 +71,11 @@ export function createBuiltinLoggerPlugin(options: LoggerPluginOptions = {}): Lo
                 statusCode,
                 duration,
                 ts: Date.now(),
+                matchedRule,
+                matchedTarget,
+                mockRuleId,
+                mockRuleName,
+                hitType,
             });
             
             counters.totalResponses += 1;

@@ -57,6 +57,7 @@ export interface HookContext {
     meta: Record<string, any>;
     shortCircuited: boolean;
     shortCircuitResponse: Response | null;
+    log: Logger;  // 插件日志接口
     setTarget(nextTarget: string): void;
     respond(response: Response): void;
 }
@@ -66,6 +67,7 @@ export interface ResponseContext {
     target: string;
     meta: Record<string, any>;
     response: Response;
+    log: Logger;  // 插件日志接口
 }
 
 export interface PipelineDecision {
@@ -260,6 +262,7 @@ export interface RouteDecisionResult {
     target: string;
     shortCircuited: boolean;
     response: Response | null;
+    meta?: Record<string, any>;  // 包含 _inspectionStages 等信息
 }
 
 export interface PluginHealthInput {
@@ -369,6 +372,14 @@ export interface LoggerEntry {
     ts: number;
     phase?: string;
     message?: string;
+    // 路由匹配信息
+    matchedRule?: string;
+    matchedTarget?: string;
+    // Mock 规则信息
+    mockRuleId?: number;
+    mockRuleName?: string;
+    // 命中类型
+    hitType?: 'route' | 'mock' | 'direct';
 }
 
 export interface LoggerSummary {
@@ -385,6 +396,34 @@ export interface LoggerSummary {
     avgDuration: number;
     minDuration: number | null;
     maxDuration: number | null;
+}
+
+// ===== Request Inspection: 请求生命周期追踪 =====
+
+export interface InspectionStage {
+    name: string;           // 插件/模块名称
+    type: 'builtin' | 'custom' | 'system';  // 类型
+    hook: string;           // hook 名称
+    status: 'ok' | 'error' | 'skipped' | 'short-circuited';  // 状态
+    duration: number;       // 执行时间 (ms)
+    target?: string;        // 处理后的 target
+    shortCircuited?: boolean;  // 是否短路（提前返回）
+    // 变化内容
+    changes?: {
+        target?: string;       // target 变化
+        requestHeaders?: Record<string, string>;  // 请求头变化
+        responseHeaders?: Record<string, string>; // 响应头变化
+        responseStatusCode?: number;   // 响应状态码变化
+        responseBody?: string;  // 响应体变化（仅适用于 short-circuit）
+    };
+    error?: string;         // 错误信息
+}
+
+export interface RequestInspection {
+    url: string;
+    method: string;
+    stages: InspectionStage[];
+    totalDuration: number;
 }
 
 export interface BuiltinPluginsOptions {

@@ -18,13 +18,20 @@ export function createBuiltinRouterPlugin(options: RouterPluginOptions): Plugin 
         onBeforeProxy(ctx: HookContext): void {
             const sourceUrl = ctx.request && ctx.request.url;
             if (!sourceUrl) return;
-            
+
+            const ruleMap = getRuleMap();
             // Import resolveTargetUrl dynamically to avoid circular dependency
             const { resolveTargetUrl } = require('../../helpers');
-            const mapped = resolveTargetUrl(sourceUrl, getRuleMap());
+            const mapped = resolveTargetUrl(sourceUrl, ruleMap);
             if (mapped) {
                 ctx.setTarget(mapped);
                 ctx.meta.routerMatched = true;
+                // 记录匹配的路由规则
+                const matchedPattern = Object.keys(ruleMap).find(pattern => new RegExp(pattern).test(sourceUrl));
+                if (matchedPattern) {
+                    ctx.meta.matchedRule = matchedPattern;
+                    ctx.meta.matchedTarget = mapped;
+                }
             }
         },
     };

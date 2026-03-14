@@ -52,9 +52,14 @@ export function handleMapLocalRequest(ctx: ProxyContext, req: any, res: any, sou
     }
 
     function makeLogData(statusCode: number, duration: number) {
+        // 查找匹配的路由规则
+        const matchedRule = Object.keys(ctx.ruleMap).find(pattern => new RegExp(pattern).test(source))
+        const matchedTarget = matchedRule ? ctx.ruleMap[matchedRule] : null
         return {
             id: recordId, method: req.method as string, source, target: fileUrl,
-            time: new Date().toLocaleTimeString(), mapLocal: true, statusCode, duration
+            time: new Date().toLocaleTimeString(), mapLocal: true, statusCode, duration,
+            matchedRule: matchedRule || undefined,
+            matchedTarget: matchedTarget || undefined,
         }
     }
 
@@ -67,6 +72,23 @@ export function handleMapLocalRequest(ctx: ProxyContext, req: any, res: any, sou
             requestHeaders: req.headers || {}, requestBody: '',
             responseHeaders: { 'Content-Type': 'text/plain; charset=utf-8' },
             responseBody: body, statusCode: 404, statusMessage: 'Not Found', method: req.method, url: source,
+            inspection: {
+                url: source,
+                method: req.method as string,
+                stages: [
+                    {
+                        name: 'builtin.router',
+                        type: 'builtin',
+                        hook: 'onBeforeProxy',
+                        status: 'ok',
+                        duration: 0,
+                        target: fileUrl,
+                        shortCircuited: true,
+                        changes: { target: fileUrl },
+                    },
+                ],
+                totalDuration: duration,
+            },
         })
         return
     }
@@ -100,6 +122,25 @@ export function handleMapLocalRequest(ctx: ProxyContext, req: any, res: any, sou
             responseBody: mimeType.startsWith('text/') || mimeType === 'application/json'
                 ? fileContent.toString('utf8') : `(binary, ${fileContent.length} bytes)`,
             statusCode: 200, statusMessage: 'OK', method: req.method, url: source,
+            inspection: {
+                url: source,
+                method: req.method as string,
+                stages: [
+                    {
+                        name: 'builtin.router',
+                        type: 'builtin',
+                        hook: 'onBeforeProxy',
+                        status: 'ok',
+                        duration: 0,
+                        target: fileUrl,
+                        shortCircuited: true,
+                        changes: {
+                            target: fileUrl,
+                        },
+                    },
+                ],
+                totalDuration: duration,
+            },
         })
     } catch (err: any) {
         const duration = Date.now() - startTime
@@ -110,6 +151,22 @@ export function handleMapLocalRequest(ctx: ProxyContext, req: any, res: any, sou
             requestHeaders: req.headers || {}, requestBody: '',
             responseHeaders: { 'Content-Type': 'text/plain; charset=utf-8' },
             responseBody: body, statusCode: 500, statusMessage: 'Internal Server Error', method: req.method, url: source,
+            inspection: {
+                url: source,
+                method: req.method as string,
+                stages: [
+                    {
+                        name: 'builtin.router',
+                        type: 'builtin',
+                        hook: 'onBeforeProxy',
+                        status: 'error',
+                        duration: 0,
+                        target: fileUrl,
+                        error: err.message,
+                    },
+                ],
+                totalDuration: duration,
+            },
         })
     }
 }

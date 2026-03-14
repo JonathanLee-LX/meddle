@@ -1,7 +1,7 @@
-import { 
-    Pipeline, 
-    PipelineOptions, 
-    PipelineDecision, 
+import {
+    Pipeline,
+    PipelineOptions,
+    PipelineDecision,
     PipelineResult,
     PipelineExecuteInput,
     HookContext,
@@ -9,7 +9,8 @@ import {
     Request,
     Response,
     PluginMode,
-    Logger
+    Logger,
+    InspectionStage,
 } from './types';
 
 const SUPPORTED_MODES = new Set<string>(['off', 'shadow', 'on']);
@@ -114,12 +115,16 @@ export function createPipeline(options: PipelineOptions): Pipeline {
 }
 
 function createHookContext(request: Request, target: string): HookContext {
+    const inspectionStages: InspectionStage[] = [];
     return {
         request,
         target,
-        meta: {},
+        meta: {
+            _inspectionStages: inspectionStages,
+        },
         shortCircuited: false,
         shortCircuitResponse: null,
+        log: console,  // 为插件提供日志接口
         setTarget(nextTarget: string): void {
             this.target = nextTarget;
         },
@@ -131,13 +136,14 @@ function createHookContext(request: Request, target: string): HookContext {
 }
 
 function createResponseContext(
-    requestContext: { request: Request; target: string; meta: Record<string, any> }, 
+    requestContext: { request: Request; target: string; meta: Record<string, any> },
     response: Partial<Response>
 ): ResponseContext {
     return {
         request: requestContext.request,
         target: requestContext.target,
         meta: requestContext.meta,
+        log: console,  // 为插件提供日志接口
         response: {
             statusCode: response.statusCode || 200,
             headers: response.headers || {},
@@ -147,18 +153,78 @@ function createResponseContext(
 }
 
 async function safeDispatch(
-    dispatcher: any, 
-    logger: Logger, 
-    hookName: string, 
+    dispatcher: any,
+    logger: Logger,
+    hookName: string,
     context: HookContext | ResponseContext
 ): Promise<any[]> {
+    const stages = (context as HookContext).meta?._inspectionStages as InspectionStage[] | undefined;
+    const prevTarget = (context as HookContext).target;
+    const prevShortCircuited = (context as HookContext).shortCircuited;
+
     try {
-        return await dispatcher.dispatch(hookName, context);
+        const results = await dispatcher.dispatch(hookName, context);
+
+        // 记录每个插件的执行结果
+        if (stages && Array.isArray(results)) {
+            for (const result of results) {
+                const stage: InspectionStage = {
+                    name: result.pluginId || 'unknown',
+                    type: result.pluginId?.startsWith('builtin.') ? 'builtin' : 'custom',
+                    hook: hookName,
+                    status: result.status === 'ok' ? 'ok' : result.status === 'skipped-disabled' ? 'skipped' : 'error',
+                    duration: result.duration || 0,
+                    target: (context as HookContext).target,
+                    error: result.error,
+                };
+
+                // 记录 target 变化
+                if ((context as HookContext).target !== prevTarget) {
+                    stage.changes = {
+                        ...stage.changes,
+                        target: (context as HookContext).target,
+                    };
+                }
+
+                // 记录短路状态
+                if ((context as HookContext).shortCircuited && !prevShortCircuited) {
+                    stage.shortCircuited = true;
+                    stage.status = 'short-circuited';
+                    // 记录响应变化
+                    const shortCircuitResponse = (context as HookContext).shortCircuitResponse;
+                    if (shortCircuitResponse) {
+                        stage.changes = {
+                            ...stage.changes,
+                            responseStatusCode: shortCircuitResponse.statusCode,
+                            responseHeaders: shortCircuitResponse.headers as Record<string, string>,
+                            responseBody: typeof shortCircuitResponse.body === 'string' ? shortCircuitResponse.body : '',
+                        };
+                    }
+                }
+
+                stages.push(stage);
+            }
+        }
+
+        return results;
     } catch (error: any) {
         logger.error(
             `[pipeline] dispatch ${hookName} failed:`,
             error && error.message ? error.message : error
         );
+
+        // 记录错误阶段
+        if (stages) {
+            stages.push({
+                name: 'pipeline',
+                type: 'system',
+                hook: hookName,
+                status: 'error',
+                duration: 0,
+                error: error?.message || String(error),
+            });
+        }
+
         return [];
     }
 }
