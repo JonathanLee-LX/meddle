@@ -462,6 +462,7 @@ export interface ProxyRecordDetail {
     statusMessage?: string;
     method: string;
     url: string;
+    inspection?: RequestInspection;
 }
 
 export interface ProxyContext {

@@ -191,6 +191,16 @@
 
         window.__epStore = store
 
+        function isProxyRecordMessage(data) {
+            return data &&
+                typeof data === 'object' &&
+                typeof data.id === 'number' &&
+                typeof data.method === 'string' &&
+                typeof data.source === 'string' &&
+                typeof data.target === 'string' &&
+                typeof data.time === 'string'
+        }
+
         // WebSocket with reconnection
         let ws = null
         let reconnectTimeout = null
@@ -200,7 +210,7 @@
 
         const connectWebSocket = () => {
             const protocol = location.protocol === "https:" ? "wss://" : "ws://";
-            ws = new WebSocket(protocol + location.host + location.pathname)
+            ws = new WebSocket(protocol + location.host + '/ws')
 
             ws.addEventListener('error', (ev) => {
                 console.error('WebSocket error:', ev)
@@ -231,6 +241,8 @@
             ws.addEventListener('message', (ev) => {
                 try {
                     const data = JSON.parse(ev.data)
+                    if (data && data.type === 'mocksUpdated') return
+                    if (!isProxyRecordMessage(data)) return
                     store.recordList.push(data)
                 } catch (e) {
                     console.error('Failed to parse WebSocket message:', e)

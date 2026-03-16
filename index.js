@@ -28,6 +28,7 @@ const { createPluginBootstrapRunner } = require('./dist/core/plugin-bootstrap-ru
 const { openBrowserWithProxy } = require('./dist/core/browser')
 const { handleLocalRequest } = require('./dist/core/static-server')
 const { createConfigDiagnostics } = require('./dist/core/config-diagnostics')
+const { appendProxyRecord } = require('./dist/core/proxy-record')
 
 const mockHandler = createMockHandler(ctx)
 const pluginIntercept = createPluginIntercept(ctx)
@@ -70,23 +71,7 @@ const serverContext = {
     appendProxyRecordFromPluginTest: (logData, detail) => {
         const recordId = ctx.recordIdSeq++
         const entry = { id: recordId, ...logData }
-        ctx.proxyRecordArr.push(entry)
-        if (ctx.proxyRecordArr.length > ctx.MAX_RECORD_SIZE) {
-            const removed = ctx.proxyRecordArr.shift()
-            if (removed.id !== undefined) ctx.proxyRecordDetailMap.delete(removed.id)
-        }
-        if (detail) {
-            ctx.proxyRecordDetailMap.set(recordId, detail)
-            if (ctx.proxyRecordDetailMap.size > ctx.MAX_DETAIL_SIZE) {
-                const firstKey = ctx.proxyRecordDetailMap.keys().next().value
-                ctx.proxyRecordDetailMap.delete(firstKey)
-            }
-        }
-        if (ctx.localWSServer) {
-            ctx.localWSServer.clients.forEach(client => {
-                if (client.readyState === 1) client.send(JSON.stringify(entry))
-            })
-        }
+        appendProxyRecord(ctx, entry, detail)
     },
     getMockFilePath: () => mockHandler.getMockFilePath(),
     performConfigDiagnostics: () => configDiag && configDiag.performConfigDiagnostics(),
@@ -180,12 +165,6 @@ const proxyServer = http.createServer((req, res) => {
                     duration: Date.now() - startTime
                 }
                 if (!intercepting) pluginIntercept.emitLegacyResponseToPlugins(logData)
-                ctx.localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
-                ctx.proxyRecordArr.push(logData)
-                if (ctx.proxyRecordArr.length > ctx.MAX_RECORD_SIZE) {
-                    const removed = ctx.proxyRecordArr.shift()
-                    if (removed.id !== undefined) ctx.proxyRecordDetailMap.delete(removed.id)
-                }
                 const responseEncoding = proxyRes.headers && proxyRes.headers['content-encoding']
                 // 获取 inspection 信息
                 const inspectionStages = routeDecision.meta?._inspectionStages || []
@@ -203,11 +182,7 @@ const proxyServer = http.createServer((req, res) => {
                         totalDuration: inspectionStages.reduce(function(sum, s) { return sum + s.duration }, 0),
                     } : undefined,
                 }
-                ctx.proxyRecordDetailMap.set(recordId, detail)
-                if (ctx.proxyRecordDetailMap.size > ctx.MAX_DETAIL_SIZE) {
-                    const firstKey = ctx.proxyRecordDetailMap.keys().next().value
-                    ctx.proxyRecordDetailMap.delete(firstKey)
-                }
+                appendProxyRecord(ctx, logData, detail)
             })
         })
         proxyReq.on('error', (err) => {
@@ -350,12 +325,6 @@ proxyServer.on('connect', async (req, socket, header) => {
                                     statusCode: proxyRes.statusCode, duration: Date.now() - startTime
                                 }
                                 if (!intercepting) pluginIntercept.emitLegacyResponseToPlugins(logData)
-                                localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
-                                ctx.proxyRecordArr.push(logData)
-                                if (ctx.proxyRecordArr.length > ctx.MAX_RECORD_SIZE) {
-                                    const removed = ctx.proxyRecordArr.shift()
-                                    if (removed.id !== undefined) ctx.proxyRecordDetailMap.delete(removed.id)
-                                }
                                 const responseEncoding = proxyRes.headers && proxyRes.headers['content-encoding']
                                 // 获取 inspection 信息
                                 const inspectionStages = routeDecision.meta?._inspectionStages || []
@@ -373,11 +342,7 @@ proxyServer.on('connect', async (req, socket, header) => {
                                         totalDuration: inspectionStages.reduce(function(sum, s) { return sum + s.duration }, 0),
                                     } : undefined,
                                 }
-                                ctx.proxyRecordDetailMap.set(recordId, detail)
-                                if (ctx.proxyRecordDetailMap.size > ctx.MAX_DETAIL_SIZE) {
-                                    const ids = Array.from(ctx.proxyRecordDetailMap.keys()).sort(function(a, b) { return a - b })
-                                    ctx.proxyRecordDetailMap.delete(ids[0])
-                                }
+                                appendProxyRecord(ctx, logData, detail)
                             })
                         } catch (err) {
                             const code = err.code || ''

@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import type { ProxyContext } from './types'
+import { appendProxyRecord } from './proxy-record'
 
 const MIME_TYPES: Record<string, string> = {
     '.html': 'text/html', '.htm': 'text/html', '.css': 'text/css',
@@ -33,24 +34,6 @@ export function handleMapLocalRequest(ctx: ProxyContext, req: any, res: any, sou
     req.on('error', () => { /* drain */ })
     req.resume()
 
-    function pushLog(logData: any, detail?: any): void {
-        try {
-            if (ctx.localWSServer) ctx.localWSServer.clients.forEach((client: any) => client.send(JSON.stringify(logData)))
-        } catch (_) { /* ignore */ }
-        ctx.proxyRecordArr.push(logData)
-        if (ctx.proxyRecordArr.length > ctx.MAX_RECORD_SIZE) {
-            const removed = ctx.proxyRecordArr.shift()
-            if (removed && removed.id !== undefined) ctx.proxyRecordDetailMap.delete(removed.id)
-        }
-        if (detail) {
-            ctx.proxyRecordDetailMap.set(logData.id, detail)
-            if (ctx.proxyRecordDetailMap.size > ctx.MAX_DETAIL_SIZE) {
-                const firstKey = ctx.proxyRecordDetailMap.keys().next().value
-                if (firstKey !== undefined) ctx.proxyRecordDetailMap.delete(firstKey)
-            }
-        }
-    }
-
     function makeLogData(statusCode: number, duration: number) {
         // 查找匹配的路由规则
         const matchedRule = Object.keys(ctx.ruleMap).find(pattern => new RegExp(pattern).test(source))
@@ -68,7 +51,7 @@ export function handleMapLocalRequest(ctx: ProxyContext, req: any, res: any, sou
         const body = 'File not found: ' + filePath
         res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' })
         res.end(body)
-        pushLog(makeLogData(404, duration), {
+        appendProxyRecord(ctx, makeLogData(404, duration), {
             requestHeaders: req.headers || {}, requestBody: '',
             responseHeaders: { 'Content-Type': 'text/plain; charset=utf-8' },
             responseBody: body, statusCode: 404, statusMessage: 'Not Found', method: req.method, url: source,
@@ -99,7 +82,7 @@ export function handleMapLocalRequest(ctx: ProxyContext, req: any, res: any, sou
         const body = 'Is a directory: ' + filePath
         res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' })
         res.end(body)
-        pushLog(makeLogData(403, duration))
+        appendProxyRecord(ctx, makeLogData(403, duration))
         return
     }
 
@@ -116,7 +99,7 @@ export function handleMapLocalRequest(ctx: ProxyContext, req: any, res: any, sou
         }
         res.writeHead(200, headers)
         res.end(fileContent)
-        pushLog(makeLogData(200, duration), {
+        appendProxyRecord(ctx, makeLogData(200, duration), {
             requestHeaders: req.headers || {}, requestBody: '',
             responseHeaders: headers,
             responseBody: mimeType.startsWith('text/') || mimeType === 'application/json'
@@ -147,7 +130,7 @@ export function handleMapLocalRequest(ctx: ProxyContext, req: any, res: any, sou
         const body = 'Error reading file: ' + err.message
         res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' })
         res.end(body)
-        pushLog(makeLogData(500, duration), {
+        appendProxyRecord(ctx, makeLogData(500, duration), {
             requestHeaders: req.headers || {}, requestBody: '',
             responseHeaders: { 'Content-Type': 'text/plain; charset=utf-8' },
             responseBody: body, statusCode: 500, statusMessage: 'Internal Server Error', method: req.method, url: source,

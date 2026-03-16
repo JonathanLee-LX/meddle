@@ -1,6 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { ProxyRecord, RecordDetail } from '@/types'
 
+function isProxyRecordMessage(data: unknown): data is ProxyRecord {
+  if (!data || typeof data !== 'object') return false
+  const value = data as Record<string, unknown>
+  return typeof value.id === 'number' &&
+    typeof value.method === 'string' &&
+    typeof value.source === 'string' &&
+    typeof value.target === 'string' &&
+    typeof value.time === 'string'
+}
+
 /**
  * Hook for managing proxy logs and details
  * Handles WebSocket connection, log records, and detail fetching
@@ -40,8 +50,9 @@ export function useLogs(maxRecords: number = 1000) {
             window.dispatchEvent(new CustomEvent('mocksUpdated', { detail: data.rules ?? [] }))
             return
           }
+          if (!isProxyRecordMessage(data)) return
           setRecords((prev) => {
-            const newRecords = [data as ProxyRecord, ...prev]
+            const newRecords = [data, ...prev]
             return newRecords.slice(0, maxRecordsRef.current)
           })
         } catch (e) {

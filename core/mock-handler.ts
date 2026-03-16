@@ -2,6 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import _debug from 'debug'
 import { getMimeType } from './map-local'
+import { appendProxyRecord } from './proxy-record'
 import type { ProxyContext, MockHandler, MockRuleEntry } from './types'
 
 const proxyDebug = _debug('proxy')
@@ -196,15 +197,7 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
                     mockRuleId: rule.id,
                     mockRuleName: rule.name,
                 }
-                try {
-                    if (ctx.localWSServer) ctx.localWSServer.clients.forEach((client: any) => client.send(JSON.stringify(logData)))
-                } catch (_) { /* ignore */ }
-                ctx.proxyRecordArr.push(logData)
-                if (ctx.proxyRecordArr.length > ctx.MAX_RECORD_SIZE) {
-                    const removed = ctx.proxyRecordArr.shift()
-                    if (removed && removed.id !== undefined) ctx.proxyRecordDetailMap.delete(removed.id)
-                }
-                const detail = {
+                const detail: ProxyContext['proxyRecordDetailMap'] extends Map<number, infer T> ? T : never = {
                     requestHeaders: req.headers || {}, requestBody: '',
                     responseHeaders, responseBody, statusCode: finalStatusCode,
                     statusMessage, method: logInfo.method, url: logInfo.source,
@@ -230,11 +223,7 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
                         totalDuration: duration,
                     },
                 }
-                ctx.proxyRecordDetailMap.set(recordId, detail)
-                if (ctx.proxyRecordDetailMap.size > ctx.MAX_DETAIL_SIZE) {
-                    const firstKey = ctx.proxyRecordDetailMap.keys().next().value
-                    if (firstKey !== undefined) ctx.proxyRecordDetailMap.delete(firstKey)
-                }
+                appendProxyRecord(ctx, logData, detail)
             }
         }
 
