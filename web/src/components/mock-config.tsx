@@ -484,7 +484,7 @@ export function MockConfig({
 
       {/* 编辑面板 */}
       <Sheet open={editOpen} onOpenChange={setEditOpen}>
-        <SheetContent className="p-0 flex flex-col" resizable={true}>
+        <SheetContent className="p-0 flex flex-col" resizable defaultWidth={700} storageKey="mock-config-editor">
           <SheetHeader className="px-4 pt-4 pb-2">
             <SheetTitle className="text-base">
               {editId != null ? '编辑 Mock 规则' : '新建 Mock 规则'}

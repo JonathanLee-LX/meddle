@@ -87,7 +87,7 @@ function SheetContent({
 
     const handleMouseMove = (e: MouseEvent) => {
       const vw = window.innerWidth
-      const newWidth = vw - e.clientX
+      const newWidth = side === "left" ? e.clientX : vw - e.clientX
       const effectiveMax = Math.min(maxWidth, vw * 0.92)
       const clampedWidth = Math.max(minWidth, Math.min(effectiveMax, newWidth))
       setWidth(clampedWidth)
@@ -102,7 +102,7 @@ function SheetContent({
 
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
-    document.body.style.cursor = 'ew-resize'
+    document.body.style.cursor = "ew-resize"
     document.body.style.userSelect = 'none'
 
     return () => {
@@ -111,7 +111,7 @@ function SheetContent({
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
-  }, [isResizing, resizable, minWidth, maxWidth, resolvedStorageKey])
+  }, [isResizing, resizable, minWidth, maxWidth, resolvedStorageKey, side])
 
   const handleResizeStart = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -124,15 +124,17 @@ function SheetContent({
       <SheetPrimitive.Content
         ref={contentRef}
         data-slot="sheet-content"
-        style={resizable && side === 'right' ? { width: `${width}px`, maxWidth: '92vw' } : undefined}
+        style={resizable && (side === "right" || side === "left") ? { width: `${width}px`, maxWidth: "92vw" } : undefined}
         className={cn(
           "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
           side === "right" && !resizable &&
             "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm",
           side === "right" && resizable &&
             "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full border-l",
-          side === "left" &&
+          side === "left" && !resizable &&
             "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left inset-y-0 left-0 h-full w-3/4 border-r sm:max-w-sm",
+          side === "left" && resizable &&
+            "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left inset-y-0 left-0 h-full border-r",
           side === "top" &&
             "data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top inset-x-0 top-0 h-auto border-b",
           side === "bottom" &&
@@ -141,15 +143,19 @@ function SheetContent({
         )}
         {...props}
       >
-        {resizable && side === 'right' && (
+        {resizable && (side === "right" || side === "left") && (
           <div
             className={cn(
-              "absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize transition-colors z-10",
+              "absolute top-0 bottom-0 w-1 cursor-ew-resize transition-colors z-10",
+              side === "right" ? "left-0" : "right-0",
               isResizing ? "bg-blue-500 w-1" : "hover:bg-blue-400/60"
             )}
             onMouseDown={handleResizeStart}
           >
-            <div className="absolute left-0 top-0 bottom-0 w-5 -translate-x-2" />
+            <div className={cn(
+              "absolute top-0 bottom-0 w-5",
+              side === "right" ? "left-0 -translate-x-2" : "right-0 translate-x-2"
+            )} />
           </div>
         )}
         {children}

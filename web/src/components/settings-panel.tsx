@@ -304,7 +304,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="p-0 flex flex-col w-[600px]">
+      <SheetContent className="p-0 flex flex-col" resizable defaultWidth={600} storageKey="settings-panel">
         <SheetHeader className="px-6 pt-6 pb-4">
           <SheetTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />

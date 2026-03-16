@@ -241,7 +241,7 @@ export function DetailPanel({ open, onClose, detail, loading, selectedRecord, on
 
   return (
     <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <SheetContent className="w-full sm:max-w-xl p-0 flex flex-col">
+      <SheetContent className="p-0 flex flex-col" resizable defaultWidth={640} storageKey="detail-panel">
         <SheetHeader className="px-4 pt-4 pb-2">
           <SheetTitle className="flex items-center gap-2 text-base">
             请求详情
