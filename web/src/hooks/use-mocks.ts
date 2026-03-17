@@ -3,6 +3,18 @@ import type { MockRule } from '@/types'
 
 const MOCKS_UPDATED_EVENT = 'mocksUpdated'
 
+export function dedupeMockRules(rules: MockRule[]): MockRule[] {
+  const byId = new Map<number, MockRule>()
+  for (const rule of rules) {
+    byId.set(rule.id, rule)
+  }
+  return Array.from(byId.values()).sort((a, b) => a.id - b.id)
+}
+
+export function upsertMockRule(rules: MockRule[], nextRule: MockRule): MockRule[] {
+  return dedupeMockRules([...rules.filter((rule) => rule.id !== nextRule.id), nextRule])
+}
+
 /**
  * Hook for managing mock rules
  */
@@ -13,7 +25,7 @@ export function useMocks() {
   useEffect(() => {
     const handler = (ev: Event) => {
       const e = ev as CustomEvent<MockRule[] | undefined>
-      setMockRules(Array.isArray(e.detail) ? e.detail : [])
+      setMockRules(dedupeMockRules(Array.isArray(e.detail) ? e.detail : []))
     }
     window.addEventListener(MOCKS_UPDATED_EVENT, handler)
     return () => window.removeEventListener(MOCKS_UPDATED_EVENT, handler)
@@ -23,7 +35,7 @@ export function useMocks() {
     try {
       const res = await fetch('/api/mocks')
       const data = await res.json()
-      setMockRules(Array.isArray(data) ? data : [])
+      setMockRules(dedupeMockRules(Array.isArray(data) ? data : []))
     } catch (err) {
       console.error('Failed to fetch mocks:', err)
     }
@@ -38,7 +50,7 @@ export function useMocks() {
       })
       const data = await res.json()
       if (data.status === 'success') {
-        setMockRules((prev) => [...prev, data.rule])
+        setMockRules((prev) => upsertMockRule(prev, data.rule as MockRule))
         return data.rule as MockRule
       }
       return null
@@ -57,7 +69,7 @@ export function useMocks() {
       })
       const data = await res.json()
       if (data.status === 'success') {
-        setMockRules((prev) => prev.map((r) => (r.id === id ? { ...r, ...updates } : r)))
+        setMockRules((prev) => upsertMockRule(prev, data.rule as MockRule))
         return true
       }
       return false
