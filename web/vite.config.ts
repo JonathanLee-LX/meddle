@@ -3,8 +3,9 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
-export default defineConfig({
-  devtools: true,
+export default defineConfig(({ command }) => ({
+  // 仅在开发模式开启 DevTools，避免生产构建启动额外 worker/服务影响时长
+  devtools: command === 'serve',
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
@@ -52,4 +53,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

@@ -464,8 +464,8 @@ export function isValidJson(str: string): boolean {
 }
 
 /**
- * 验证HTML内容的基本结构
- * 使用浏览器 DOMParser 进行验证（最可靠的方案）
+ * 验证 HTML 内容的基本结构
+ * 使用轻量标签栈，避免 DOMParser 自动修复导致误判
  */
 export function validateHtml(html: string): { valid: boolean; error?: string } {
   const trimmed = html.trim()
@@ -474,25 +474,46 @@ export function validateHtml(html: string): { valid: boolean; error?: string } {
   }
 
   try {
-    // 使用浏览器 DOMParser 解析 HTML
-    const parser = new DOMParser()
-    const doc = parser.parseFromString(trimmed, 'text/html')
-
-    // 检查解析错误（DOMParser 会尝试修复错误，但可以通过 querySelector 来检测问题）
-    const parseError = doc.querySelector('parsererror')
-    if (parseError) {
-      return { valid: false, error: 'HTML解析错误：' + parseError.textContent?.slice(0, 100) }
-    }
-
-    // 检查是否有严重的结构问题
-    const body = doc.body
-    if (!body) {
-      return { valid: false, error: 'HTML解析失败：无法解析文档结构' }
-    }
-
-    // 额外的简单检查：确保有基本标签
-    if (trimmed.length > 0 && !trimmed.includes('<')) {
+    if (!trimmed.includes('<')) {
       return { valid: false, error: '内容不像是有效的HTML' }
+    }
+
+    const voidTags = new Set([
+      'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
+      'link', 'meta', 'param', 'source', 'track', 'wbr',
+    ])
+    const tagStack: string[] = []
+    const tagRe = /<!--[\s\S]*?-->|<!DOCTYPE[^>]*>|<\/?([a-z][\w-]*)\b[^>]*?>/gi
+    let match: RegExpExecArray | null
+
+    while ((match = tagRe.exec(trimmed)) !== null) {
+      const fullMatch = match[0]
+      const tagName = match[1]?.toLowerCase()
+
+      if (!tagName || fullMatch.startsWith('<!--') || /^<!doctype/i.test(fullMatch)) {
+        continue
+      }
+
+      if (fullMatch.startsWith('</')) {
+        if (tagStack.length === 0) {
+          return { valid: false, error: `HTML语法错误：未找到标签 <${tagName}> 的开始标签` }
+        }
+        const lastTag = tagStack.pop()
+        if (lastTag !== tagName) {
+          return { valid: false, error: `HTML语法错误：标签不匹配，期望 </${lastTag}>，实际 </${tagName}>` }
+        }
+        continue
+      }
+
+      const selfClosing = fullMatch.endsWith('/>') || voidTags.has(tagName)
+      if (!selfClosing) {
+        tagStack.push(tagName)
+      }
+    }
+
+    if (tagStack.length > 0) {
+      const unclosedTag = tagStack[tagStack.length - 1]
+      return { valid: false, error: `HTML语法错误：标签 <${unclosedTag}> 未闭合` }
     }
 
     return { valid: true }
