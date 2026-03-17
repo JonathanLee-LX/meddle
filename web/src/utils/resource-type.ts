@@ -4,8 +4,14 @@ import type { ProxyRecord, ResourceType } from '@/types'
  * Determine resource type based on URL and method
  */
 export function getResourceType(record: ProxyRecord): ResourceType {
-  const url = record.source.toLowerCase()
-  const method = record.method.toUpperCase()
+  const source = typeof record.source === 'string' ? record.source : ''
+  const methodValue = typeof record.method === 'string' ? record.method : ''
+  const url = source.toLowerCase()
+  const method = methodValue.toUpperCase()
+
+  if (!url) {
+    return 'other'
+  }
   
   // WebSocket
   if (url.startsWith('ws://') || url.startsWith('wss://')) {

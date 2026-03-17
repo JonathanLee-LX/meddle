@@ -45,6 +45,7 @@ export function createPluginIntercept(ctx: ProxyContext) {
         } catch (_) { return false }
 
         const pluginLogger = {
+            debug: (...a: any[]) => console.debug('[plugin]', ...a),
             log: (...a: any[]) => console.log('[plugin]', ...a),
             info: (...a: any[]) => console.log('[plugin]', ...a),
             warn: (...a: any[]) => console.warn('[plugin]', ...a),

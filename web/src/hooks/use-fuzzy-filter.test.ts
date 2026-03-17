@@ -15,6 +15,13 @@ describe('useFuzzyFilter', () => {
     { id: 8, method: 'GET', source: 'http://test.com/error', target: 'localhost:4000', time: '12:00:07', statusCode: 404 },
     { id: 9, method: 'DELETE', source: 'http://api.test.com/users/1', target: 'localhost:3000', time: '12:00:08' },
   ]
+  const malformedRecord = {
+    id: 10,
+    method: undefined,
+    source: undefined,
+    target: undefined,
+    time: undefined,
+  } as unknown as ProxyRecord
 
   describe('Resource Type Filtering', () => {
     it('should return all records when filter is "all"', () => {
@@ -253,6 +260,17 @@ describe('useFuzzyFilter', () => {
     it('should handle empty records array', () => {
       const { result } = renderHook(() => useFuzzyFilter([]))
       expect(result.current.filteredRecords).toHaveLength(0)
+    })
+
+    it('should tolerate malformed records during filtering', () => {
+      const { result } = renderHook(() => useFuzzyFilter([...mockRecords, malformedRecord]))
+
+      act(() => {
+        result.current.setResourceTypeFilter('fetch')
+        result.current.setFilterText('users')
+      })
+
+      expect(result.current.filteredRecords.length).toBeGreaterThan(0)
     })
 
     it('should handle empty filter text', () => {

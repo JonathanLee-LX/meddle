@@ -294,6 +294,7 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
 
             const testLogs: Array<{ level: string; message: string; timestamp: number }> = []
             const testLogger = {
+                debug: (...args: unknown[]) => testLogs.push({ level: 'debug', message: args.join(' '), timestamp: Date.now() }),
                 log: (...args: unknown[]) => testLogs.push({ level: 'log', message: args.join(' '), timestamp: Date.now() }),
                 info: (...args: unknown[]) => testLogs.push({ level: 'info', message: args.join(' '), timestamp: Date.now() }),
                 warn: (...args: unknown[]) => testLogs.push({ level: 'warn', message: args.join(' '), timestamp: Date.now() }),

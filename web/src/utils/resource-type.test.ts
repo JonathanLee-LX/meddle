@@ -243,5 +243,16 @@ describe('getResourceType', () => {
       const record = createRecord('http://example.com/page.html#section1')
       expect(getResourceType(record)).toBe('doc')
     })
+
+    it('should tolerate malformed records', () => {
+      const record = {
+        id: 1,
+        method: undefined,
+        source: undefined,
+        target: 'example.com',
+        time: '12:00:00',
+      } as unknown as ProxyRecord
+      expect(getResourceType(record)).toBe('other')
+    })
   })
 })

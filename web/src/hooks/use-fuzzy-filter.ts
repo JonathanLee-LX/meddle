@@ -31,6 +31,11 @@ export function useFuzzyFilter(records: ProxyRecord[]) {
     const terms = raw.split(/\s+/).filter(Boolean)
 
     return result.filter((record) => {
+      const method = typeof record.method === 'string' ? record.method : ''
+      const source = typeof record.source === 'string' ? record.source : ''
+      const target = typeof record.target === 'string' ? record.target : ''
+      const time = typeof record.time === 'string' ? record.time : ''
+
       return terms.every((term) => {
         const isNegative = term.startsWith('-') && term.length > 1
         const cleanTerm = isNegative ? term.slice(1) : term
@@ -39,8 +44,8 @@ export function useFuzzyFilter(records: ProxyRecord[]) {
 
         // method: filter
         if (cleanTerm.startsWith('method:')) {
-          const method = cleanTerm.slice(7).toUpperCase()
-          matches = record.method.toUpperCase() === method
+          const expectedMethod = cleanTerm.slice(7).toUpperCase()
+          matches = method.toUpperCase() === expectedMethod
         }
         // status: filter (e.g., status:200, status:4xx, status:5xx)
         else if (cleanTerm.startsWith('status:')) {
@@ -58,16 +63,16 @@ export function useFuzzyFilter(records: ProxyRecord[]) {
         else if (cleanTerm.startsWith('domain:')) {
           const domain = cleanTerm.slice(7).toLowerCase()
           try {
-            const url = new URL(record.source)
+            const url = new URL(source)
             matches = url.hostname.toLowerCase().includes(domain)
           } catch {
-            matches = record.source.toLowerCase().includes(domain)
+            matches = source.toLowerCase().includes(domain)
           }
         }
         // Plain text fuzzy match against source, target, method
         else {
           const lower = cleanTerm.toLowerCase()
-          const haystack = `${record.method} ${record.source} ${record.target || ''} ${record.time || ''}`.toLowerCase()
+          const haystack = `${method} ${source} ${target} ${time}`.toLowerCase()
           // Fuzzy: check if all characters appear in order
           matches = fuzzyMatch(lower, haystack)
         }
