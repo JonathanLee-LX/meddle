@@ -77,6 +77,7 @@ const serverContext = {
     performConfigDiagnostics: () => configDiag && configDiag.performConfigDiagnostics(),
     loadSettingsSync: () => configDiag && configDiag.loadSettingsSync(),
     resolveTargetUrlForTest: (url) => resolveTargetUrl(url, ctx.ruleMap) || url,
+    canUsePipelineExecuteForTest: (source) => pluginIntercept.canUsePipelineExecuteForSource(source),
     matchMockRuleForTest: (url, method) => mockHandler.matchMockRule(url, method),
     shouldUseMockForTest: (source, rule) => !pluginIntercept.shouldUsePluginMockForRequest(source, rule),
     buildMockResponseForTest: (rule) => mockHandler.buildMockResponseForTest(rule),

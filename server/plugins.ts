@@ -3,6 +3,46 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { ServerContext } from './index'
 
+type TestPlugin = {
+    manifest: {
+        id: string
+        name: string
+        hooks?: string[]
+        priority?: number
+    }
+    [key: string]: unknown
+}
+
+export function sortPluginsByHookOrder(plugins: TestPlugin[]): TestPlugin[] {
+    return [...plugins].sort((a, b) => {
+        const priorityA = typeof a.manifest.priority === 'number' ? a.manifest.priority : 100
+        const priorityB = typeof b.manifest.priority === 'number' ? b.manifest.priority : 100
+        if (priorityA !== priorityB) return priorityA - priorityB
+        return a.manifest.id.localeCompare(b.manifest.id)
+    })
+}
+
+export function selectTestPluginsForHook(
+    allPlugins: TestPlugin[],
+    hookName: string,
+    targetPluginId: string,
+    includeBuiltinFlow: boolean,
+): TestPlugin[] {
+    const allowedIds = new Set<string>([targetPluginId])
+    if (includeBuiltinFlow) {
+        allowedIds.add('builtin.mock')
+        allowedIds.add('builtin.router')
+    }
+
+    return sortPluginsByHookOrder(
+        allPlugins.filter((plugin) =>
+            allowedIds.has(plugin.manifest.id) &&
+            Array.isArray(plugin.manifest.hooks) &&
+            plugin.manifest.hooks.includes(hookName),
+        ),
+    )
+}
+
 export function registerPluginsRoutes(app: Application, ctx: ServerContext): void {
     const epDir = ctx.epDir
 
@@ -284,7 +324,7 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
             const method = (data.method || 'GET').toUpperCase()
             const integrated = data.integrated !== false
 
-            const allPlugins = ctx.pluginManager.getAll()
+            const allPlugins = ctx.pluginManager.getAll() as TestPlugin[]
             const targetPlugin = allPlugins.find(p => p.manifest.id === pluginId)
 
             if (!targetPlugin) {
@@ -304,14 +344,16 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
             const hooks = targetPlugin.manifest.hooks || []
             const hookResults: Record<string, unknown> = {}
 
-            // integrated=true：与真实代理一致（路由 + Mock）；integrated=false：单独测试，直接请求 URL
+            // integrated=true：尽量贴近真实代理前半段（直出 Mock / 内置 Mock / Router 的先后）
             const source = url
             const legacyTarget = integrated && typeof ctx.resolveTargetUrlForTest === 'function'
                 ? ctx.resolveTargetUrlForTest(source)
                 : source
-            let currentTarget = legacyTarget
+            const usePipelineFlow = integrated && typeof ctx.canUsePipelineExecuteForTest === 'function'
+                ? ctx.canUsePipelineExecuteForTest(source)
+                : false
+            let currentTarget = usePipelineFlow ? source : legacyTarget
 
-            // --- Phase 1: onRequestStart / onBeforeProxy（可变的 request 便于插件修改并做对比）---
             const requestMutable = {
                 method,
                 url: source,
@@ -321,54 +363,84 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
             const initialRequestSnapshot = { headers: { ...requestMutable.headers }, body: requestMutable.body }
             let shortCircuited = false
             let shortCircuitResponse: Record<string, unknown> | null = null
+            let realResponse: { statusCode: number; headers: Record<string, string>; body: string } | null = null
+            let fetchError: string | null = null
+            let fetchDuration = 0
+            let usedMock = false
+            const requestMeta: Record<string, unknown> = { _test: true, _pluginRequestStartAt: Date.now() }
 
-            for (const hookName of ['onRequestStart', 'onBeforeProxy']) {
-                if (!hooks.includes(hookName)) continue
-                const hookFn = (targetPlugin as Record<string, unknown>)[hookName]
-                if (typeof hookFn !== 'function') continue
+            // --- Phase 0: 与真实代理一致，先处理“直出 Mock”路径 ---
+            if (integrated) {
+                const mockRule = typeof ctx.matchMockRuleForTest === 'function'
+                    ? ctx.matchMockRuleForTest(source, method)
+                    : null
+                if (mockRule && typeof ctx.shouldUseMockForTest === 'function' && ctx.shouldUseMockForTest(source, mockRule) && typeof ctx.buildMockResponseForTest === 'function') {
+                    const mockRes = ctx.buildMockResponseForTest(mockRule)
+                    currentTarget = source
+                    realResponse = { statusCode: mockRes.statusCode, headers: mockRes.headers, body: mockRes.body }
+                    fetchDuration = 0
+                    usedMock = true
+                }
+            }
 
-                const hookCtx: Record<string, unknown> = {
-                    log: testLogger,
-                    request: requestMutable,
-                    target: currentTarget,
-                    meta: { _test: true, _pluginRequestStartAt: Date.now() },
-                    shortCircuited: false,
-                    shortCircuitResponse: null,
-                    setTarget: (t: string) => { hookCtx.target = t; currentTarget = t },
-                    respond: (r: unknown) => { hookCtx.shortCircuited = true; hookCtx.shortCircuitResponse = r; shortCircuited = true; shortCircuitResponse = r as Record<string, unknown> },
+            // --- Phase 1: onRequestStart / onBeforeProxy ---
+            if (!realResponse) {
+                for (const hookName of ['onRequestStart', 'onBeforeProxy']) {
+                    const orderedPlugins = selectTestPluginsForHook(allPlugins, hookName, pluginId, integrated && usePipelineFlow)
+                    if (orderedPlugins.length === 0) continue
+
+                    const hookStartTarget = currentTarget
+                    const hookCtx: Record<string, unknown> = {
+                        log: testLogger,
+                        request: requestMutable,
+                        target: currentTarget,
+                        meta: requestMeta,
+                        shortCircuited,
+                        shortCircuitResponse,
+                        setTarget: (t: string) => { hookCtx.target = t; currentTarget = t },
+                        respond: (r: unknown) => {
+                            hookCtx.shortCircuited = true
+                            hookCtx.shortCircuitResponse = r
+                            shortCircuited = true
+                            shortCircuitResponse = r as Record<string, unknown>
+                        },
+                    }
+
+                    for (const plugin of orderedPlugins) {
+                        const hookFn = plugin[hookName]
+                        if (typeof hookFn !== 'function') continue
+
+                        const t0 = Date.now()
+                        try {
+                            await (hookFn as (c: unknown) => Promise<void>).call(plugin, hookCtx)
+                            if (plugin.manifest.id === pluginId) {
+                                hookResults[hookName] = {
+                                    status: 'success',
+                                    duration: Date.now() - t0,
+                                    targetChanged: currentTarget !== hookStartTarget ? currentTarget : null,
+                                    shortCircuited,
+                                }
+                            }
+                        } catch (e) {
+                            if (plugin.manifest.id === pluginId) {
+                                hookResults[hookName] = {
+                                    status: 'error',
+                                    duration: Date.now() - t0,
+                                    error: (e as Error).message,
+                                    stack: (e as Error).stack,
+                                }
+                            }
+                        }
+                    }
                 }
-                const t0 = Date.now()
-                try {
-                    await (hookFn as (c: unknown) => Promise<void>).call(targetPlugin, hookCtx)
-                    hookResults[hookName] = { status: 'success', duration: Date.now() - t0, targetChanged: currentTarget !== source ? currentTarget : null, shortCircuited }
-                } catch (e) {
-                    hookResults[hookName] = { status: 'error', duration: Date.now() - t0, error: (e as Error).message, stack: (e as Error).stack }
-                }
-                if (shortCircuited) break
             }
 
             const modifiedRequestSnapshot = { headers: { ...requestMutable.headers }, body: requestMutable.body }
             const requestHeadersChanged = JSON.stringify(initialRequestSnapshot.headers) !== JSON.stringify(modifiedRequestSnapshot.headers)
             const requestBodyChanged = initialRequestSnapshot.body !== modifiedRequestSnapshot.body
 
-            // --- Phase 2: Mock 命中则用 Mock 响应，否则发起真实 HTTP 请求 ---
-            let realResponse: { statusCode: number; headers: Record<string, string>; body: string } | null = null
-            let fetchError: string | null = null
-            let fetchDuration = 0
-            let usedMock = false
-
+            // --- Phase 2: 发起真实 HTTP 请求 ---
             if (!shortCircuited) {
-                if (integrated) {
-                    const mockRule = typeof ctx.matchMockRuleForTest === 'function'
-                        ? ctx.matchMockRuleForTest(source, method)
-                        : null
-                    if (mockRule && typeof ctx.shouldUseMockForTest === 'function' && ctx.shouldUseMockForTest(source, mockRule) && typeof ctx.buildMockResponseForTest === 'function') {
-                        const mockRes = ctx.buildMockResponseForTest(mockRule)
-                        realResponse = { statusCode: mockRes.statusCode, headers: mockRes.headers, body: mockRes.body }
-                        fetchDuration = 0
-                        usedMock = true
-                    }
-                }
                 if (!realResponse) {
                     const http = require('http') as typeof import('http')
                     const https = require('https') as typeof import('https')

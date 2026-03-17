@@ -113,6 +113,8 @@ export interface ServerContext {
     loadSettingsSync: () => unknown
     /** 供插件测试：解析路由得到目标 URL */
     resolveTargetUrlForTest?: (url: string) => string
+    /** 供插件测试：该请求是否会走 request pipeline */
+    canUsePipelineExecuteForTest?: (source: string) => boolean
     /** 供插件测试：匹配 Mock 规则 */
     matchMockRuleForTest?: (url: string, method: string) => { statusCode?: number; headers?: Record<string, string>; body?: string; bodyType?: string; name?: string; id?: number; urlPattern?: string; enabled?: boolean } | null
     /** 供插件测试：是否应对该请求使用 Mock（而非走插件 Mock） */

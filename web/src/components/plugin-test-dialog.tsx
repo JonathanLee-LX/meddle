@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   PlayCircle,
   CheckCircle2,
@@ -22,14 +23,174 @@ import {
   ArrowRight,
   FileText,
 } from 'lucide-react'
-import { BodyDiffView } from './body-diff-view'
+import { BodyDiffView, type DiffViewMode } from './body-diff-view'
 
-function headersToLines(headers: Record<string, unknown> | undefined): string {
-  if (!headers || typeof headers !== 'object') return ''
-  return Object.entries(headers)
-    .map(([k, v]) => `${k}: ${v != null ? String(v) : ''}`)
-    .sort()
-    .join('\n')
+type HeaderDiffStatus = 'unchanged' | 'changed' | 'added' | 'removed'
+
+interface HeaderDiffRow {
+  key: string
+  displayKey: string
+  originalValue: string
+  modifiedValue: string
+  status: HeaderDiffStatus
+}
+
+function normalizeHeaders(headers: Record<string, unknown> | undefined): Map<string, { displayKey: string; value: string }> {
+  const map = new Map<string, { displayKey: string; value: string }>()
+  if (!headers || typeof headers !== 'object') return map
+
+  Object.entries(headers).forEach(([key, value]) => {
+    map.set(key.toLowerCase(), {
+      displayKey: key,
+      value: value != null ? String(value) : '',
+    })
+  })
+
+  return map
+}
+
+function buildHeaderDiffRows(
+  originalHeaders: Record<string, unknown> | undefined,
+  modifiedHeaders: Record<string, unknown> | undefined,
+): HeaderDiffRow[] {
+  const originalMap = normalizeHeaders(originalHeaders)
+  const modifiedMap = normalizeHeaders(modifiedHeaders)
+  const keys = Array.from(new Set([...originalMap.keys(), ...modifiedMap.keys()])).sort()
+
+  return keys.map((key) => {
+    const originalEntry = originalMap.get(key)
+    const modifiedEntry = modifiedMap.get(key)
+    const originalValue = originalEntry?.value ?? ''
+    const modifiedValue = modifiedEntry?.value ?? ''
+
+    let status: HeaderDiffStatus = 'unchanged'
+    if (!originalEntry && modifiedEntry) status = 'added'
+    else if (originalEntry && !modifiedEntry) status = 'removed'
+    else if (originalValue !== modifiedValue) status = 'changed'
+
+    return {
+      key,
+      displayKey: modifiedEntry?.displayKey ?? originalEntry?.displayKey ?? key,
+      originalValue,
+      modifiedValue,
+      status,
+    }
+  })
+}
+
+function getHeaderCellClassName(status: HeaderDiffStatus, column: 'original' | 'modified'): string {
+  const base = 'rounded-md border px-2 py-1.5'
+  if (status === 'unchanged') return `${base} border-transparent`
+  if (status === 'changed') return `${base} border-orange-300 bg-orange-500/10`
+  if (status === 'added') return column === 'modified'
+    ? `${base} border-green-300 bg-green-500/10`
+    : `${base} border-transparent opacity-50`
+  if (status === 'removed') return column === 'original'
+    ? `${base} border-red-300 bg-red-500/10`
+    : `${base} border-transparent opacity-50`
+  return base
+}
+
+function HeaderDiffView({
+  original,
+  modified,
+  mode = 'split',
+}: {
+  original: Record<string, unknown> | undefined
+  modified: Record<string, unknown> | undefined
+  mode?: DiffViewMode
+}) {
+  const rows = buildHeaderDiffRows(original, modified)
+
+  if (mode === 'inline') {
+    return (
+      <div className="bg-muted/50 rounded-md p-2 text-xs font-mono max-h-[220px] overflow-auto space-y-1">
+        {rows.map((row) => (
+          <div
+            key={row.key}
+            className={`rounded-md border px-2 py-1.5 ${
+              row.status === 'unchanged'
+                ? 'border-transparent'
+                : row.status === 'changed'
+                  ? 'border-orange-300 bg-orange-500/10'
+                  : row.status === 'added'
+                    ? 'border-green-300 bg-green-500/10'
+                    : 'border-red-300 bg-red-500/10'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-muted-foreground">{row.displayKey}</span>
+              <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal">
+                {row.status === 'unchanged'
+                  ? '未变'
+                  : row.status === 'changed'
+                    ? '修改'
+                    : row.status === 'added'
+                      ? '新增'
+                      : '删除'}
+              </Badge>
+            </div>
+            {row.status === 'changed' && (
+              <div className="mt-1 space-y-1">
+                <div className="text-red-700 dark:text-red-300">
+                  <span className="mr-1">-</span>
+                  {row.originalValue || <span className="text-muted-foreground italic">(无)</span>}
+                </div>
+                <div className="text-green-700 dark:text-green-300">
+                  <span className="mr-1">+</span>
+                  {row.modifiedValue || <span className="text-muted-foreground italic">(无)</span>}
+                </div>
+              </div>
+            )}
+            {row.status === 'added' && (
+              <div className="mt-1 text-green-700 dark:text-green-300">
+                <span className="mr-1">+</span>
+                {row.modifiedValue || <span className="text-muted-foreground italic">(无)</span>}
+              </div>
+            )}
+            {row.status === 'removed' && (
+              <div className="mt-1 text-red-700 dark:text-red-300">
+                <span className="mr-1">-</span>
+                {row.originalValue || <span className="text-muted-foreground italic">(无)</span>}
+              </div>
+            )}
+            {row.status === 'unchanged' && (
+              <div className="mt-1">
+                {row.modifiedValue || row.originalValue || <span className="text-muted-foreground italic">(无)</span>}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <div>
+        <div className="text-[10px] text-muted-foreground mb-0.5">原始</div>
+        <div className="bg-muted/50 rounded-md p-2 text-xs font-mono max-h-[220px] overflow-auto space-y-1">
+          {rows.map((row) => (
+            <div key={`original-${row.key}`} className={getHeaderCellClassName(row.status, 'original')}>
+              <span className="text-muted-foreground">{row.displayKey}:</span>{' '}
+              {row.originalValue || <span className="text-muted-foreground italic">(无)</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="text-[10px] text-muted-foreground mb-0.5">修改后</div>
+        <div className="bg-muted/50 rounded-md p-2 text-xs font-mono max-h-[220px] overflow-auto space-y-1">
+          {rows.map((row) => (
+            <div key={`modified-${row.key}`} className={getHeaderCellClassName(row.status, 'modified')}>
+              <span className="text-muted-foreground">{row.displayKey}:</span>{' '}
+              {row.modifiedValue || <span className="text-muted-foreground italic">(无)</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 interface PluginTestDialogProps {
@@ -53,6 +214,8 @@ export function PluginTestDialog({
   const [testMethod, setTestMethod] = useState('GET')
   const [testMode, setTestMode] = useState<'standalone' | 'integrated'>('standalone')
   const [testResults, setTestResults] = useState<any>(null)
+  const [headerDiffMode, setHeaderDiffMode] = useState<DiffViewMode>('split')
+  const [bodyDiffMode, setBodyDiffMode] = useState<DiffViewMode>('inline')
 
   const handleTest = async () => {
     setTesting(true)
@@ -185,6 +348,27 @@ export function PluginTestDialog({
                 </div>
               ) : (
                 <>
+                  <div className="flex flex-wrap gap-4 items-center rounded-md border bg-muted/20 px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Header 对比</span>
+                      <Tabs value={headerDiffMode} onValueChange={(value) => setHeaderDiffMode(value as DiffViewMode)}>
+                        <TabsList className="h-7">
+                          <TabsTrigger value="split" className="px-2 text-xs">分栏</TabsTrigger>
+                          <TabsTrigger value="inline" className="px-2 text-xs">行内</TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Body 对比</span>
+                      <Tabs value={bodyDiffMode} onValueChange={(value) => setBodyDiffMode(value as DiffViewMode)}>
+                        <TabsList className="h-7">
+                          <TabsTrigger value="inline" className="px-2 text-xs">行内</TabsTrigger>
+                          <TabsTrigger value="split" className="px-2 text-xs">分栏</TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                    </div>
+                  </div>
+
                   {/* 真实请求信息 */}
                   {testResults.realRequest && (
                     <div className="space-y-2">
@@ -292,39 +476,22 @@ export function PluginTestDialog({
                       {testResults.requestHeadersChanged && (
                         <div className="space-y-1">
                           <div className="text-xs font-medium text-muted-foreground">Request Headers</div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <div className="text-[10px] text-muted-foreground mb-0.5">原始</div>
-                              <pre className="bg-muted/50 rounded-md p-2 text-xs font-mono max-h-[180px] overflow-auto whitespace-pre-wrap break-all">
-                                {headersToLines(testResults.originalRequest.headers)}
-                              </pre>
-                            </div>
-                            <div>
-                              <div className="text-[10px] text-muted-foreground mb-0.5">修改后</div>
-                              <pre className="bg-green-500/10 rounded-md p-2 text-xs font-mono max-h-[180px] overflow-auto whitespace-pre-wrap break-all border border-green-500/30">
-                                {headersToLines(testResults.modifiedRequest.headers)}
-                              </pre>
-                            </div>
-                          </div>
+                          <HeaderDiffView
+                            original={testResults.originalRequest.headers}
+                            modified={testResults.modifiedRequest.headers}
+                            mode={headerDiffMode}
+                          />
                         </div>
                       )}
                       {testResults.requestBodyChanged && (
                         <div className="space-y-1">
                           <div className="text-xs font-medium text-muted-foreground">Request Body</div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <div className="text-[10px] text-muted-foreground mb-0.5">原始</div>
-                              <pre className="bg-muted/50 rounded-md p-2 text-xs font-mono max-h-[120px] overflow-auto whitespace-pre-wrap break-all">
-                                {testResults.originalRequest.body || '(空)'}
-                              </pre>
-                            </div>
-                            <div>
-                              <div className="text-[10px] text-muted-foreground mb-0.5">修改后</div>
-                              <pre className="bg-green-500/10 rounded-md p-2 text-xs font-mono max-h-[120px] overflow-auto whitespace-pre-wrap break-all border border-green-500/30">
-                                {testResults.modifiedRequest.body || '(空)'}
-                              </pre>
-                            </div>
-                          </div>
+                          <BodyDiffView
+                            original={testResults.originalRequest.body || ''}
+                            modified={testResults.modifiedRequest.body || ''}
+                            mode={bodyDiffMode}
+                            maxHeight="180px"
+                          />
                         </div>
                       )}
                     </div>
@@ -337,20 +504,11 @@ export function PluginTestDialog({
                         <AlertCircle className="h-4 w-4 text-orange-500" />
                         Response Headers 对比（已被插件修改）
                       </h3>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <div className="text-[10px] text-muted-foreground mb-0.5">原始</div>
-                          <pre className="bg-muted/50 rounded-md p-2 text-xs font-mono max-h-[180px] overflow-auto whitespace-pre-wrap break-all">
-                            {headersToLines(testResults.originalResponse.headers)}
-                          </pre>
-                        </div>
-                        <div>
-                          <div className="text-[10px] text-muted-foreground mb-0.5">修改后</div>
-                          <pre className="bg-green-500/10 rounded-md p-2 text-xs font-mono max-h-[180px] overflow-auto whitespace-pre-wrap break-all border border-green-500/30">
-                            {headersToLines(testResults.modifiedResponse.headers)}
-                          </pre>
-                        </div>
-                      </div>
+                      <HeaderDiffView
+                        original={testResults.originalResponse.headers}
+                        modified={testResults.modifiedResponse.headers}
+                        mode={headerDiffMode}
+                      />
                     </div>
                   )}
 
@@ -384,6 +542,7 @@ export function PluginTestDialog({
                           <BodyDiffView
                             original={testResults.originalResponse.bodyForDiff ?? testResults.originalResponse.bodyPreview ?? ''}
                             modified={testResults.modifiedResponse.bodyForDiff ?? testResults.modifiedResponse.bodyPreview ?? ''}
+                            mode={bodyDiffMode}
                             maxHeight="320px"
                           />
                         </div>
