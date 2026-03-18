@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { BodyDiffView, type DiffViewMode } from './body-diff-view'
 import { getAIConfig, getActiveModel, isAIConfigValid } from '@/lib/ai-config-store'
+import { MonacoEditor } from './monaco-editor'
 
 type HeaderDiffStatus = 'unchanged' | 'changed' | 'added' | 'removed'
 
@@ -212,6 +213,21 @@ interface TestErrorItem {
   stack?: string
 }
 
+function getFixStageLabel(stage: 'idle' | 'generating' | 'saving' | 'reloading' | 'retesting'): string {
+  switch (stage) {
+    case 'generating':
+      return 'AI 正在流式生成修复代码'
+    case 'saving':
+      return '正在保存修复后的插件代码'
+    case 'reloading':
+      return '正在热加载插件'
+    case 'retesting':
+      return '正在重新执行插件测试'
+    default:
+      return ''
+  }
+}
+
 export function PluginTestDialog({
   open,
   onOpenChange,
@@ -229,6 +245,11 @@ export function PluginTestDialog({
   const [headerDiffMode, setHeaderDiffMode] = useState<DiffViewMode>('split')
   const [bodyDiffMode, setBodyDiffMode] = useState<DiffViewMode>('inline')
   const [fixResult, setFixResult] = useState<{ status: 'success' | 'error'; message: string } | null>(null)
+  const [pluginCode, setPluginCode] = useState('')
+  const [loadingCode, setLoadingCode] = useState(false)
+  const [codeError, setCodeError] = useState<string | null>(null)
+  const [fixStreamCode, setFixStreamCode] = useState('')
+  const [fixStage, setFixStage] = useState<'idle' | 'generating' | 'saving' | 'reloading' | 'retesting'>('idle')
 
   const aiConfig = getAIConfig()
   const activeModel = getActiveModel(aiConfig)
@@ -245,6 +266,35 @@ export function PluginTestDialog({
   }
   const isAIReady = isAIConfigValid(aiConfig)
   const customFilename = pluginId.startsWith('local.') ? `${pluginId.slice('local.'.length)}.js` : ''
+
+  const fetchPluginCode = useCallback(async () => {
+    if (!customFilename || !open) {
+      setPluginCode('')
+      setCodeError(null)
+      return
+    }
+
+    setLoadingCode(true)
+    setCodeError(null)
+    try {
+      const codeRes = await fetch(`/api/plugins/custom/${encodeURIComponent(customFilename)}/code`)
+      if (!codeRes.ok) {
+        const error = await codeRes.json()
+        throw new Error(error.error || '读取插件源码失败')
+      }
+      const codeData = await codeRes.json()
+      setPluginCode(codeData.code || '')
+    } catch (error) {
+      setPluginCode('')
+      setCodeError(error instanceof Error ? error.message : '读取插件源码失败')
+    } finally {
+      setLoadingCode(false)
+    }
+  }, [customFilename, open])
+
+  useEffect(() => {
+    fetchPluginCode()
+  }, [fetchPluginCode])
 
   const testErrors = useMemo(() => {
     const errors: TestErrorItem[] = []
@@ -309,19 +359,19 @@ export function PluginTestDialog({
 
     setFixing(true)
     setFixResult(null)
+    setFixStreamCode('')
     try {
-      const codeRes = await fetch(`/api/plugins/custom/${encodeURIComponent(customFilename)}/code`)
-      if (!codeRes.ok) {
-        const error = await codeRes.json()
-        throw new Error(error.error || '读取插件源码失败')
+      setFixStage('generating')
+      const codeData = { code: pluginCode }
+      if (!codeData.code) {
+        throw new Error('插件源码为空，无法修复')
       }
-      const codeData = await codeRes.json()
 
       const errorSummary = testErrors
         .map((item) => `Hook: ${item.hookName}\nError: ${item.message}${item.stack ? `\nStack:\n${item.stack}` : ''}`)
         .join('\n\n---\n\n')
 
-      const fixRes = await fetch('/api/plugins/fix', {
+      const fixRes = await fetch('/api/plugins/fix-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -340,12 +390,53 @@ export function PluginTestDialog({
         const error = await fixRes.json()
         throw new Error(error.error || 'AI 修复失败')
       }
-      const fixData = await fixRes.json()
-      const fixedCode = fixData.fixedCode
+
+      const reader = fixRes.body?.getReader()
+      const decoder = new TextDecoder()
+      if (!reader) {
+        throw new Error('无法读取 AI 修复流')
+      }
+
+      let fixedCode = ''
+      let buffer = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue
+          const data = line.slice(5).trim()
+          if (!data) continue
+          try {
+            const parsed = JSON.parse(data)
+            if (parsed.status === 'generating') {
+              setFixResult({ status: 'success', message: 'AI 正在分析错误并生成修复代码...' })
+            } else if (parsed.chunk) {
+              fixedCode = parsed.accumulated || `${fixedCode}${parsed.chunk}`
+              setFixStreamCode(fixedCode)
+            } else if (parsed.status === 'success') {
+              fixedCode = parsed.fixedCode || fixedCode
+              setFixStreamCode(fixedCode)
+            } else if (parsed.error) {
+              throw new Error(parsed.error)
+            }
+          } catch (error) {
+            if (error instanceof Error && error.message !== 'Unexpected end of JSON input') {
+              throw error
+            }
+          }
+        }
+      }
+
       if (!fixedCode || typeof fixedCode !== 'string') {
         throw new Error('AI 未返回有效代码')
       }
 
+      setFixStage('saving')
       const saveRes = await fetch(`/api/plugins/custom/${encodeURIComponent(customFilename)}/code`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -356,21 +447,27 @@ export function PluginTestDialog({
         throw new Error(error.error || '保存修复后的代码失败')
       }
 
+      setFixStage('reloading')
       const reloadRes = await fetch('/api/plugins/reload', { method: 'POST' })
       if (!reloadRes.ok) {
         const error = await reloadRes.json().catch(() => ({ error: '热加载失败' }))
         throw new Error(error.error || '热加载失败')
       }
 
-      setFixResult({ status: 'success', message: 'AI 已修复插件代码并完成热加载。请重新测试验证结果。' })
+      setPluginCode(fixedCode)
+      setFixStage('retesting')
+      setFixResult({ status: 'success', message: 'AI 已生成修复代码，正在保存、热加载并重新测试...' })
       onPluginFixed?.()
       await handleTest()
+      setFixResult({ status: 'success', message: 'AI 已修复插件代码并完成热加载，测试结果已刷新。' })
+      setFixStage('idle')
     } catch (error) {
       setFixResult({
         status: 'error',
         message: error instanceof Error ? error.message : 'AI 修复失败',
       })
     } finally {
+      setFixStage('idle')
       setFixing(false)
     }
   }
@@ -459,6 +556,79 @@ export function PluginTestDialog({
               </p>
             </div>
           </div>
+
+          {!!customFilename && (
+            <div className="space-y-3">
+              <Separator />
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-medium flex items-center gap-2">
+                    <Code2 className="h-4 w-4" />
+                    插件代码
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs font-normal">
+                      {customFilename}
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={fetchPluginCode}
+                      disabled={loadingCode || fixing}
+                    >
+                      {loadingCode ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          读取中
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-1" />
+                          刷新代码
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+                {codeError ? (
+                  <div className="rounded-md border border-red-200 bg-red-50/80 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/20 dark:text-red-300">
+                    {codeError}
+                  </div>
+                ) : (
+                  <MonacoEditor
+                    value={pluginCode}
+                    onChange={() => {}}
+                    language="javascript"
+                    readOnly
+                    minHeight="260px"
+                  />
+                )}
+              </div>
+
+              {(fixing || fixStreamCode) && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-medium flex items-center gap-2">
+                      <Wand2 className="h-4 w-4" />
+                      AI 修复代码
+                    </h3>
+                    {fixStage !== 'idle' && (
+                      <Badge variant="outline" className="text-xs font-normal">
+                        {getFixStageLabel(fixStage)}
+                      </Badge>
+                    )}
+                  </div>
+                  <MonacoEditor
+                    value={fixStreamCode}
+                    onChange={() => {}}
+                    language="javascript"
+                    readOnly
+                    minHeight="260px"
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 测试结果 */}
           {testResults && (

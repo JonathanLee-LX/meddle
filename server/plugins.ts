@@ -314,6 +314,46 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
         res.end()
     })
 
+    // API: AI自动修复插件（流式）
+    app.post('/api/plugins/fix-stream', async (req: Request, res: Response) => {
+        try {
+            const data = req.body
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { fixPluginWithAIStream } = require('../core/plugin-generator')
+
+            res.writeHead(200, {
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'Access-Control-Allow-Origin': '*'
+            })
+
+            res.write('event: start\n')
+            res.write('data: {"status":"generating"}\n\n')
+
+            let accumulatedCode = ''
+            const fixedCode = await fixPluginWithAIStream(
+                data.originalCode,
+                data.testError,
+                data.requirement,
+                data.aiConfig,
+                (chunk: string) => {
+                    accumulatedCode += chunk
+                    res.write('event: chunk\n')
+                    res.write(`data: ${JSON.stringify({ chunk, accumulated: accumulatedCode })}\n\n`)
+                }
+            )
+
+            res.write('event: complete\n')
+            res.write(`data: ${JSON.stringify({ status: 'success', fixedCode })}\n\n`)
+            res.end()
+        } catch (error) {
+            res.write('event: error\n')
+            res.write(`data: ${JSON.stringify({ error: (error as Error).message })}\n\n`)
+            res.end()
+        }
+    })
+
     // API: 测试插件功能（真实请求模式）
     app.post('/api/plugins/test', async (req: Request, res: Response) => {
         res.setHeader('Content-Type', 'application/json')

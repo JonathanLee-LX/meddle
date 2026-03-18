@@ -539,6 +539,77 @@ async function fixWithOpenAINonStream(
     return cleanAIResponse(code);
 }
 
+async function fixWithOpenAIStream(
+    userPrompt: string,
+    systemPrompt: string,
+    config: AIConfig,
+    onChunk: (chunk: string) => void
+): Promise<string> {
+    const response = await fetch(config.baseUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.apiKey}`
+        },
+        body: JSON.stringify({
+            model: config.model,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.3,
+            max_tokens: 2000,
+            stream: true
+        })
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`OpenAI API 错误 (${response.status}): ${errorText}`);
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    if (!reader) {
+        throw new Error('无法读取响应流');
+    }
+
+    let fullCode = '';
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const data = line.slice(6);
+                if (data === '[DONE]') continue;
+                try {
+                    const parsed = JSON.parse(data);
+                    const content = parsed.choices?.[0]?.delta?.content;
+                    if (content) {
+                        fullCode += content;
+                        onChunk(content);
+                    }
+                } catch (_) {
+                    // ignore parse errors
+                }
+            }
+        }
+    } finally {
+        reader.releaseLock();
+    }
+
+    if (!fullCode.trim()) {
+        throw new Error('OpenAI 返回了空结果');
+    }
+
+    return cleanAIResponse(fullCode);
+}
+
 async function fixWithAnthropicNonStream(
     userPrompt: string,
     systemPrompt: string,
@@ -575,6 +646,121 @@ async function fixWithAnthropicNonStream(
     }
 
     return cleanAIResponse(code);
+}
+
+async function fixWithAnthropicStream(
+    userPrompt: string,
+    systemPrompt: string,
+    config: AIConfig,
+    onChunk: (chunk: string) => void
+): Promise<string> {
+    const response = await fetch(config.baseUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': config.apiKey,
+            'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+            model: config.model,
+            max_tokens: 2000,
+            system: systemPrompt,
+            messages: [
+                { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.3,
+            stream: true
+        })
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Anthropic API 错误 (${response.status}): ${errorText}`);
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    if (!reader) {
+        throw new Error('无法读取响应流');
+    }
+
+    let fullCode = '';
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const data = line.slice(6);
+                try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.type === 'content_block_delta') {
+                        const content = parsed.delta?.text;
+                        if (content) {
+                            fullCode += content;
+                            onChunk(content);
+                        }
+                    }
+                } catch (_) {
+                    // ignore parse errors
+                }
+            }
+        }
+    } finally {
+        reader.releaseLock();
+    }
+
+    if (!fullCode.trim()) {
+        throw new Error('Anthropic 返回了空结果');
+    }
+
+    return cleanAIResponse(fullCode);
+}
+
+export async function fixPluginWithAIStream(
+    originalCode: string,
+    testError: string,
+    requirement: PluginRequirement,
+    config: AIConfig,
+    onChunk: (chunk: string) => void
+): Promise<string> {
+    const systemPrompt = `你是一个专业的插件调试助手。用户的插件代码在测试时出现了错误，你需要分析错误并修复代码。
+
+${getPluginSystemDesignPrompt()}
+
+## 修复要求
+
+1. 仔细分析测试错误信息
+2. 找出代码中的问题
+3. 修复bug，确保代码正确
+4. 返回修复后的完整代码
+5. 只返回代码，不要解释
+6. 代码必须是纯JavaScript（CommonJS格式）`;
+
+    const userPrompt = `以下是插件代码和测试错误，请修复代码中的问题。
+
+原始需求：
+${requirement.description}
+
+当前代码：
+\`\`\`javascript
+${originalCode}
+\`\`\`
+
+测试错误：
+${testError}
+
+请分析错误原因并返回修复后的完整JavaScript代码。`;
+
+    if (config.provider === 'anthropic') {
+        return fixWithAnthropicStream(userPrompt, systemPrompt, config, onChunk);
+    }
+
+    return fixWithOpenAIStream(userPrompt, systemPrompt, config, onChunk);
 }
 
 /**
