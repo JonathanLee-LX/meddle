@@ -25,6 +25,15 @@ describe('plugin-runtime PluginManager', () => {
         expect(manager.getState(plugin.manifest.id)).toBe('registered')
     })
 
+    it('unregisters plugin and removes state', () => {
+        const manager = new PluginManager({ logger: { error() {} } })
+        const plugin = createPlugin()
+        manager.register(plugin)
+        manager.unregister(plugin.manifest.id)
+        expect(manager.getAll()).toHaveLength(0)
+        expect(manager.getState(plugin.manifest.id)).toBe('unknown')
+    })
+
     it('disables plugin when lifecycle throws error', async () => {
         const manager = new PluginManager({ logger: { error() {} } })
         const plugin = createPlugin({

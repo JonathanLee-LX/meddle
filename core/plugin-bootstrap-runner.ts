@@ -2,6 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import chalk from 'chalk'
 import { bootstrapPlugins } from './plugin-bootstrap'
+import { loadCustomPlugins } from './custom-plugin-loader'
 import { createBuiltinPlugins } from '../plugins/builtin'
 import { createBuiltinRouterPlugin } from '../plugins/builtin/router-plugin'
 import { createBuiltinMockPlugin } from '../plugins/builtin/mock-plugin'
@@ -13,7 +14,6 @@ export function createPluginBootstrapRunner(ctx: ProxyContext, mockHandler: Mock
     async function loadCustomPluginsInternal(customPluginsDir: string): Promise<Plugin[]> {
         let customPlugins: Plugin[] = []
         try {
-            const { loadCustomPlugins } = require('./custom-plugin-loader')
             customPlugins = await loadCustomPlugins({ pluginsDir: customPluginsDir, logger: console })
             console.log(chalk.green(`已加载 ${customPlugins.length} 个自定义插件`))
         } catch (error: any) {
@@ -68,8 +68,19 @@ export function createPluginBootstrapRunner(ctx: ProxyContext, mockHandler: Mock
         const newCustomPlugins = await loadCustomPluginsInternal(customPluginsDir)
 
         for (const oldPlugin of loadedCustomPlugins) {
+            try {
+                if (typeof oldPlugin.stop === 'function') await oldPlugin.stop!()
+            }
+            catch (error: any) { console.error('停止插件失败:', oldPlugin.manifest.id, error.message) }
             try { if (typeof oldPlugin.dispose === 'function') await oldPlugin.dispose!() }
             catch (error: any) { console.error('卸载插件失败:', oldPlugin.manifest.id, error.message) }
+            try {
+                if (typeof ctx.pluginManager.unregister === 'function') {
+                    ctx.pluginManager.unregister(oldPlugin.manifest.id)
+                }
+            } catch (error: any) {
+                console.error('注销插件失败:', oldPlugin.manifest.id, error.message)
+            }
         }
 
         for (const newPlugin of newCustomPlugins) {

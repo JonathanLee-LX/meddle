@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,8 +22,12 @@ import {
   Globe,
   ArrowRight,
   FileText,
+  Wand2,
+  RefreshCw,
+  Code2,
 } from 'lucide-react'
 import { BodyDiffView, type DiffViewMode } from './body-diff-view'
+import { getAIConfig, getActiveModel, isAIConfigValid } from '@/lib/ai-config-store'
 
 type HeaderDiffStatus = 'unchanged' | 'changed' | 'added' | 'removed'
 
@@ -202,24 +206,75 @@ interface PluginTestDialogProps {
   onPluginFixed?: () => void
 }
 
+interface TestErrorItem {
+  hookName: string
+  message: string
+  stack?: string
+}
+
 export function PluginTestDialog({
   open,
   onOpenChange,
   pluginId,
   pluginName,
   hooks,
+  onPluginFixed,
 }: PluginTestDialogProps) {
   const [testing, setTesting] = useState(false)
+  const [fixing, setFixing] = useState(false)
   const [testUrl, setTestUrl] = useState('https://365.wps.cn/home')
   const [testMethod, setTestMethod] = useState('GET')
   const [testMode, setTestMode] = useState<'standalone' | 'integrated'>('standalone')
   const [testResults, setTestResults] = useState<any>(null)
   const [headerDiffMode, setHeaderDiffMode] = useState<DiffViewMode>('split')
   const [bodyDiffMode, setBodyDiffMode] = useState<DiffViewMode>('inline')
+  const [fixResult, setFixResult] = useState<{ status: 'success' | 'error'; message: string } | null>(null)
+
+  const aiConfig = getAIConfig()
+  const activeModel = getActiveModel(aiConfig)
+  const effectiveAIConfig = activeModel ? {
+    provider: activeModel.provider,
+    apiKey: activeModel.apiKey,
+    baseUrl: activeModel.baseUrl,
+    model: activeModel.model,
+  } : {
+    provider: aiConfig.provider,
+    apiKey: aiConfig.apiKey,
+    baseUrl: aiConfig.baseUrl,
+    model: aiConfig.model,
+  }
+  const isAIReady = isAIConfigValid(aiConfig)
+  const customFilename = pluginId.startsWith('local.') ? `${pluginId.slice('local.'.length)}.js` : ''
+
+  const testErrors = useMemo(() => {
+    const errors: TestErrorItem[] = []
+    if (testResults?.error) {
+      errors.push({ hookName: 'test', message: testResults.error })
+    }
+    Object.entries(testResults?.hookResults || {}).forEach(([hookName, result]: [string, any]) => {
+      if (result?.status === 'error') {
+        errors.push({
+          hookName,
+          message: result.error || '未知错误',
+          stack: result.stack,
+        })
+      }
+    })
+    if (testResults?.realRequest?.fetchError) {
+      errors.push({
+        hookName: 'fetch',
+        message: testResults.realRequest.fetchError,
+      })
+    }
+    return errors
+  }, [testResults])
+
+  const hasFixableErrors = testErrors.length > 0 && !!customFilename
 
   const handleTest = async () => {
     setTesting(true)
     setTestResults(null)
+    setFixResult(null)
 
     try {
       const response = await fetch('/api/plugins/test', {
@@ -246,6 +301,77 @@ export function PluginTestDialog({
       })
     } finally {
       setTesting(false)
+    }
+  }
+
+  const handleAIFix = async () => {
+    if (!hasFixableErrors || !isAIReady) return
+
+    setFixing(true)
+    setFixResult(null)
+    try {
+      const codeRes = await fetch(`/api/plugins/custom/${encodeURIComponent(customFilename)}/code`)
+      if (!codeRes.ok) {
+        const error = await codeRes.json()
+        throw new Error(error.error || '读取插件源码失败')
+      }
+      const codeData = await codeRes.json()
+
+      const errorSummary = testErrors
+        .map((item) => `Hook: ${item.hookName}\nError: ${item.message}${item.stack ? `\nStack:\n${item.stack}` : ''}`)
+        .join('\n\n---\n\n')
+
+      const fixRes = await fetch('/api/plugins/fix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originalCode: codeData.code,
+          testError: errorSummary,
+          requirement: {
+            name: pluginName,
+            description: `修复插件 ${pluginName} 在测试中的报错，并保持现有 hooks 行为正确。Hooks: ${hooks.join(', ')}`,
+            hooks,
+          },
+          aiConfig: effectiveAIConfig,
+        }),
+      })
+
+      if (!fixRes.ok) {
+        const error = await fixRes.json()
+        throw new Error(error.error || 'AI 修复失败')
+      }
+      const fixData = await fixRes.json()
+      const fixedCode = fixData.fixedCode
+      if (!fixedCode || typeof fixedCode !== 'string') {
+        throw new Error('AI 未返回有效代码')
+      }
+
+      const saveRes = await fetch(`/api/plugins/custom/${encodeURIComponent(customFilename)}/code`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: fixedCode }),
+      })
+      if (!saveRes.ok) {
+        const error = await saveRes.json()
+        throw new Error(error.error || '保存修复后的代码失败')
+      }
+
+      const reloadRes = await fetch('/api/plugins/reload', { method: 'POST' })
+      if (!reloadRes.ok) {
+        const error = await reloadRes.json().catch(() => ({ error: '热加载失败' }))
+        throw new Error(error.error || '热加载失败')
+      }
+
+      setFixResult({ status: 'success', message: 'AI 已修复插件代码并完成热加载。请重新测试验证结果。' })
+      onPluginFixed?.()
+      await handleTest()
+    } catch (error) {
+      setFixResult({
+        status: 'error',
+        message: error instanceof Error ? error.message : 'AI 修复失败',
+      })
+    } finally {
+      setFixing(false)
     }
   }
 
@@ -450,9 +576,20 @@ export function PluginTestDialog({
                               )}
                             </div>
                             {result.status === 'error' && (
-                              <pre className="text-xs text-red-700 dark:text-red-300 font-mono mt-2 whitespace-pre-wrap break-all">
-                                {result.error}
-                              </pre>
+                              <div className="mt-2 space-y-2">
+                                <div className="rounded-md border border-red-200 bg-red-100/60 px-2 py-2 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/20 dark:text-red-300">
+                                  <div className="font-medium mb-1">错误原因</div>
+                                  <pre className="font-mono whitespace-pre-wrap break-all">{result.error}</pre>
+                                </div>
+                                {result.stack && (
+                                  <details className="rounded-md border border-red-200 bg-background/60 px-2 py-2 text-xs dark:border-red-900">
+                                    <summary className="cursor-pointer text-red-700 dark:text-red-300">查看错误堆栈</summary>
+                                    <pre className="font-mono whitespace-pre-wrap break-all mt-2 text-muted-foreground">
+                                      {result.stack}
+                                    </pre>
+                                  </details>
+                                )}
+                              </div>
                             )}
                             {result.targetChanged && (
                               <div className="text-xs text-blue-700 mt-1 flex items-center gap-1">
@@ -465,6 +602,79 @@ export function PluginTestDialog({
                       </div>
                     )}
                   </div>
+
+                  {testErrors.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="text-sm font-medium flex items-center gap-2">
+                          <AlertCircle className="h-4 w-4 text-red-500" />
+                          错误详情
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          {!isAIReady && (
+                            <span className="text-xs text-muted-foreground">AI 未配置，无法自动修复</span>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleAIFix}
+                            disabled={!hasFixableErrors || !isAIReady || fixing || testing}
+                          >
+                            {fixing ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                AI 修复中...
+                              </>
+                            ) : (
+                              <>
+                                <Wand2 className="h-4 w-4 mr-1" />
+                                AI 修复并更新代码
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {testErrors.map((item, index) => (
+                          <div key={`${item.hookName}-${index}`} className="rounded-md border border-red-200 bg-red-50/80 p-3 dark:border-red-900 dark:bg-red-950/20">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Badge variant="outline" className="text-xs">{item.hookName}</Badge>
+                              <span className="text-xs text-red-700 dark:text-red-300">错误原因</span>
+                            </div>
+                            <pre className="text-xs font-mono whitespace-pre-wrap break-all text-red-800 dark:text-red-300">
+                              {item.message}
+                            </pre>
+                            {item.stack && (
+                              <details className="mt-2 text-xs">
+                                <summary className="cursor-pointer text-muted-foreground">查看完整堆栈</summary>
+                                <pre className="font-mono whitespace-pre-wrap break-all mt-2 text-muted-foreground">
+                                  {item.stack}
+                                </pre>
+                              </details>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {fixResult && (
+                        <div
+                          className={`rounded-md border px-3 py-2 text-sm ${
+                            fixResult.status === 'success'
+                              ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900 dark:bg-green-950/20 dark:text-green-300'
+                              : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/20 dark:text-red-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            {fixResult.status === 'success' ? (
+                              <RefreshCw className="h-4 w-4" />
+                            ) : (
+                              <Code2 className="h-4 w-4" />
+                            )}
+                            <span>{fixResult.message}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Request 对比：仅在被修改时显示 */}
                   {(testResults.requestHeadersChanged || testResults.requestBodyChanged) && testResults.originalRequest && testResults.modifiedRequest && (

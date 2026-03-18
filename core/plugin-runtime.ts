@@ -81,6 +81,11 @@ export class PluginManager {
         }
     }
 
+    unregister(pluginId: string): void {
+        this.plugins.delete(pluginId);
+        this.pluginStates.delete(pluginId);
+    }
+
     async setup(contextFactory: (manifest: PluginManifest) => PluginContext): Promise<void> {
         for (const plugin of this.getAll()) {
             const pluginContext = contextFactory(plugin.manifest);

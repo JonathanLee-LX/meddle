@@ -497,6 +497,10 @@ export function PluginConfig({
         pluginId={testPluginId}
         pluginName={testPluginName}
         hooks={testPluginHooks}
+        onPluginFixed={async () => {
+          await fetchCustomPlugins()
+          await fetchPlugins()
+        }}
       />
 
       {/* Plugin Code Editor */}
