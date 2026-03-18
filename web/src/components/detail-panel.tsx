@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Loader2, Wand2, RotateCw, Activity, CheckCircle2, XCircle, AlertCircle, ArrowRight, Clock } from 'lucide-react'
+import { Loader2, Wand2, RotateCw, Activity, CheckCircle2, XCircle, AlertCircle, ArrowRight, Clock, CornerDownRight, Flag, Route, ShieldCheck } from 'lucide-react'
 import { highlightCode } from '@/lib/syntax-highlight'
 import type { RecordDetail, ProxyRecord, InspectionStage } from '@/types'
 
@@ -97,112 +97,252 @@ function getStatusBadgeVariant(status: InspectionStage['status']) {
   }
 }
 
+function getStageStatusLabel(status: InspectionStage['status']) {
+  switch (status) {
+    case 'ok':
+      return '通过'
+    case 'error':
+      return '异常'
+    case 'skipped':
+      return '跳过'
+    case 'short-circuited':
+      return '已短路返回'
+    default:
+      return status
+  }
+}
+
+function getStageTypeLabel(type: InspectionStage['type']) {
+  switch (type) {
+    case 'builtin':
+      return '内置'
+    case 'custom':
+      return '自定义'
+    case 'system':
+      return '系统'
+    default:
+      return type
+  }
+}
+
+function formatStageName(name: string) {
+  return name.replace(/^builtin\./, '').replace(/^custom\./, '')
+}
+
+function getFinalOutcome(inspection: NonNullable<RecordDetail['inspection']>) {
+  const shortCircuitStage = [...inspection.stages].reverse().find((stage) => stage.status === 'short-circuited')
+  if (shortCircuitStage) {
+    return {
+      label: '提前返回响应',
+      description: `在 ${formatStageName(shortCircuitStage.name)} 阶段直接生成响应`,
+      icon: <CornerDownRight className="h-4 w-4 text-blue-500" />,
+    }
+  }
+
+  const errorStage = [...inspection.stages].reverse().find((stage) => stage.status === 'error')
+  if (errorStage) {
+    return {
+      label: '处理过程中出现异常',
+      description: `${formatStageName(errorStage.name)} 执行失败`,
+      icon: <XCircle className="h-4 w-4 text-red-500" />,
+    }
+  }
+
+  return {
+    label: '进入正常代理流程',
+    description: '请求经过检查后继续转发到目标服务',
+    icon: <ArrowRight className="h-4 w-4 text-emerald-500" />,
+  }
+}
+
 function InspectionView({ inspection }: { inspection: NonNullable<RecordDetail['inspection']> }) {
+  const finalOutcome = getFinalOutcome(inspection)
+
   return (
     <div className="space-y-4 pt-3">
-      {/* 请求基本信息 */}
-      <div className="flex items-center gap-4 text-sm">
-        <Badge variant="outline" className="font-mono">
-          {inspection.method}
-        </Badge>
-        <span className="font-mono text-muted-foreground truncate flex-1">
-          {inspection.url}
-        </span>
-        <div className="flex items-center gap-1 text-muted-foreground">
-          <Clock className="h-3.5 w-3.5" />
-          <span className="text-xs">{inspection.totalDuration}ms</span>
+      <div className="rounded-xl border bg-gradient-to-br from-muted/20 via-background to-muted/10 p-4 space-y-4">
+        <div className="flex items-center gap-4 text-sm">
+          <Badge variant="outline" className="font-mono">
+            {inspection.method}
+          </Badge>
+          <span className="font-mono text-muted-foreground truncate flex-1">
+            {inspection.url}
+          </span>
+          <div className="flex items-center gap-1 text-muted-foreground">
+            <Clock className="h-3.5 w-3.5" />
+            <span className="text-xs">{inspection.totalDuration}ms</span>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-lg border bg-background/80 p-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+              <Route className="h-3.5 w-3.5" />
+              请求入口
+            </div>
+            <div className="text-sm font-medium">请求进入代理</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              从浏览器或客户端发起，进入 Easy Proxy 的处理流水线
+            </div>
+          </div>
+
+          <div className="rounded-lg border bg-background/80 p-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              处理阶段
+            </div>
+            <div className="text-sm font-medium">{inspection.stages.length} 个阶段</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              按实际执行顺序记录插件和系统模块对请求的处理
+            </div>
+          </div>
+
+          <div className="rounded-lg border bg-background/80 p-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+              {finalOutcome.icon}
+              最终结果
+            </div>
+            <div className="text-sm font-medium">{finalOutcome.label}</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {finalOutcome.description}
+            </div>
+          </div>
         </div>
       </div>
 
-      <Separator />
-
-      {/* 处理阶段列表 */}
       {inspection.stages.length === 0 ? (
         <p className="text-sm text-muted-foreground py-4 text-center">
           无处理阶段信息（插件模式可能未开启）
         </p>
       ) : (
-        <div className="space-y-3">
+        <div className="rounded-xl border bg-card p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h4 className="text-sm font-semibold">处理流程</h4>
+              <p className="text-xs text-muted-foreground mt-1">
+                按请求真实执行顺序展示，从进入代理到返回响应或继续转发
+              </p>
+            </div>
+            <Badge variant="outline" className="text-xs">
+              Timeline
+            </Badge>
+          </div>
+
+          <div className="space-y-0">
           {inspection.stages.map((stage, index) => (
             <div
               key={`${stage.name}-${index}`}
-              className="border rounded-lg p-3 space-y-2"
+              className="relative pl-10 pb-5 last:pb-0"
             >
-              {/* 阶段头部 */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {getStatusIcon(stage.status)}
-                  <span className="font-medium text-sm">{stage.name}</span>
-                  <Badge variant="outline" className="text-xs font-normal">
-                    {stage.hook}
-                  </Badge>
-                  {stage.type !== 'system' && (
-                    <Badge variant="outline" className="text-xs font-normal">
-                      {stage.type}
-                    </Badge>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge className={`text-xs border ${getStatusBadgeVariant(stage.status)}`}>
-                    {stage.status}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    {stage.duration}ms
-                  </span>
-                </div>
+              {index < inspection.stages.length - 1 && (
+                <div className="absolute left-[15px] top-8 bottom-0 w-px bg-border" />
+              )}
+              <div className="absolute left-0 top-1 flex h-8 w-8 items-center justify-center rounded-full border bg-background shadow-sm">
+                {getStatusIcon(stage.status)}
               </div>
 
-              {/* Target 变化 */}
-              {stage.target && (
-                <div className="text-xs">
-                  <span className="text-muted-foreground">Target: </span>
-                  <span className="font-mono">{stage.target}</span>
+              <div className="rounded-xl border bg-background/90 p-3 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-sm">{index + 1}. {formatStageName(stage.name)}</span>
+                      <Badge variant="outline" className="text-xs font-normal">
+                        {stage.hook}
+                      </Badge>
+                      <Badge variant="outline" className="text-xs font-normal">
+                        {getStageTypeLabel(stage.type)}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {stage.status === 'short-circuited'
+                        ? '这一阶段直接生成了响应，请求不会继续往后转发。'
+                        : stage.status === 'error'
+                          ? '这一阶段执行失败，影响了后续处理流程。'
+                          : stage.status === 'skipped'
+                            ? '这一阶段被跳过，没有对请求做实际处理。'
+                            : '这一阶段执行完成，请求继续进入下一步。'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge className={`text-xs border ${getStatusBadgeVariant(stage.status)}`}>
+                      {getStageStatusLabel(stage.status)}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {stage.duration}ms
+                    </span>
+                  </div>
                 </div>
-              )}
 
-              {/* 变化详情 */}
-              {stage.changes && (
-                <div className="bg-muted/50 rounded p-2 space-y-1.5">
-                  {stage.changes.target && (
-                    <div className="text-xs">
-                      <span className="text-muted-foreground">Target changed: </span>
-                      <span className="font-mono">{stage.changes.target}</span>
-                    </div>
-                  )}
-                  {stage.changes.responseStatusCode && (
-                    <div className="text-xs">
-                      <span className="text-muted-foreground">Status: </span>
-                      <span className="font-mono">{stage.changes.responseStatusCode}</span>
-                    </div>
-                  )}
-                  {stage.changes.responseHeaders && (
-                    <div className="text-xs">
-                      <span className="text-muted-foreground">Headers: </span>
-                      <span className="font-mono">
-                        {Object.keys(stage.changes.responseHeaders).join(', ')}
-                      </span>
-                    </div>
-                  )}
-                  {stage.changes.responseBody && (
-                    <div className="text-xs">
-                      <span className="text-muted-foreground">Body: </span>
-                      <span className="font-mono truncate block max-w-xs">
-                        {stage.changes.responseBody.substring(0, 50)}
-                        {stage.changes.responseBody.length > 50 ? '...' : ''}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
+                {(stage.target || stage.changes) && (
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {stage.target && (
+                      <div className="rounded-lg bg-muted/50 p-2">
+                        <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">
+                          当前 Target
+                        </div>
+                        <div className="font-mono text-xs break-all">
+                          {stage.target}
+                        </div>
+                      </div>
+                    )}
 
-              {/* 错误信息 */}
-              {stage.error && (
-                <div className="text-xs text-red-600">
-                  Error: {stage.error}
+                    {stage.changes && (
+                      <div className="rounded-lg bg-muted/50 p-2">
+                        <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">
+                          本阶段产出
+                        </div>
+                        <div className="space-y-1.5 text-xs">
+                          {stage.changes.target && (
+                            <div>
+                              <span className="text-muted-foreground">改写目标: </span>
+                              <span className="font-mono break-all">{stage.changes.target}</span>
+                            </div>
+                          )}
+                          {stage.changes.responseStatusCode && (
+                            <div>
+                              <span className="text-muted-foreground">响应状态: </span>
+                              <span className="font-mono">{stage.changes.responseStatusCode}</span>
+                            </div>
+                          )}
+                          {stage.changes.responseHeaders && (
+                            <div>
+                              <span className="text-muted-foreground">响应头: </span>
+                              <span className="font-mono">
+                                {Object.keys(stage.changes.responseHeaders).join(', ') || '无'}
+                              </span>
+                            </div>
+                          )}
+                          {stage.changes.responseBody && (
+                            <div>
+                              <span className="text-muted-foreground">响应体摘要: </span>
+                              <span className="font-mono break-all">
+                                {stage.changes.responseBody.substring(0, 80)}
+                                {stage.changes.responseBody.length > 80 ? '...' : ''}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {stage.error && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    Error: {stage.error}
+                  </div>
+                )}
+
+                {index === inspection.stages.length - 1 && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
+                    <Flag className="h-3.5 w-3.5" />
+                    <span>流程在这一步之后结束</span>
+                  </div>
+                )}
                 </div>
-              )}
-            </div>
+              </div>
           ))}
+          </div>
         </div>
       )}
     </div>
