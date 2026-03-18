@@ -169,4 +169,52 @@ describe('mock-handler createMockHandler', () => {
             expect(result.startsWith(tmpDir)).toBeTruthy()
         })
     })
+
+    describe('sendMockResponse inspection', () => {
+        it('writes short-circuit inspection diff fields for direct mock responses', () => {
+            const ctx = makeCtx({ epDir: tmpDir })
+            const handler = createMockHandler(ctx)
+            const rule = {
+                id: 1,
+                name: 'MockRule',
+                urlPattern: '.*',
+                method: 'POST',
+                enabled: true,
+                statusCode: 201,
+                delay: 0,
+                bodyType: 'inline',
+                headers: { 'x-mock-rule': 'MockRule' },
+                body: '{"ok":true}',
+            }
+
+            let writtenStatus = 0
+            let endedBody = ''
+
+            handler.sendMockResponse(
+                {
+                    headers: { host: 'example.com' },
+                    on: () => {},
+                    resume: () => {},
+                },
+                {
+                    writeHead: (status: number) => { writtenStatus = status },
+                    end: (body: string) => { endedBody = body },
+                },
+                rule as any,
+                { method: 'POST', source: 'https://example.com/api', target: 'https://example.com/api' },
+            )
+
+            expect(writtenStatus).toBe(201)
+            expect(endedBody).toBe('{"ok":true}')
+
+            const detail = ctx.proxyRecordDetailMap.get(0)
+            expect(detail?.inspection?.stages).toHaveLength(1)
+            expect(detail?.inspection?.stages[0].status).toBe('short-circuited')
+            expect(detail?.inspection?.stages[0].changes?.responseStatusCodeAfter).toBe(201)
+            expect(detail?.inspection?.stages[0].changes?.responseHeadersBefore).toEqual({})
+            expect(detail?.inspection?.stages[0].changes?.responseHeadersAfter?.['x-mock-rule']).toBe('MockRule')
+            expect(detail?.inspection?.stages[0].changes?.responseBodyBefore).toBe('')
+            expect(detail?.inspection?.stages[0].changes?.responseBodyAfter).toBe('{"ok":true}')
+        })
+    })
 })

@@ -85,10 +85,20 @@ export interface InspectionStage {
   // 变化内容
   changes?: {
     target?: string       // target 变化
+    targetBefore?: string
+    targetAfter?: string
     requestHeaders?: Record<string, string>  // 请求头变化
+    requestHeadersBefore?: Record<string, string>
+    requestHeadersAfter?: Record<string, string>
     responseHeaders?: Record<string, string> // 响应头变化
+    responseHeadersBefore?: Record<string, string>
+    responseHeadersAfter?: Record<string, string>
     responseStatusCode?: number   // 响应状态码变化
+    responseStatusCodeBefore?: number
+    responseStatusCodeAfter?: number
     responseBody?: string  // 响应体变化（仅适用于 short-circuit）
+    responseBodyBefore?: string
+    responseBodyAfter?: string
   }
   error?: string         // 错误信息
 }

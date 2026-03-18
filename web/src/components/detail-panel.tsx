@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, type ReactNode } from 'react'
 import {
   Sheet,
   SheetContent,
@@ -10,9 +10,11 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Loader2, Wand2, RotateCw, Activity, CheckCircle2, XCircle, AlertCircle, ArrowRight, Clock, CornerDownRight, Flag, Route, ShieldCheck } from 'lucide-react'
+import { Loader2, Wand2, RotateCw, Activity, XCircle, ArrowRight, ArrowDown, Clock, CornerDownRight, Flag, Route, ShieldCheck, ChevronDown, ChevronRight, Monitor, Server } from 'lucide-react'
+import { diffLines } from 'diff'
 import { highlightCode } from '@/lib/syntax-highlight'
 import type { RecordDetail, ProxyRecord, InspectionStage } from '@/types'
+import { BodyDiffView } from './body-diff-view'
 
 interface DetailPanelProps {
   open: boolean
@@ -67,21 +69,6 @@ function BodyView({ body }: { body: string }) {
   )
 }
 
-function getStatusIcon(status: InspectionStage['status']) {
-  switch (status) {
-    case 'ok':
-      return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-    case 'error':
-      return <XCircle className="h-3.5 w-3.5 text-red-500" />
-    case 'skipped':
-      return <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
-    case 'short-circuited':
-      return <ArrowRight className="h-3.5 w-3.5 text-blue-500" />
-    default:
-      return null
-  }
-}
-
 function getStatusBadgeVariant(status: InspectionStage['status']) {
   switch (status) {
     case 'ok':
@@ -129,6 +116,422 @@ function formatStageName(name: string) {
   return name.replace(/^builtin\./, '').replace(/^custom\./, '')
 }
 
+function getStageKey(stage: InspectionStage, index: number) {
+  return `${index}-${stage.hook}-${stage.name}`
+}
+
+function getStagePhase(hook: InspectionStage['hook']): 'request' | 'response' {
+  return hook === 'onBeforeResponse' || hook === 'onAfterResponse' ? 'response' : 'request'
+}
+
+function getChangedHeaderEntries(before: Record<string, string>, after: Record<string, string>) {
+  const keys = Array.from(new Set([...Object.keys(before), ...Object.keys(after)])).sort()
+  return keys
+    .map((key) => ({
+      key,
+      before: before[key] ?? '',
+      after: after[key] ?? '',
+    }))
+    .filter((entry) => entry.before !== entry.after)
+}
+
+function HeaderSnapshotView({ headers }: { headers: Record<string, string> }) {
+  const entries = Object.entries(headers)
+  if (entries.length === 0) {
+    return <span className="text-muted-foreground italic">(无)</span>
+  }
+  return (
+    <div className="space-y-1">
+      {entries.map(([key, value]) => (
+        <div key={key} className="break-all">
+          <span className="text-muted-foreground">{key}:</span> {value}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function DiffLinePreview({
+  lines,
+  className,
+}: {
+  lines: Array<{ type: 'added' | 'removed'; text: string }>
+  className?: string
+}) {
+  if (lines.length === 0) {
+    return <p className="text-xs text-muted-foreground">无变更</p>
+  }
+
+  return (
+    <div className={`rounded-lg border bg-muted/20 p-2 text-xs font-mono space-y-1 ${className || ''}`}>
+      {lines.map((line, index) => (
+        <div
+          key={`${line.type}-${index}-${line.text}`}
+          className={`whitespace-pre-wrap break-all px-2 py-1 rounded ${
+            line.type === 'added'
+              ? 'bg-green-500/10 text-green-700 dark:text-green-300'
+              : 'bg-red-500/10 text-red-700 dark:text-red-300'
+          }`}
+        >
+          <span className="mr-1">{line.type === 'added' ? '+ ' : '- '}</span>
+          {line.text}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function buildKeyValueDiffLines(
+  label: string,
+  before: string | number | undefined,
+  after: string | number | undefined,
+) {
+  const lines: Array<{ type: 'added' | 'removed'; text: string }> = []
+
+  if (before !== undefined && before !== '') {
+    lines.push({ type: 'removed', text: `${label} ${before}` })
+  }
+
+  if (after !== undefined && after !== '') {
+    lines.push({ type: 'added', text: `${label} ${after}` })
+  }
+
+  return lines
+}
+
+function buildRawDiffLines(before: string | undefined, after: string | undefined) {
+  const lines: Array<{ type: 'added' | 'removed'; text: string }> = []
+
+  if (before !== undefined && before !== '') {
+    lines.push({ type: 'removed', text: before })
+  }
+
+  if (after !== undefined && after !== '') {
+    lines.push({ type: 'added', text: after })
+  }
+
+  return lines
+}
+
+function splitDisplayLines(value: string) {
+  const normalized = value.replace(/\r\n/g, '\n')
+  const lines = normalized.split('\n')
+  if (lines[lines.length - 1] === '') {
+    lines.pop()
+  }
+  return lines.length > 0 ? lines : ['']
+}
+
+function isBinaryBodyValue(value: string) {
+  if (!value) return false
+  if (/^\(binary(?:,\s*\d+\s+bytes)?\)$/i.test(value.trim())) return true
+
+  let controlCount = 0
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+    if (code === 9 || code === 10 || code === 13) continue
+    if (code < 32 || code === 65533) {
+      controlCount += 1
+    }
+  }
+
+  return controlCount > 0 && controlCount / Math.max(value.length, 1) > 0.15
+}
+
+function HeaderDiffPreview({
+  before,
+  after,
+}: {
+  before: Record<string, string>
+  after: Record<string, string>
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const changedEntries = useMemo(() => getChangedHeaderEntries(before, after), [before, after])
+  const diffLines = useMemo(
+    () => changedEntries.flatMap((entry) => buildKeyValueDiffLines(entry.key, entry.before, entry.after)),
+    [changedEntries],
+  )
+
+  if (diffLines.length === 0) {
+    return <p className="text-xs text-muted-foreground">无变更</p>
+  }
+
+  return (
+    <div className="space-y-2">
+      <DiffLinePreview lines={diffLines} />
+      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setExpanded((value) => !value)}>
+        {expanded ? <ChevronDown className="h-3.5 w-3.5 mr-1" /> : <ChevronRight className="h-3.5 w-3.5 mr-1" />}
+        {expanded ? '收起完整头部' : '展开完整头部'}
+      </Button>
+      {expanded && (
+        <div className="grid gap-2 md:grid-cols-2">
+          <div className="rounded-lg bg-muted/50 p-2 text-xs font-mono">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">变更前</div>
+            <HeaderSnapshotView headers={before} />
+          </div>
+          <div className="rounded-lg bg-muted/50 p-2 text-xs font-mono">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">变更后</div>
+            <HeaderSnapshotView headers={after} />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CompactBodyDiff({
+  before,
+  after,
+}: {
+  before: string
+  after: string
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const changedParts = useMemo(
+    () => diffLines(before || '', after || '').filter((part) => part.added || part.removed),
+    [before, after],
+  )
+  const hasBinaryBody = useMemo(
+    () => isBinaryBodyValue(before || '') || isBinaryBodyValue(after || ''),
+    [before, after],
+  )
+  const previewLines = useMemo(
+    () => {
+      if (hasBinaryBody) {
+        return buildRawDiffLines(before || '', after || '')
+      }
+
+      return changedParts.flatMap((part) =>
+        splitDisplayLines(part.value).map((line) => ({
+          type: part.added ? 'added' : 'removed',
+          text: line,
+        })),
+      ) as Array<{ type: 'added' | 'removed'; text: string }>
+    },
+    [before, after, changedParts, hasBinaryBody],
+  )
+
+  if (previewLines.length === 0) {
+    return <p className="text-xs text-muted-foreground">无变更</p>
+  }
+
+  return (
+    <div className="space-y-2">
+      <DiffLinePreview lines={previewLines} className="max-h-40 overflow-auto" />
+      {!hasBinaryBody && (
+        <>
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setExpanded((value) => !value)}>
+            {expanded ? <ChevronDown className="h-3.5 w-3.5 mr-1" /> : <ChevronRight className="h-3.5 w-3.5 mr-1" />}
+            {expanded ? '收起完整 Diff' : '展开完整 Diff'}
+          </Button>
+          {expanded && (
+            <BodyDiffView original={before} modified={after} mode="inline" maxHeight="220px" />
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function StageDiffSections({ stage }: { stage: InspectionStage }) {
+  const changes = stage.changes
+  if (!changes) return null
+
+  return (
+    <div className="space-y-2">
+      {(changes.targetBefore || changes.targetAfter) && (
+        <div className="rounded-lg bg-muted/50 p-2">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Request URL Diff</div>
+          <DiffLinePreview
+            lines={buildKeyValueDiffLines('Request URL', changes.targetBefore, changes.targetAfter || changes.target)}
+          />
+        </div>
+      )}
+
+      {(changes.requestHeadersBefore || changes.requestHeadersAfter) && (
+        <div className="rounded-lg bg-muted/50 p-2">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Request Header Diff</div>
+          <HeaderDiffPreview before={changes.requestHeadersBefore || {}} after={changes.requestHeadersAfter || {}} />
+        </div>
+      )}
+
+      {(changes.responseStatusCodeBefore !== undefined || changes.responseStatusCodeAfter !== undefined) && (
+        <div className="rounded-lg bg-muted/50 p-2">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Response Status Diff</div>
+          <DiffLinePreview
+            lines={buildKeyValueDiffLines(
+              'Response Status',
+              changes.responseStatusCodeBefore,
+              changes.responseStatusCodeAfter ?? changes.responseStatusCode,
+            )}
+          />
+        </div>
+      )}
+
+      {(changes.responseHeadersBefore || changes.responseHeadersAfter) && (
+        <div className="rounded-lg bg-muted/50 p-2">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Response Header Diff</div>
+          <HeaderDiffPreview before={changes.responseHeadersBefore || {}} after={changes.responseHeadersAfter || {}} />
+        </div>
+      )}
+
+      {(changes.responseBodyBefore !== undefined || changes.responseBodyAfter !== undefined) && (
+        <div className="rounded-lg bg-muted/50 p-2">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Response Body Diff</div>
+          <CompactBodyDiff before={changes.responseBodyBefore || ''} after={changes.responseBodyAfter || changes.responseBody || ''} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StageCard({
+  stage,
+  index,
+  isLast,
+  accentClass,
+}: {
+  stage: InspectionStage
+  index: number
+  isLast: boolean
+  accentClass: string
+}) {
+  const [expanded, setExpanded] = useState(stage.status !== 'skipped')
+
+  return (
+    <div className="space-y-2">
+      <div className="rounded-xl border bg-background/90 p-3 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-1 text-xs"
+              onClick={() => setExpanded((value) => !value)}
+              title={expanded ? '收起' : '展开'}
+            >
+              {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            </Button>
+            <span className="font-medium text-sm">{index + 1}. {formatStageName(stage.name)}</span>
+            <Badge variant="outline" className="text-xs font-normal">
+              {stage.hook}
+            </Badge>
+            <Badge variant="outline" className="text-xs font-normal">
+              {getStageTypeLabel(stage.type)}
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {stage.status === 'short-circuited'
+              ? '这一阶段直接生成了响应，请求不会继续往后转发。'
+              : stage.status === 'error'
+                ? '这一阶段执行失败，影响了后续处理流程。'
+                : '这一阶段执行完成，请求继续进入下一步。'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Badge className={`text-xs border ${getStatusBadgeVariant(stage.status)}`}>
+            {getStageStatusLabel(stage.status)}
+          </Badge>
+          <span className="text-xs text-muted-foreground">
+            {stage.duration}ms
+          </span>
+        </div>
+      </div>
+
+      {expanded && (
+        <>
+          {stage.target && (
+            <div className="rounded-lg bg-muted/50 p-2">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">
+                当前 Target
+              </div>
+              <div className="font-mono text-xs break-all">
+                {stage.target}
+              </div>
+            </div>
+          )}
+
+          <StageDiffSections stage={stage} />
+
+          {stage.error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              Error: {stage.error}
+            </div>
+          )}
+        </>
+      )}
+      </div>
+
+      {!isLast && (
+        <div className="flex justify-center py-1">
+          <div className="flex flex-col items-center gap-1">
+            <div className={`h-2.5 w-2.5 rounded-full ${accentClass} animate-pulse`} />
+            <ArrowDown className={`h-4 w-4 ${accentClass} animate-bounce`} />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StageColumn({
+  title,
+  description,
+  stages,
+  icon,
+  roleLabel,
+  roleIcon,
+  accentClass,
+}: {
+  title: string
+  description: string
+  stages: Array<{ stage: InspectionStage; index: number }>
+  icon: ReactNode
+  roleLabel: string
+  roleIcon: ReactNode
+  accentClass: string
+}) {
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Badge variant="outline" className="text-[11px] font-normal">
+              <span className="mr-1">{roleIcon}</span>
+              {roleLabel}
+            </Badge>
+          </div>
+          <h4 className="text-sm font-semibold flex items-center gap-2">
+            <span className={accentClass}>{icon}</span>
+            {title}
+          </h4>
+          <p className="text-xs text-muted-foreground mt-1">{description}</p>
+        </div>
+        <Badge variant="outline" className="text-xs">
+          {stages.length} 个阶段
+        </Badge>
+      </div>
+
+      {stages.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-4 text-center">无阶段信息</p>
+      ) : (
+        <div className="space-y-3">
+          {stages.map(({ stage, index }, stageIndex) => (
+            <StageCard
+              key={getStageKey(stage, index)}
+              stage={stage}
+              index={index}
+              isLast={stageIndex === stages.length - 1}
+              accentClass={accentClass}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function getFinalOutcome(inspection: NonNullable<RecordDetail['inspection']>) {
   const shortCircuitStage = [...inspection.stages].reverse().find((stage) => stage.status === 'short-circuited')
   if (shortCircuitStage) {
@@ -157,6 +560,9 @@ function getFinalOutcome(inspection: NonNullable<RecordDetail['inspection']>) {
 
 function InspectionView({ inspection }: { inspection: NonNullable<RecordDetail['inspection']> }) {
   const finalOutcome = getFinalOutcome(inspection)
+  const stageEntries = inspection.stages.map((stage, index) => ({ stage, index }))
+  const requestStages = stageEntries.filter(({ stage }) => getStagePhase(stage.hook) === 'request')
+  const responseStages = stageEntries.filter(({ stage }) => getStagePhase(stage.hook) === 'response')
 
   return (
     <div className="space-y-4 pt-3">
@@ -215,133 +621,41 @@ function InspectionView({ inspection }: { inspection: NonNullable<RecordDetail['
           无处理阶段信息（插件模式可能未开启）
         </p>
       ) : (
-        <div className="rounded-xl border bg-card p-4">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h4 className="text-sm font-semibold">处理流程</h4>
-              <p className="text-xs text-muted-foreground mt-1">
-                按请求真实执行顺序展示，从进入代理到返回响应或继续转发
-              </p>
-            </div>
-            <Badge variant="outline" className="text-xs">
-              Timeline
-            </Badge>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Flag className="h-3.5 w-3.5" />
+            <span>默认仅展示改动内容；跳过阶段默认折叠，可单独展开查看更多。</span>
           </div>
 
-          <div className="space-y-0">
-          {inspection.stages.map((stage, index) => (
-            <div
-              key={`${stage.name}-${index}`}
-              className="relative pl-10 pb-5 last:pb-0"
-            >
-              {index < inspection.stages.length - 1 && (
-                <div className="absolute left-[15px] top-8 bottom-0 w-px bg-border" />
-              )}
-              <div className="absolute left-0 top-1 flex h-8 w-8 items-center justify-center rounded-full border bg-background shadow-sm">
-                {getStatusIcon(stage.status)}
-              </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <StageColumn
+              title="请求阶段"
+              description="客户端请求进入代理后，按顺序执行请求侧处理阶段"
+              stages={requestStages}
+              icon={<Route className="h-4 w-4 text-blue-500" />}
+              roleLabel="客户端"
+              roleIcon={<Monitor className="h-3 w-3 text-blue-500" />}
+              accentClass="text-blue-500"
+            />
+            <StageColumn
+              title="响应阶段"
+              description="服务器响应返回代理后，按顺序执行响应侧处理阶段"
+              stages={responseStages}
+              icon={<Activity className="h-4 w-4 text-emerald-500" />}
+              roleLabel="服务器"
+              roleIcon={<Server className="h-3 w-3 text-emerald-500" />}
+              accentClass="text-emerald-500"
+            />
+          </div>
 
-              <div className="rounded-xl border bg-background/90 p-3 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-sm">{index + 1}. {formatStageName(stage.name)}</span>
-                      <Badge variant="outline" className="text-xs font-normal">
-                        {stage.hook}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs font-normal">
-                        {getStageTypeLabel(stage.type)}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {stage.status === 'short-circuited'
-                        ? '这一阶段直接生成了响应，请求不会继续往后转发。'
-                        : stage.status === 'error'
-                          ? '这一阶段执行失败，影响了后续处理流程。'
-                          : stage.status === 'skipped'
-                            ? '这一阶段被跳过，没有对请求做实际处理。'
-                            : '这一阶段执行完成，请求继续进入下一步。'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Badge className={`text-xs border ${getStatusBadgeVariant(stage.status)}`}>
-                      {getStageStatusLabel(stage.status)}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">
-                      {stage.duration}ms
-                    </span>
-                  </div>
-                </div>
-
-                {(stage.target || stage.changes) && (
-                  <div className="grid gap-2 md:grid-cols-2">
-                    {stage.target && (
-                      <div className="rounded-lg bg-muted/50 p-2">
-                        <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">
-                          当前 Target
-                        </div>
-                        <div className="font-mono text-xs break-all">
-                          {stage.target}
-                        </div>
-                      </div>
-                    )}
-
-                    {stage.changes && (
-                      <div className="rounded-lg bg-muted/50 p-2">
-                        <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">
-                          本阶段产出
-                        </div>
-                        <div className="space-y-1.5 text-xs">
-                          {stage.changes.target && (
-                            <div>
-                              <span className="text-muted-foreground">改写目标: </span>
-                              <span className="font-mono break-all">{stage.changes.target}</span>
-                            </div>
-                          )}
-                          {stage.changes.responseStatusCode && (
-                            <div>
-                              <span className="text-muted-foreground">响应状态: </span>
-                              <span className="font-mono">{stage.changes.responseStatusCode}</span>
-                            </div>
-                          )}
-                          {stage.changes.responseHeaders && (
-                            <div>
-                              <span className="text-muted-foreground">响应头: </span>
-                              <span className="font-mono">
-                                {Object.keys(stage.changes.responseHeaders).join(', ') || '无'}
-                              </span>
-                            </div>
-                          )}
-                          {stage.changes.responseBody && (
-                            <div>
-                              <span className="text-muted-foreground">响应体摘要: </span>
-                              <span className="font-mono break-all">
-                                {stage.changes.responseBody.substring(0, 80)}
-                                {stage.changes.responseBody.length > 80 ? '...' : ''}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {stage.error && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                    Error: {stage.error}
-                  </div>
-                )}
-
-                {index === inspection.stages.length - 1 && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
-                    <Flag className="h-3.5 w-3.5" />
-                    <span>流程在这一步之后结束</span>
-                  </div>
-                )}
-                </div>
-              </div>
-          ))}
+          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+            <span>请求进入</span>
+            <ArrowRight className="h-4 w-4 animate-pulse text-blue-500" />
+            <span>请求阶段</span>
+            <ArrowRight className="h-4 w-4 animate-pulse text-violet-500" />
+            <span>响应阶段</span>
+            <ArrowRight className="h-4 w-4 animate-pulse text-emerald-500" />
+            <span>最终返回</span>
           </div>
         </div>
       )}

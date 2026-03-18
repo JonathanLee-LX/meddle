@@ -9,9 +9,9 @@ import {
     Request,
     Response,
     PluginMode,
-    Logger,
     InspectionStage,
 } from './types';
+import { dispatchWithInspection } from './inspection-dispatch';
 
 const SUPPORTED_MODES = new Set<string>(['off', 'shadow', 'on']);
 
@@ -35,8 +35,8 @@ export function createPipeline(options: PipelineOptions): Pipeline {
                     meta: hookContext.meta,
                 };
             }
-            await safeDispatch(dispatcher, logger, 'onRequestStart', hookContext);
-            await safeDispatch(dispatcher, logger, 'onBeforeProxy', hookContext);
+            await dispatchWithInspection(dispatcher, logger, 'onRequestStart', hookContext);
+            await dispatchWithInspection(dispatcher, logger, 'onBeforeProxy', hookContext);
             if (mode === 'shadow') {
                 return {
                     target: initialTarget,
@@ -85,8 +85,8 @@ export function createPipeline(options: PipelineOptions): Pipeline {
                     shortCircuitContext, 
                     decision.response!
                 );
-                await safeDispatch(dispatcher, logger, 'onBeforeResponse', responseContext);
-                await safeDispatch(dispatcher, logger, 'onAfterResponse', responseContext);
+                await dispatchWithInspection(dispatcher, logger, 'onBeforeResponse', responseContext);
+                await dispatchWithInspection(dispatcher, logger, 'onAfterResponse', responseContext);
                 return {
                     shortCircuited: true,
                     response: responseContext.response,
@@ -100,8 +100,8 @@ export function createPipeline(options: PipelineOptions): Pipeline {
                 { request, target: decision.target, meta: decision.meta },
                 upstream.response || upstream
             );
-            await safeDispatch(dispatcher, logger, 'onBeforeResponse', responseContext);
-            await safeDispatch(dispatcher, logger, 'onAfterResponse', responseContext);
+            await dispatchWithInspection(dispatcher, logger, 'onBeforeResponse', responseContext);
+            await dispatchWithInspection(dispatcher, logger, 'onAfterResponse', responseContext);
             return {
                 ...upstream,
                 shortCircuited: false,
@@ -150,83 +150,6 @@ function createResponseContext(
             body: response.body || '',
         },
     };
-}
-
-async function safeDispatch(
-    dispatcher: any,
-    logger: Logger,
-    hookName: string,
-    context: HookContext | ResponseContext
-): Promise<any[]> {
-    const stages = (context as HookContext).meta?._inspectionStages as InspectionStage[] | undefined;
-    const prevTarget = (context as HookContext).target;
-    const prevShortCircuited = (context as HookContext).shortCircuited;
-
-    try {
-        const results = await dispatcher.dispatch(hookName, context);
-
-        // 记录每个插件的执行结果
-        if (stages && Array.isArray(results)) {
-            for (const result of results) {
-                const stage: InspectionStage = {
-                    name: result.pluginId || 'unknown',
-                    type: result.pluginId?.startsWith('builtin.') ? 'builtin' : 'custom',
-                    hook: hookName,
-                    status: result.status === 'ok' ? 'ok' : result.status === 'skipped-disabled' ? 'skipped' : 'error',
-                    duration: result.duration || 0,
-                    target: (context as HookContext).target,
-                    error: result.error,
-                };
-
-                // 记录 target 变化
-                if ((context as HookContext).target !== prevTarget) {
-                    stage.changes = {
-                        ...stage.changes,
-                        target: (context as HookContext).target,
-                    };
-                }
-
-                // 记录短路状态
-                if ((context as HookContext).shortCircuited && !prevShortCircuited) {
-                    stage.shortCircuited = true;
-                    stage.status = 'short-circuited';
-                    // 记录响应变化
-                    const shortCircuitResponse = (context as HookContext).shortCircuitResponse;
-                    if (shortCircuitResponse) {
-                        stage.changes = {
-                            ...stage.changes,
-                            responseStatusCode: shortCircuitResponse.statusCode,
-                            responseHeaders: shortCircuitResponse.headers as Record<string, string>,
-                            responseBody: typeof shortCircuitResponse.body === 'string' ? shortCircuitResponse.body : '',
-                        };
-                    }
-                }
-
-                stages.push(stage);
-            }
-        }
-
-        return results;
-    } catch (error: any) {
-        logger.error(
-            `[pipeline] dispatch ${hookName} failed:`,
-            error && error.message ? error.message : error
-        );
-
-        // 记录错误阶段
-        if (stages) {
-            stages.push({
-                name: 'pipeline',
-                type: 'system',
-                hook: hookName,
-                status: 'error',
-                duration: 0,
-                error: error?.message || String(error),
-            });
-        }
-
-        return [];
-    }
 }
 
 export function normalizeMode(mode?: string): PluginMode {

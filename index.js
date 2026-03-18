@@ -153,7 +153,7 @@ const proxyServer = http.createServer((req, res) => {
                         intercepted = await pluginIntercept.interceptResponseWithPlugins({
                             req, res, source, target: url.href, startTime,
                             statusCode: proxyRes.statusCode, headers: proxyRes.headers,
-                            bodyBuffer: resBody, reqBody,
+                            bodyBuffer: resBody, reqBody, inspectionMeta: routeDecision.meta,
                         })
                     } catch (e) { console.error('[plugin] intercept error:', e) }
                     if (!intercepted) { res.writeHead(proxyRes.statusCode, proxyRes.headers); res.end(resBody) }
@@ -313,7 +313,7 @@ proxyServer.on('connect', async (req, socket, header) => {
                                         intercepted = await pluginIntercept.interceptResponseWithPlugins({
                                             req, res, source, target, startTime,
                                             statusCode: proxyRes.statusCode, headers: proxyRes.headers,
-                                            bodyBuffer: resBody, reqBody, cleanHeaders: cleanHeadersForH2,
+                                            bodyBuffer: resBody, reqBody, inspectionMeta: routeDecision.meta, cleanHeaders: cleanHeadersForH2,
                                         })
                                     } catch (e) { console.error('[plugin] intercept error (HTTPS):', e) }
                                     if (!intercepted) { res.writeHead(proxyRes.statusCode, cleanHeadersForH2(proxyRes.headers)); res.end(resBody) }

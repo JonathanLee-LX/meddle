@@ -1,6 +1,7 @@
 import * as zlib from 'zlib'
 import _debug from 'debug'
 import type { ProxyContext, InterceptOptions } from './types'
+import { dispatchWithInspection } from './inspection-dispatch'
 
 const proxyDebug = _debug('proxy')
 
@@ -32,7 +33,7 @@ export function createPluginIntercept(ctx: ProxyContext) {
     }
 
     async function interceptResponseWithPlugins(opts: InterceptOptions): Promise<boolean> {
-        const { req, res, source, target, startTime, statusCode, headers, bodyBuffer, reqBody, cleanHeaders } = opts
+        const { req, res, source, target, startTime, statusCode, headers, bodyBuffer, reqBody, inspectionMeta, cleanHeaders } = opts
         const contentType: string = headers['content-type'] || ''
         const contentEncoding: string = headers['content-encoding'] || ''
 
@@ -61,11 +62,11 @@ export function createPluginIntercept(ctx: ProxyContext) {
                 body: reqBody ? reqBody.toString('utf-8') : '',
             },
             target,
-            meta: { _pluginRequestStartAt: startTime },
+            meta: { ...(inspectionMeta || {}), _pluginRequestStartAt: startTime },
             response: { statusCode, headers: hdrs, body: bodyStr },
         }
 
-        try { await ctx.hookDispatcher.dispatch('onBeforeResponse', responseCtx) }
+        try { await dispatchWithInspection(ctx.hookDispatcher, console, 'onBeforeResponse', responseCtx) }
         catch (e) { console.error('[plugin] onBeforeResponse hook error:', e) }
 
         const finalBody = Buffer.from(responseCtx.response.body, 'utf-8')
@@ -77,7 +78,7 @@ export function createPluginIntercept(ctx: ProxyContext) {
         res.writeHead(responseCtx.response.statusCode, finalWriteHeaders)
         res.end(finalBody)
 
-        try { await ctx.hookDispatcher.dispatch('onAfterResponse', responseCtx) } catch (_) { /* ignore */ }
+        try { await dispatchWithInspection(ctx.hookDispatcher, console, 'onAfterResponse', responseCtx) } catch (_) { /* ignore */ }
         return true
     }
 

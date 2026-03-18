@@ -128,6 +128,10 @@ describe('pipeline inspection', () => {
         // 查找 short-circuited 的 stage
         const shortCircuitStage = stages.find((s: any) => s.shortCircuited === true)
         expect(shortCircuitStage).toBeDefined()
+        expect(shortCircuitStage.changes?.responseHeadersBefore).toEqual({})
+        expect(shortCircuitStage.changes?.responseHeadersAfter).toEqual({ 'X-Test': '1' })
+        expect(shortCircuitStage.changes?.responseBodyBefore).toBe('')
+        expect(shortCircuitStage.changes?.responseBodyAfter).toBe('short-circuit')
     })
 
     it('records errors in inspection stages', async () => {
@@ -179,6 +183,40 @@ describe('pipeline inspection', () => {
         expect(receivedCtx.log).toBeDefined()
         expect(typeof receivedCtx.log.info).toBe('function')
         expect(typeof receivedCtx.log.error).toBe('function')
+    })
+
+    it('records response-stage changes in inspection stages', async () => {
+        const pipeline = createPipeline({
+            mode: 'on',
+            dispatcher: {
+                async dispatch(hook: string, ctx: any) {
+                    if (hook === 'onBeforeResponse') {
+                        ctx.response.statusCode = 201
+                        ctx.response.headers['x-inspected'] = 'yes'
+                        ctx.response.body = 'modified body'
+                    }
+                    return [{
+                        pluginId: 'local.response',
+                        status: 'ok',
+                        duration: 3,
+                    }]
+                },
+            },
+            pluginManager: {},
+            logger: { error() {} },
+        })
+
+        const result = await pipeline.execute({
+            request: { method: 'GET', url: 'https://a.com' },
+            initialTarget: 'https://a.com',
+            executeUpstream: async () => ({ response: { statusCode: 200, headers: {}, body: 'original body' } }),
+        })
+
+        const responseStage = result.meta._inspectionStages.find((stage: any) => stage.hook === 'onBeforeResponse')
+        expect(responseStage).toBeDefined()
+        expect(responseStage.changes?.responseStatusCode).toBe(201)
+        expect(responseStage.changes?.responseHeaders?.['x-inspected']).toBe('yes')
+        expect(responseStage.changes?.responseBody).toBe('modified body')
     })
 })
 

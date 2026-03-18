@@ -132,6 +132,44 @@ describe('plugin-intercept createPluginIntercept', () => {
             expect(writtenHeaders).toBeTruthy()
             expect(writtenHeaders['x-extra']).toBe(undefined)
         })
+
+        it('appends response hook stages into inspection timeline', async () => {
+            const inspectionMeta = { _inspectionStages: [] as any[] }
+            const ctx = makeCtx({
+                requestPipeline: { mode: 'on' },
+                hookDispatcher: {
+                    dispatch: async (hook: string, responseCtx: any) => {
+                        if (hook === 'onBeforeResponse') {
+                            responseCtx.response.headers['x-plugin'] = '1'
+                        }
+                        return [{
+                            pluginId: 'local.custom',
+                            status: 'ok',
+                            duration: 4,
+                        }]
+                    },
+                },
+            })
+            const pi = createPluginIntercept(ctx)
+
+            await pi.interceptResponseWithPlugins({
+                req: { method: 'GET', headers: {} },
+                res: { writeHead: () => {}, end: () => {} },
+                source: 'https://a.com', target: 'https://a.com',
+                startTime: Date.now(), statusCode: 200,
+                headers: { 'content-type': 'application/json' },
+                bodyBuffer: Buffer.from('{"ok":true}'),
+                reqBody: Buffer.alloc(0),
+                inspectionMeta,
+            })
+
+            expect(inspectionMeta._inspectionStages).toHaveLength(2)
+            expect(inspectionMeta._inspectionStages.map((stage: any) => stage.hook)).toEqual([
+                'onBeforeResponse',
+                'onAfterResponse',
+            ])
+            expect(inspectionMeta._inspectionStages[0].changes?.responseHeaders?.['x-plugin']).toBe('1')
+        })
     })
 
     describe('delegation methods', () => {
