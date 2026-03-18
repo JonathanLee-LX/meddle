@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { createPipeline, normalizeMode } from '../core/pipeline'
+import { PluginManager, HookDispatcher } from '../core/plugin-runtime'
 
 describe('pipeline normalizeMode', () => {
     it('falls back to off for unsupported modes', () => {
@@ -217,6 +218,68 @@ describe('pipeline inspection', () => {
         expect(responseStage.changes?.responseStatusCode).toBe(201)
         expect(responseStage.changes?.responseHeaders?.['x-inspected']).toBe('yes')
         expect(responseStage.changes?.responseBody).toBe('modified body')
+    })
+
+    it('attributes response diffs to the plugin that actually changed them', async () => {
+        const manager = new PluginManager({ logger: { error() {} } })
+        manager.register({
+            manifest: {
+                id: 'local.cors',
+                version: '1.0.0',
+                apiVersion: '1.x',
+                permissions: [],
+                hooks: ['onBeforeResponse'],
+                priority: 100,
+            },
+            async setup() {},
+            async onBeforeResponse(ctx: any) {
+                ctx.response.headers['access-control-allow-origin'] = 'https://app.example.com'
+            },
+        })
+        manager.register({
+            manifest: {
+                id: 'local.inject-eruda',
+                version: '1.0.0',
+                apiVersion: '1.x',
+                permissions: [],
+                hooks: ['onBeforeResponse'],
+                priority: 110,
+            },
+            async setup() {},
+            async onBeforeResponse(ctx: any) {
+                ctx.response.body = `${ctx.response.body}\n<script src="https://cdn.jsdelivr.net/npm/eruda"></script>`
+            },
+        })
+        await manager.setup(() => ({}))
+        await manager.start()
+
+        const dispatcher = new HookDispatcher(manager, {
+            logger: { error() {} },
+            defaultTimeoutMs: 30,
+        })
+
+        const pipeline = createPipeline({
+            mode: 'on',
+            dispatcher,
+            pluginManager: manager,
+            logger: { error() {} },
+        })
+
+        const result = await pipeline.execute({
+            request: { method: 'GET', url: 'https://a.com' },
+            initialTarget: 'https://a.com',
+            executeUpstream: async () => ({
+                response: { statusCode: 200, headers: { 'content-type': 'text/html' }, body: '<html></html>' },
+            }),
+        })
+
+        const corsStage = result.meta._inspectionStages.find((stage: any) => stage.name === 'local.cors')
+        const erudaStage = result.meta._inspectionStages.find((stage: any) => stage.name === 'local.inject-eruda')
+
+        expect(corsStage.changes?.responseHeadersAfter?.['access-control-allow-origin']).toBe('https://app.example.com')
+        expect(corsStage.changes?.responseBodyAfter).toBeUndefined()
+        expect(erudaStage.changes?.responseBodyAfter).toContain('eruda')
+        expect(erudaStage.changes?.responseHeadersAfter).toBeUndefined()
     })
 })
 

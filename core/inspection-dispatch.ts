@@ -1,5 +1,9 @@
 import { InspectionStage, HookContext, ResponseContext, Logger } from './types'
 
+function hasDifferentHeaders(a: Record<string, string>, b: Record<string, string>): boolean {
+    return JSON.stringify(a) !== JSON.stringify(b)
+}
+
 function normalizeHeaders(headers: Record<string, any> | undefined): Record<string, string> {
     const out: Record<string, string> = {}
     if (!headers || typeof headers !== 'object') return out
@@ -19,10 +23,6 @@ function cloneResponse(response: any) {
     }
 }
 
-function hasDifferentHeaders(a: Record<string, string>, b: Record<string, string>): boolean {
-    return JSON.stringify(a) !== JSON.stringify(b)
-}
-
 export async function dispatchWithInspection(
     dispatcher: any,
     logger: Logger,
@@ -30,78 +30,97 @@ export async function dispatchWithInspection(
     context: HookContext | ResponseContext,
 ): Promise<any[]> {
     const stages = (context as HookContext).meta?._inspectionStages as InspectionStage[] | undefined
-    const prevTarget = (context as HookContext).target
-    const prevShortCircuited = (context as HookContext).shortCircuited
-    const prevRequestHeaders = normalizeHeaders((context as any).request?.headers)
-    const prevResponse = cloneResponse((context as any).response)
+    const fallbackBefore = {
+        target: (context as HookContext).target,
+        shortCircuited: (context as HookContext).shortCircuited,
+        requestHeaders: normalizeHeaders((context as any).request?.headers),
+        response: cloneResponse((context as any).response),
+        shortCircuitResponse: cloneResponse((context as HookContext).shortCircuitResponse),
+    }
 
     try {
         const results = await dispatcher.dispatch(hookName, context)
 
         if (stages && Array.isArray(results)) {
-            const nextRequestHeaders = normalizeHeaders((context as any).request?.headers)
-            const nextResponse = cloneResponse((context as any).response)
+            const fallbackAfter = {
+                target: (context as HookContext).target,
+                shortCircuited: (context as HookContext).shortCircuited,
+                requestHeaders: normalizeHeaders((context as any).request?.headers),
+                response: cloneResponse((context as any).response),
+                shortCircuitResponse: cloneResponse((context as HookContext).shortCircuitResponse),
+            }
 
             for (const result of results) {
+                const contextBefore = result.contextBefore || fallbackBefore
+                const contextAfter = result.contextAfter || fallbackAfter
+                const beforeTarget = contextBefore.target
+                const afterTarget = contextAfter.target
+                const beforeShortCircuited = contextBefore.shortCircuited
+                const afterShortCircuited = contextAfter.shortCircuited
+                const beforeRequestHeaders = contextBefore.requestHeaders || {}
+                const afterRequestHeaders = contextAfter.requestHeaders || {}
+                const beforeResponse = contextBefore.response || null
+                const afterResponse = contextAfter.response || null
+
                 const stage: InspectionStage = {
                     name: result.pluginId || 'unknown',
                     type: result.pluginId?.startsWith('builtin.') ? 'builtin' : 'custom',
                     hook: hookName,
                     status: result.status === 'ok' ? 'ok' : result.status === 'skipped-disabled' ? 'skipped' : 'error',
                     duration: result.duration || 0,
-                    target: (context as HookContext).target,
+                    target: afterTarget,
                     error: result.error,
                 }
 
-                if ((context as HookContext).target !== prevTarget) {
+                if (afterTarget !== beforeTarget) {
                     stage.changes = {
                         ...stage.changes,
-                        target: (context as HookContext).target,
-                        targetBefore: prevTarget,
-                        targetAfter: (context as HookContext).target,
+                        target: afterTarget,
+                        targetBefore: beforeTarget,
+                        targetAfter: afterTarget,
                     }
                 }
 
-                if (hasDifferentHeaders(prevRequestHeaders, nextRequestHeaders)) {
+                if (hasDifferentHeaders(beforeRequestHeaders, afterRequestHeaders)) {
                     stage.changes = {
                         ...stage.changes,
-                        requestHeaders: nextRequestHeaders,
-                        requestHeadersBefore: prevRequestHeaders,
-                        requestHeadersAfter: nextRequestHeaders,
+                        requestHeaders: afterRequestHeaders,
+                        requestHeadersBefore: beforeRequestHeaders,
+                        requestHeadersAfter: afterRequestHeaders,
                     }
                 }
 
-                if (nextResponse && prevResponse) {
-                    if (nextResponse.statusCode !== prevResponse.statusCode) {
+                if (beforeResponse && afterResponse) {
+                    if (afterResponse.statusCode !== beforeResponse.statusCode) {
                         stage.changes = {
                             ...stage.changes,
-                            responseStatusCode: nextResponse.statusCode,
-                            responseStatusCodeBefore: prevResponse.statusCode,
-                            responseStatusCodeAfter: nextResponse.statusCode,
+                            responseStatusCode: afterResponse.statusCode,
+                            responseStatusCodeBefore: beforeResponse.statusCode,
+                            responseStatusCodeAfter: afterResponse.statusCode,
                         }
                     }
-                    if (hasDifferentHeaders(prevResponse.headers, nextResponse.headers)) {
+                    if (hasDifferentHeaders(beforeResponse.headers, afterResponse.headers)) {
                         stage.changes = {
                             ...stage.changes,
-                            responseHeaders: nextResponse.headers,
-                            responseHeadersBefore: prevResponse.headers,
-                            responseHeadersAfter: nextResponse.headers,
+                            responseHeaders: afterResponse.headers,
+                            responseHeadersBefore: beforeResponse.headers,
+                            responseHeadersAfter: afterResponse.headers,
                         }
                     }
-                    if (nextResponse.body !== prevResponse.body) {
+                    if (afterResponse.body !== beforeResponse.body) {
                         stage.changes = {
                             ...stage.changes,
-                            responseBody: nextResponse.body,
-                            responseBodyBefore: prevResponse.body,
-                            responseBodyAfter: nextResponse.body,
+                            responseBody: afterResponse.body,
+                            responseBodyBefore: beforeResponse.body,
+                            responseBodyAfter: afterResponse.body,
                         }
                     }
                 }
 
-                if ((context as HookContext).shortCircuited && !prevShortCircuited) {
+                if (afterShortCircuited && !beforeShortCircuited) {
                     stage.shortCircuited = true
                     stage.status = 'short-circuited'
-                    const shortCircuitResponse = (context as HookContext).shortCircuitResponse
+                    const shortCircuitResponse = contextAfter.shortCircuitResponse
                     if (shortCircuitResponse) {
                         stage.changes = {
                             ...stage.changes,

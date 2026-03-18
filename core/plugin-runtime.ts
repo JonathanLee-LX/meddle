@@ -15,6 +15,35 @@ import {
 
 const DEFAULT_HOOK_TIMEOUT_MS = 10;
 
+function normalizeHeaders(headers: Record<string, any> | undefined): Record<string, string> {
+    const out: Record<string, string> = {};
+    if (!headers || typeof headers !== 'object') return out;
+    for (const [key, value] of Object.entries(headers)) {
+        if (value == null) continue;
+        out[key] = Array.isArray(value) ? value.join(', ') : String(value);
+    }
+    return out;
+}
+
+function cloneResponse(response: any) {
+    if (!response || typeof response !== 'object') return null;
+    return {
+        statusCode: response.statusCode || 200,
+        headers: normalizeHeaders(response.headers),
+        body: typeof response.body === 'string' ? response.body : String(response.body || ''),
+    };
+}
+
+function snapshotHookContext(hookContext: HookContext | ResponseContext) {
+    return {
+        target: (hookContext as HookContext).target,
+        shortCircuited: (hookContext as HookContext).shortCircuited,
+        requestHeaders: normalizeHeaders((hookContext as any).request?.headers),
+        response: cloneResponse((hookContext as any).response),
+        shortCircuitResponse: cloneResponse((hookContext as HookContext).shortCircuitResponse),
+    };
+}
+
 export class PluginManager {
     private plugins: Map<string, Plugin>;
     private pluginStates: Map<string, PluginState>;
@@ -144,6 +173,7 @@ export class HookDispatcher {
             if (typeof hookFn !== 'function') continue;
             
             const start = Date.now();
+            const contextBefore = snapshotHookContext(hookContext);
             try {
                 await runWithTimeout(
                     Promise.resolve(hookFn.call(plugin, hookContext)),
@@ -151,7 +181,13 @@ export class HookDispatcher {
                     `${pluginId}.${hookName}`
                 );
                 this._recordHookStat(pluginId, hookName, 'ok', Date.now() - start);
-                results.push({ pluginId, status: 'ok', duration: Date.now() - start });
+                results.push({
+                    pluginId,
+                    status: 'ok',
+                    duration: Date.now() - start,
+                    contextBefore,
+                    contextAfter: snapshotHookContext(hookContext),
+                });
             } catch (error: any) {
                 const isTimeout = error && error.code === 'PLUGIN_HOOK_TIMEOUT';
                 const status = isTimeout ? 'timeout' : 'error';
@@ -161,6 +197,8 @@ export class HookDispatcher {
                     status,
                     duration: Date.now() - start,
                     error: error && error.message ? error.message : String(error),
+                    contextBefore,
+                    contextAfter: snapshotHookContext(hookContext),
                 });
                 this.logger.error(
                     `[plugin-runtime] hook ${pluginId}.${hookName} failed:`,

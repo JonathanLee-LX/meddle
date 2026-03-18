@@ -114,6 +114,24 @@ export interface HookDispatchResult {
     status: 'ok' | 'error' | 'timeout' | 'skipped-disabled';
     duration: number;
     error?: string;
+    contextBefore?: HookDispatchSnapshot;
+    contextAfter?: HookDispatchSnapshot;
+}
+
+export interface HookDispatchSnapshot {
+    target?: string;
+    shortCircuited?: boolean;
+    requestHeaders?: Record<string, string>;
+    response?: {
+        statusCode: number;
+        headers: Record<string, string>;
+        body: string;
+    } | null;
+    shortCircuitResponse?: {
+        statusCode: number;
+        headers: Record<string, string>;
+        body: string;
+    } | null;
 }
 
 export interface PluginStats {
