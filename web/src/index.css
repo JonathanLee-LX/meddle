@@ -164,3 +164,46 @@
     @apply bg-background text-foreground;
   }
 }
+
+.route-canvas .react-flow__renderer {
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--background) 96%, transparent), transparent 180px),
+    radial-gradient(circle at top left, color-mix(in oklab, var(--primary) 8%, transparent), transparent 26%),
+    radial-gradient(circle at bottom right, color-mix(in oklab, var(--chart-2) 12%, transparent), transparent 30%);
+}
+
+.route-canvas .react-flow__controls {
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 8px);
+  overflow: hidden;
+  box-shadow: 0 14px 34px color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+
+.route-canvas .react-flow__controls-button {
+  background: color-mix(in oklab, var(--card) 92%, transparent);
+  border-bottom-color: var(--border);
+  color: var(--foreground);
+}
+
+.route-canvas .react-flow__controls-button:hover {
+  background: color-mix(in oklab, var(--accent) 86%, transparent);
+}
+
+.route-canvas .react-flow__minimap {
+  background: color-mix(in oklab, var(--card) 90%, transparent);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 10px);
+  overflow: hidden;
+}
+
+.route-canvas .react-flow__attribution {
+  background: color-mix(in oklab, var(--background) 85%, transparent);
+  border-top-left-radius: calc(var(--radius) + 6px);
+}
+
+.route-canvas .react-flow__handle {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--background);
+  background: var(--primary);
+}

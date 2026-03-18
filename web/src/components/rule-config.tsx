@@ -31,6 +31,8 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { buildRuleGraph } from '@/utils/rule-graph'
+import { RouteCanvas } from '@/components/route-canvas'
 
 interface RuleConfigProps {
   rules: RuleItem[]
@@ -210,6 +212,7 @@ export function RuleConfig(props: RuleConfigProps) {
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [mergeByTarget, setMergeByTarget] = useState(false)
+  const [viewMode, setViewMode] = useState<'table' | 'graph'>('graph')
   const [highlightIndex, setHighlightIndex] = useState<number | null>(null)
   const highlightRowRef = useRef<HTMLTableRowElement | null>(null)
 
@@ -398,6 +401,10 @@ export function RuleConfig(props: RuleConfigProps) {
     })
   }, [filteredRules, rules])
 
+  const graphData = useMemo(() => {
+    return buildRuleGraph(rules, filteredRules.map(({ index }) => index))
+  }, [rules, filteredRules])
+
   const toggleGroup = useCallback((indices: number[], enabledState: boolean | 'indeterminate') => {
     startTransition(() => { const next = enabledState !== true; const s = new Set(indices); setRules(prev => prev.map((item, idx) => (s.has(idx) ? { ...item, enabled: next } : item))) })
   }, [setRules])
@@ -509,31 +516,42 @@ export function RuleConfig(props: RuleConfigProps) {
 
       {/* 操作栏 */}
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-muted-foreground">
-          {activeFileName ? `${activeFileName}` : '请选择规则文件'}
-          {isPending && <span className="ml-2 text-xs text-muted-foreground">(更新中...)</span>}
-        </h3>
+        <div className="space-y-2">
+          {isPending && (
+            <div className="text-xs text-muted-foreground">(更新中...)</div>
+          )}
+          <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as 'table' | 'graph')}>
+            <TabsList variant="line">
+              <TabsTrigger value="table">表格视图</TabsTrigger>
+              <TabsTrigger value="graph">图表视图</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
         <div className="flex items-center gap-2">
           <Button variant={showFilters ? 'default' : 'outline'} size="sm" onClick={() => setShowFilters(v => !v)} title="显示/隐藏筛选器">
             <Filter className="h-4 w-4 mr-1" />筛选
           </Button>
-          <Button variant={mergeByTarget ? 'default' : 'outline'} size="sm" onClick={() => setMergeByTarget(v => !v)} title="将同一目标的规则合并为一条记录">
-            <Layers className="h-4 w-4 mr-1" />{mergeByTarget ? '已按目标合并' : '按目标合并'}
-          </Button>
-          <Button variant="outline" size="sm" onClick={addRule} disabled={!activeFileName}>
-            <Plus className="h-4 w-4 mr-1" />添加规则
-          </Button>
-          <input ref={importFileRef} type="file" accept=".txt,.rules" className="hidden" onChange={handleImportInputChange} />
-          <Button variant="outline" size="sm" onClick={handleImportFile}>
-            <FolderOpen className="h-4 w-4 mr-1" />从文件加载
-          </Button>
-          {activeFileName && (
+          {viewMode === 'table' && (
             <>
-              <Button size="sm" onClick={handleSave} disabled={saving}>
-                <Save className="h-4 w-4 mr-1" />{saving ? '保存中...' : '保存'}
+              <Button variant={mergeByTarget ? 'default' : 'outline'} size="sm" onClick={() => setMergeByTarget(v => !v)} title="将同一目标的规则合并为一条记录">
+                <Layers className="h-4 w-4 mr-1" />{mergeByTarget ? '已按目标合并' : '按目标合并'}
               </Button>
-              {saveStatus === 'success' && <span className="text-sm text-green-600 self-center">已保存</span>}
-              {saveStatus === 'error' && <span className="text-sm text-red-600 self-center">保存失败</span>}
+              <Button variant="outline" size="sm" onClick={addRule} disabled={!activeFileName}>
+                <Plus className="h-4 w-4 mr-1" />添加规则
+              </Button>
+              <input ref={importFileRef} type="file" accept=".txt,.rules" className="hidden" onChange={handleImportInputChange} />
+              <Button variant="outline" size="sm" onClick={handleImportFile}>
+                <FolderOpen className="h-4 w-4 mr-1" />从文件加载
+              </Button>
+              {activeFileName && (
+                <>
+                  <Button size="sm" onClick={handleSave} disabled={saving}>
+                    <Save className="h-4 w-4 mr-1" />{saving ? '保存中...' : '保存'}
+                  </Button>
+                  {saveStatus === 'success' && <span className="text-sm text-green-600 self-center">已保存</span>}
+                  {saveStatus === 'error' && <span className="text-sm text-red-600 self-center">保存失败</span>}
+                </>
+              )}
             </>
           )}
         </div>
@@ -569,63 +587,82 @@ export function RuleConfig(props: RuleConfigProps) {
         </div>
       )}
 
-      {/* 规则表格 */}
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {!mergeByTarget && !ruleFilter && !targetFilter && <TableHead className="w-8"></TableHead>}
-              <TableHead className="w-12">启用</TableHead>
-              <TableHead>规则</TableHead>
-              <TableHead>目标</TableHead>
-              <TableHead className="w-24">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {!activeFileName ? (
+      {viewMode === 'table' ? (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                  请选择或创建一个规则文件
-                </TableCell>
+                {!mergeByTarget && !ruleFilter && !targetFilter && <TableHead className="w-8"></TableHead>}
+                <TableHead className="w-12">启用</TableHead>
+                <TableHead>规则</TableHead>
+                <TableHead>目标</TableHead>
+                <TableHead className="w-24">操作</TableHead>
               </TableRow>
-            ) : rules.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                  暂无规则，点击"添加规则"开始配置
-                </TableCell>
-              </TableRow>
-            ) : filteredRules.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                  没有匹配的规则，请调整筛选条件
-                </TableCell>
-              </TableRow>
-            ) : mergeByTarget ? (
-              groupedRules.map(group => (
-                <GroupedRuleRow key={group.key} group={group} highlighted={highlightIndex != null && group.indices.includes(highlightIndex)} highlightRef={highlightRowRef}
-                  onToggleGroup={createToggleGroupCallback(group.indices, group.enabledState)} onUpdateGroupRules={createUpdateGroupRulesCallback(group.indices)}
-                  onUpdateGroupTarget={createUpdateGroupTargetCallback(group.indices)} onDeleteGroup={createDeleteGroupCallback(group.indices)} />
-              ))
-            ) : ruleFilter || targetFilter ? (
-              filteredRules.map(({ item, index }) => (
-                <FilteredRuleRow key={index} item={item} highlighted={highlightIndex === index} highlightRef={highlightRowRef}
-                  onToggle={createToggleRuleCallback(index)} onUpdateRule={createUpdateRuleCallback(index)}
-                  onDelete={createDeleteRuleCallback(index)} onMoveToTop={createMoveToTopCallback(index)} />
-              ))
-            ) : (
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                <SortableContext items={rules.map((_, i) => `rule-${i}`)} strategy={verticalListSortingStrategy}>
-                  {rules.map((item, index) => (
-                    <SortableRuleRow key={`rule-${index}`} id={`rule-${index}`} item={item} highlighted={highlightIndex === index} highlightRef={highlightRowRef}
-                      onToggle={createToggleRuleCallback(index)} onUpdateRule={createUpdateRuleCallback(index)}
-                      onDelete={createDeleteRuleCallback(index)} onMoveToTop={createMoveToTopCallback(index)} />
-                  ))}
-                </SortableContext>
-              </DndContext>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+            </TableHeader>
+            <TableBody>
+              {!activeFileName ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                    请选择或创建一个规则文件
+                  </TableCell>
+                </TableRow>
+              ) : rules.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                    暂无规则，点击"添加规则"开始配置
+                  </TableCell>
+                </TableRow>
+              ) : filteredRules.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                    没有匹配的规则，请调整筛选条件
+                  </TableCell>
+                </TableRow>
+              ) : mergeByTarget ? (
+                groupedRules.map(group => (
+                  <GroupedRuleRow key={group.key} group={group} highlighted={highlightIndex != null && group.indices.includes(highlightIndex)} highlightRef={highlightRowRef}
+                    onToggleGroup={createToggleGroupCallback(group.indices, group.enabledState)} onUpdateGroupRules={createUpdateGroupRulesCallback(group.indices)}
+                    onUpdateGroupTarget={createUpdateGroupTargetCallback(group.indices)} onDeleteGroup={createDeleteGroupCallback(group.indices)} />
+                ))
+              ) : ruleFilter || targetFilter ? (
+                filteredRules.map(({ item, index }) => (
+                  <FilteredRuleRow key={index} item={item} highlighted={highlightIndex === index} highlightRef={highlightRowRef}
+                    onToggle={createToggleRuleCallback(index)} onUpdateRule={createUpdateRuleCallback(index)}
+                    onDelete={createDeleteRuleCallback(index)} onMoveToTop={createMoveToTopCallback(index)} />
+                ))
+              ) : (
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <SortableContext items={rules.map((_, i) => `rule-${i}`)} strategy={verticalListSortingStrategy}>
+                    {rules.map((item, index) => (
+                      <SortableRuleRow key={`rule-${index}`} id={`rule-${index}`} item={item} highlighted={highlightIndex === index} highlightRef={highlightRowRef}
+                        onToggle={createToggleRuleCallback(index)} onUpdateRule={createUpdateRuleCallback(index)}
+                        onDelete={createDeleteRuleCallback(index)} onMoveToTop={createMoveToTopCallback(index)} />
+                    ))}
+                  </SortableContext>
+                </DndContext>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {!activeFileName ? (
+            <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
+              请选择或创建一个规则文件后查看图表
+            </div>
+          ) : rules.length === 0 ? (
+            <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
+              暂无规则，点击“添加规则”后这里会自动生成路由流向图
+            </div>
+          ) : filteredRules.length === 0 ? (
+            <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
+              没有匹配的规则，请调整筛选条件后再查看图表
+            </div>
+          ) : (
+            <RouteCanvas graphData={graphData} />
+          )}
+        </div>
+      )}
 
       {(ruleFilter || targetFilter) && filteredRules.length > 0 && (
         <div className="text-sm text-muted-foreground">显示 {filteredRules.length} / {rules.length} 条规则</div>
