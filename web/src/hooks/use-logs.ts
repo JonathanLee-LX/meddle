@@ -20,6 +20,7 @@ export function useLogs(maxRecords: number = 1000) {
   const [selectedRecordId, setSelectedRecordId] = useState<number | null>(null)
   const [recordDetail, setRecordDetail] = useState<RecordDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState<string | null>(null)
   const maxRecordsRef = useRef(maxRecords)
   maxRecordsRef.current = maxRecords
   const wsRef = useRef<WebSocket | null>(null)
@@ -107,13 +108,16 @@ export function useLogs(maxRecords: number = 1000) {
     setSelectedRecordId(id)
     setDetailLoading(true)
     setRecordDetail(null)
+    setDetailError(null)
     try {
       const res = await fetch(`/api/logs/${id}`)
       const data = await res.json()
-      if (!data.error) {
-        setRecordDetail(data)
+      if (!res.ok) {
+        throw new Error(data?.error || `加载详情失败 (${res.status})`)
       }
+      setRecordDetail(data)
     } catch (err) {
+      setDetailError(err instanceof Error ? err.message : '加载详情失败')
       console.error('Failed to fetch detail:', err)
     } finally {
       setDetailLoading(false)
@@ -144,6 +148,7 @@ export function useLogs(maxRecords: number = 1000) {
     selectedRecordId,
     recordDetail,
     detailLoading,
+    detailError,
     fetchDetail,
     closeDetail,
     clearRecords,

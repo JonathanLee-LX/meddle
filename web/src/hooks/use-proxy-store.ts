@@ -21,6 +21,7 @@ export function useProxyStore() {
     selectedRecordId: logs.selectedRecordId,
     recordDetail: logs.recordDetail,
     detailLoading: logs.detailLoading,
+    detailError: logs.detailError,
     fetchDetail: logs.fetchDetail,
     closeDetail: logs.closeDetail,
     clearRecords: logs.clearRecords,

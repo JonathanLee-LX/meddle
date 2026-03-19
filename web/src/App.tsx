@@ -204,6 +204,7 @@ function App() {
         onClose={store.closeDetail}
         detail={store.recordDetail}
         loading={store.detailLoading}
+        error={store.detailError}
         selectedRecord={store.records.find(r => r.id === store.selectedRecordId)}
         onCreateMock={handleCreateMockFromLog}
         onReplay={handleReplay}

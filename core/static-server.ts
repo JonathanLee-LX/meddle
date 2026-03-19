@@ -20,6 +20,13 @@ export function handleLocalRequest(req: any, res: any, opts: HandleLocalRequestO
     const webDistDir = path.resolve(__dirname, '../../web/dist')
     const hasReactBuild = fs.existsSync(path.resolve(webDistDir, 'index.html'))
 
+    function setNoCacheHeaders(contentType: string): void {
+        res.setHeader('Content-Type', contentType)
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+        res.setHeader('Pragma', 'no-cache')
+        res.setHeader('Expires', '0')
+    }
+
     if (req.url && (req.url as string).startsWith('/api')) {
         serverContext.currentMocksPath = ctx.currentMocksPath
         if (!serverContext.ruleMap) serverContext.ruleMap = ctx.ruleMap
@@ -38,11 +45,17 @@ export function handleLocalRequest(req: any, res: any, opts: HandleLocalRequestO
         if (!fullPath.startsWith(webDistDir)) { res.writeHead(403); res.end(); return }
         if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
             const ext = path.extname(fullPath).toLowerCase()
-            res.setHeader('Content-Type', STATIC_MIME[ext] || 'application/octet-stream')
+            const contentType = STATIC_MIME[ext] || 'application/octet-stream'
+            if (ext === '.html') {
+                setNoCacheHeaders(contentType)
+            } else {
+                res.setHeader('Content-Type', contentType)
+                res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+            }
             res.writeHead(200)
             fs.createReadStream(fullPath).pipe(res)
         } else {
-            res.setHeader('Content-Type', 'text/html')
+            setNoCacheHeaders('text/html')
             res.writeHead(200)
             res.write(fs.readFileSync(path.resolve(webDistDir, 'index.html'), 'utf8'))
             res.end()
@@ -51,7 +64,7 @@ export function handleLocalRequest(req: any, res: any, opts: HandleLocalRequestO
         if (req.url === '/' || !(req.url as string).startsWith('/api')) {
             const legacyHtml = path.resolve(__dirname, '../../index.html')
             if (fs.existsSync(legacyHtml)) {
-                res.setHeader('Content-Type', 'text/html')
+                setNoCacheHeaders('text/html')
                 res.writeHead(200)
                 res.write(fs.readFileSync(legacyHtml, 'utf8'))
                 res.end()

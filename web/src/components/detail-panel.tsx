@@ -21,6 +21,7 @@ interface DetailPanelProps {
   onClose: () => void
   detail: RecordDetail | null
   loading: boolean
+  error?: string | null
   selectedRecord?: ProxyRecord
   onCreateMock?: (data: { source: string; responseBody: string; statusCode: number; responseHeaders?: Record<string, string> }) => void
   onReplay?: (id: number) => Promise<unknown>
@@ -663,7 +664,7 @@ function InspectionView({ inspection }: { inspection: NonNullable<RecordDetail['
   )
 }
 
-export function DetailPanel({ open, onClose, detail, loading, selectedRecord, onCreateMock, onReplay }: DetailPanelProps) {
+export function DetailPanel({ open, onClose, detail, loading, error, selectedRecord, onCreateMock, onReplay }: DetailPanelProps) {
   const [replaying, setReplaying] = useState(false)
 
   const handleCreateMock = () => {
@@ -741,6 +742,12 @@ export function DetailPanel({ open, onClose, detail, loading, selectedRecord, on
           </div>
         )}
 
+        {error && !loading && !detail && (
+          <div className="mx-4 mt-2 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-xs">
+            {error}
+          </div>
+        )}
+
         {loading ? (
           <div className="flex-1 flex items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -802,8 +809,17 @@ export function DetailPanel({ open, onClose, detail, loading, selectedRecord, on
             </TabsContent>
           </Tabs>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-            无法加载详情
+          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm px-6 text-center">
+            {selectedRecord ? (
+              <div className="space-y-2">
+                <div>详情数据暂不可用</div>
+                <div className="text-xs font-mono break-all">
+                  {selectedRecord.method} {selectedRecord.source}
+                </div>
+              </div>
+            ) : (
+              <div>无法加载详情</div>
+            )}
           </div>
         )}
       </SheetContent>
