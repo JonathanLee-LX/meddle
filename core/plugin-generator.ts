@@ -368,7 +368,7 @@ ${requirement.permissions ? `需要的权限：${requirement.permissions.join(',
 /**
  * 清理 AI 响应，移除 markdown 代码块标记
  */
-function cleanAIResponse(text: string): string {
+export function cleanAIResponse(text: string): string {
     // 移除可能的 markdown 代码块标记
     let cleaned = text
         .replace(/^```[a-z]*\n?/i, '')
@@ -755,6 +755,48 @@ ${originalCode}
 ${testError}
 
 请分析错误原因并返回修复后的完整JavaScript代码。`;
+
+    if (config.provider === 'anthropic') {
+        return fixWithAnthropicStream(userPrompt, systemPrompt, config, onChunk);
+    }
+
+    return fixWithOpenAIStream(userPrompt, systemPrompt, config, onChunk);
+}
+
+export async function revisePluginWithAIStream(
+    originalCode: string,
+    instruction: string,
+    requirement: PluginRequirement,
+    config: AIConfig,
+    onChunk: (chunk: string) => void
+): Promise<string> {
+    const systemPrompt = `你是一个专业的 Easy Proxy 插件开发助手。用户会给你现有插件代码和额外修改要求，你需要在保持插件可运行的前提下更新代码。
+
+${getPluginSystemDesignPrompt()}
+
+## 更新要求
+
+1. 基于现有代码做增量修改，不要无关重写
+2. 严格保留插件 manifest 的核心语义，除非用户明确要求修改
+3. 保持已有 hooks 与权限声明正确
+4. 返回更新后的完整代码
+5. 只返回代码，不要解释
+6. 代码必须是纯JavaScript（CommonJS格式）`;
+
+    const userPrompt = `以下是当前插件代码和新的修改要求，请直接更新插件代码。
+
+原始需求：
+${requirement.description}
+
+当前代码：
+\`\`\`javascript
+${originalCode}
+\`\`\`
+
+额外修改要求：
+${instruction}
+
+请返回更新后的完整 JavaScript 插件代码。`;
 
     if (config.provider === 'anthropic') {
         return fixWithAnthropicStream(userPrompt, systemPrompt, config, onChunk);

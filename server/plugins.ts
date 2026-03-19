@@ -51,7 +51,7 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
         try {
             const data = req.body
             // eslint-disable-next-line @typescript-eslint/no-var-requires
-            const { generatePluginStream } = require('../core/plugin-generator')
+            const { generatePluginStream, cleanAIResponse } = require('../core/plugin-generator')
 
             // 设置 SSE 响应头
             res.writeHead(200, {
@@ -74,7 +74,7 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
                 (chunk: string) => {
                     accumulatedCode += chunk
                     res.write('event: chunk\n')
-                    res.write(`data: ${JSON.stringify({ chunk, accumulated: accumulatedCode })}\n\n`)
+                    res.write(`data: ${JSON.stringify({ chunk, accumulated: cleanAIResponse(accumulatedCode) })}\n\n`)
                 }
             )
 
@@ -319,7 +319,7 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
         try {
             const data = req.body
             // eslint-disable-next-line @typescript-eslint/no-var-requires
-            const { fixPluginWithAIStream } = require('../core/plugin-generator')
+            const { fixPluginWithAIStream, cleanAIResponse } = require('../core/plugin-generator')
 
             res.writeHead(200, {
                 'Content-Type': 'text/event-stream',
@@ -340,12 +340,51 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
                 (chunk: string) => {
                     accumulatedCode += chunk
                     res.write('event: chunk\n')
-                    res.write(`data: ${JSON.stringify({ chunk, accumulated: accumulatedCode })}\n\n`)
+                    res.write(`data: ${JSON.stringify({ chunk, accumulated: cleanAIResponse(accumulatedCode) })}\n\n`)
                 }
             )
 
             res.write('event: complete\n')
             res.write(`data: ${JSON.stringify({ status: 'success', fixedCode })}\n\n`)
+            res.end()
+        } catch (error) {
+            res.write('event: error\n')
+            res.write(`data: ${JSON.stringify({ error: (error as Error).message })}\n\n`)
+            res.end()
+        }
+    })
+
+    app.post('/api/plugins/revise-stream', async (req: Request, res: Response) => {
+        try {
+            const data = req.body
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { revisePluginWithAIStream, cleanAIResponse } = require('../core/plugin-generator')
+
+            res.writeHead(200, {
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'Access-Control-Allow-Origin': '*'
+            })
+
+            res.write('event: start\n')
+            res.write('data: {"status":"generating"}\n\n')
+
+            let accumulatedCode = ''
+            const revisedCode = await revisePluginWithAIStream(
+                data.originalCode,
+                data.instruction,
+                data.requirement,
+                data.aiConfig,
+                (chunk: string) => {
+                    accumulatedCode += chunk
+                    res.write('event: chunk\n')
+                    res.write(`data: ${JSON.stringify({ chunk, accumulated: cleanAIResponse(accumulatedCode) })}\n\n`)
+                }
+            )
+
+            res.write('event: complete\n')
+            res.write(`data: ${JSON.stringify({ status: 'success', revisedCode })}\n\n`)
             res.end()
         } catch (error) {
             res.write('event: error\n')

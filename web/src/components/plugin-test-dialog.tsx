@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Sheet,
   SheetContent,
@@ -25,10 +26,11 @@ import {
   Wand2,
   RefreshCw,
   Code2,
+  PencilLine,
 } from 'lucide-react'
 import { BodyDiffView, type DiffViewMode } from './body-diff-view'
 import { getAIConfig, getActiveModel, isAIConfigValid } from '@/lib/ai-config-store'
-import { MonacoEditor } from './monaco-editor'
+import { MonacoDiffEditor, MonacoEditor } from './monaco-editor'
 
 type HeaderDiffStatus = 'unchanged' | 'changed' | 'added' | 'removed'
 
@@ -246,9 +248,12 @@ export function PluginTestDialog({
   const [bodyDiffMode, setBodyDiffMode] = useState<DiffViewMode>('inline')
   const [fixResult, setFixResult] = useState<{ status: 'success' | 'error'; message: string } | null>(null)
   const [pluginCode, setPluginCode] = useState('')
+  const [fixBaseCode, setFixBaseCode] = useState('')
   const [loadingCode, setLoadingCode] = useState(false)
   const [codeError, setCodeError] = useState<string | null>(null)
   const [fixStreamCode, setFixStreamCode] = useState('')
+  const [codeViewMode, setCodeViewMode] = useState<'normal' | 'diff'>('normal')
+  const [extraInstruction, setExtraInstruction] = useState('')
   const [fixStage, setFixStage] = useState<'idle' | 'generating' | 'saving' | 'reloading' | 'retesting'>('idle')
 
   const aiConfig = getAIConfig()
@@ -270,6 +275,7 @@ export function PluginTestDialog({
   const fetchPluginCode = useCallback(async () => {
     if (!customFilename || !open) {
       setPluginCode('')
+      setFixBaseCode('')
       setCodeError(null)
       return
     }
@@ -284,13 +290,17 @@ export function PluginTestDialog({
       }
       const codeData = await codeRes.json()
       setPluginCode(codeData.code || '')
+      if (!fixing && !fixStreamCode) {
+        setFixBaseCode(codeData.code || '')
+      }
     } catch (error) {
       setPluginCode('')
+      setFixBaseCode('')
       setCodeError(error instanceof Error ? error.message : '读取插件源码失败')
     } finally {
       setLoadingCode(false)
     }
-  }, [customFilename, open])
+  }, [customFilename, fixing, fixStreamCode, open])
 
   useEffect(() => {
     fetchPluginCode()
@@ -320,6 +330,40 @@ export function PluginTestDialog({
   }, [testResults])
 
   const hasFixableErrors = testErrors.length > 0 && !!customFilename
+  const hasDiffView = !!fixBaseCode && !!(fixStreamCode || (fixStage === 'idle' && fixBaseCode && pluginCode && fixBaseCode !== pluginCode))
+
+  const saveReloadAndRefresh = async (nextCode: string, successMessage: string, shouldRetest: boolean) => {
+    setFixStage('saving')
+    const saveRes = await fetch(`/api/plugins/custom/${encodeURIComponent(customFilename)}/code`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: nextCode }),
+    })
+    if (!saveRes.ok) {
+      const error = await saveRes.json()
+      throw new Error(error.error || '保存修复后的代码失败')
+    }
+
+    setFixStage('reloading')
+    const reloadRes = await fetch('/api/plugins/reload', { method: 'POST' })
+    if (!reloadRes.ok) {
+      const error = await reloadRes.json().catch(() => ({ error: '热加载失败' }))
+      throw new Error(error.error || '热加载失败')
+    }
+
+    setPluginCode(nextCode)
+    setFixStreamCode(nextCode)
+    setCodeViewMode('diff')
+    onPluginFixed?.()
+
+    if (shouldRetest) {
+      setFixStage('retesting')
+      await handleTest()
+    }
+
+    setFixResult({ status: 'success', message: successMessage })
+    setFixStage('idle')
+  }
 
   const handleTest = async () => {
     setTesting(true)
@@ -360,6 +404,7 @@ export function PluginTestDialog({
     setFixing(true)
     setFixResult(null)
     setFixStreamCode('')
+    setFixBaseCode(pluginCode)
     try {
       setFixStage('generating')
       const codeData = { code: pluginCode }
@@ -436,35 +481,103 @@ export function PluginTestDialog({
         throw new Error('AI 未返回有效代码')
       }
 
-      setFixStage('saving')
-      const saveRes = await fetch(`/api/plugins/custom/${encodeURIComponent(customFilename)}/code`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: fixedCode }),
-      })
-      if (!saveRes.ok) {
-        const error = await saveRes.json()
-        throw new Error(error.error || '保存修复后的代码失败')
-      }
-
-      setFixStage('reloading')
-      const reloadRes = await fetch('/api/plugins/reload', { method: 'POST' })
-      if (!reloadRes.ok) {
-        const error = await reloadRes.json().catch(() => ({ error: '热加载失败' }))
-        throw new Error(error.error || '热加载失败')
-      }
-
-      setPluginCode(fixedCode)
-      setFixStage('retesting')
       setFixResult({ status: 'success', message: 'AI 已生成修复代码，正在保存、热加载并重新测试...' })
-      onPluginFixed?.()
-      await handleTest()
-      setFixResult({ status: 'success', message: 'AI 已修复插件代码并完成热加载，测试结果已刷新。' })
-      setFixStage('idle')
+      await saveReloadAndRefresh(fixedCode, 'AI 已修复插件代码并完成热加载，测试结果已刷新。', true)
     } catch (error) {
       setFixResult({
         status: 'error',
         message: error instanceof Error ? error.message : 'AI 修复失败',
+      })
+    } finally {
+      setFixStage('idle')
+      setFixing(false)
+    }
+  }
+
+  const handleAIRevise = async () => {
+    if (!customFilename || !extraInstruction.trim() || !isAIReady || fixing) return
+
+    setFixing(true)
+    setFixResult(null)
+    setFixStreamCode('')
+    setFixBaseCode(pluginCode)
+
+    try {
+      setFixStage('generating')
+      const reviseRes = await fetch('/api/plugins/revise-stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originalCode: pluginCode,
+          instruction: extraInstruction.trim(),
+          requirement: {
+            name: pluginName,
+            description: `根据额外要求更新插件 ${pluginName}，并保持 hooks 行为正确。Hooks: ${hooks.join(', ')}`,
+            hooks,
+          },
+          aiConfig: effectiveAIConfig,
+        }),
+      })
+
+      if (!reviseRes.ok) {
+        const error = await reviseRes.json()
+        throw new Error(error.error || 'AI 更新代码失败')
+      }
+
+      const reader = reviseRes.body?.getReader()
+      const decoder = new TextDecoder()
+      if (!reader) {
+        throw new Error('无法读取 AI 更新流')
+      }
+
+      let revisedCode = ''
+      let buffer = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue
+          const data = line.slice(5).trim()
+          if (!data) continue
+          try {
+            const parsed = JSON.parse(data)
+            if (parsed.status === 'generating') {
+              setFixResult({ status: 'success', message: 'AI 正在根据额外要求更新插件代码...' })
+            } else if (parsed.chunk) {
+              revisedCode = parsed.accumulated || `${revisedCode}${parsed.chunk}`
+              setFixStreamCode(revisedCode)
+              setCodeViewMode('diff')
+            } else if (parsed.status === 'success') {
+              revisedCode = parsed.revisedCode || revisedCode
+              setFixStreamCode(revisedCode)
+              setCodeViewMode('diff')
+            } else if (parsed.error) {
+              throw new Error(parsed.error)
+            }
+          } catch (error) {
+            if (error instanceof Error && error.message !== 'Unexpected end of JSON input') {
+              throw error
+            }
+          }
+        }
+      }
+
+      if (!revisedCode || typeof revisedCode !== 'string') {
+        throw new Error('AI 未返回有效代码')
+      }
+
+      setFixResult({ status: 'success', message: 'AI 已生成更新后的代码，正在保存并热加载...' })
+      await saveReloadAndRefresh(revisedCode, 'AI 已根据额外要求更新插件代码并完成热加载。', false)
+      setExtraInstruction('')
+    } catch (error) {
+      setFixResult({
+        status: 'error',
+        message: error instanceof Error ? error.message : 'AI 更新代码失败',
       })
     } finally {
       setFixStage('idle')
@@ -567,6 +680,12 @@ export function PluginTestDialog({
                     插件代码
                   </h3>
                   <div className="flex items-center gap-2">
+                    <Tabs value={codeViewMode} onValueChange={(value) => setCodeViewMode(value as 'normal' | 'diff')}>
+                      <TabsList className="h-7">
+                        <TabsTrigger value="normal" className="px-2 text-xs">正常视图</TabsTrigger>
+                        <TabsTrigger value="diff" className="px-2 text-xs" disabled={!hasDiffView}>Diff 视图</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
                     <Badge variant="outline" className="text-xs font-normal">
                       {customFilename}
                     </Badge>
@@ -594,39 +713,69 @@ export function PluginTestDialog({
                   <div className="rounded-md border border-red-200 bg-red-50/80 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/20 dark:text-red-300">
                     {codeError}
                   </div>
+                ) : codeViewMode === 'diff' && hasDiffView ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-xs text-muted-foreground">
+                        左侧是原代码，右侧是 AI 修复后的代码
+                      </div>
+                      {fixStage !== 'idle' && (
+                      <Badge variant="outline" className="text-xs font-normal">
+                        {getFixStageLabel(fixStage)}
+                      </Badge>
+                    )}
+                  </div>
+                  <MonacoDiffEditor
+                      original={fixBaseCode || pluginCode}
+                      modified={fixStreamCode || pluginCode}
+                      language="javascript"
+                      minHeight="320px"
+                    />
+                  </div>
                 ) : (
                   <MonacoEditor
-                    value={pluginCode}
+                    value={fixing && fixStreamCode ? fixStreamCode : pluginCode}
                     onChange={() => {}}
                     language="javascript"
                     readOnly
                     minHeight="260px"
                   />
                 )}
-              </div>
-
-              {(fixing || fixStreamCode) && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-medium flex items-center gap-2">
-                      <Wand2 className="h-4 w-4" />
-                      AI 修复代码
-                    </h3>
-                    {fixStage !== 'idle' && (
-                      <Badge variant="outline" className="text-xs font-normal">
-                        {getFixStageLabel(fixStage)}
-                      </Badge>
-                    )}
-                  </div>
-                  <MonacoEditor
-                    value={fixStreamCode}
-                    onChange={() => {}}
-                    language="javascript"
-                    readOnly
-                    minHeight="260px"
+                <div className="space-y-2 pt-2">
+                  <Label htmlFor="plugin-extra-instruction">额外信息</Label>
+                  <Textarea
+                    id="plugin-extra-instruction"
+                    value={extraInstruction}
+                    onChange={(e) => setExtraInstruction(e.target.value)}
+                    placeholder="例如：补充 onBeforeResponse 里对 JSON 响应的判空逻辑；保留现有 hooks 和 manifest，不要改插件 id。"
+                    className="min-h-[88px]"
+                    disabled={fixing || loadingCode}
                   />
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs text-muted-foreground">
+                      输入额外要求后，AI 会基于当前插件代码直接更新并热加载。
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleAIRevise}
+                      disabled={!customFilename || !extraInstruction.trim() || !isAIReady || fixing || loadingCode || !!codeError}
+                    >
+                      {fixing && fixStage !== 'retesting' ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          AI 更新中...
+                        </>
+                      ) : (
+                        <>
+                          <PencilLine className="h-4 w-4 mr-1" />
+                          根据额外信息更新代码
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
           )}
 

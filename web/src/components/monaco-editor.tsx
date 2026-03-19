@@ -1,11 +1,22 @@
 import { useRef, useEffect, useState } from 'react'
-import Editor, { type OnMount, type Monaco } from '@monaco-editor/react'
+import Editor, { DiffEditor, type OnMount, type Monaco } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
+import { useTheme } from './theme-provider'
 
 interface MonacoEditorProps {
   value: string
   onChange: (value: string) => void
   placeholder?: string
+  className?: string
+  minHeight?: string
+  height?: string
+  language?: string
+  readOnly?: boolean
+}
+
+interface MonacoDiffEditorProps {
+  original: string
+  modified: string
   className?: string
   minHeight?: string
   height?: string
@@ -30,6 +41,7 @@ export function MonacoEditor({
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<Monaco | null>(null)
   const [detectedLanguage, setDetectedLanguage] = useState(language)
+  const { resolvedTheme } = useTheme()
 
   // 自动检测语言类型
   useEffect(() => {
@@ -119,21 +131,13 @@ export function MonacoEditor({
       },
     })
 
-    // 设置主题（根据系统主题）
-    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    monaco.editor.setTheme(isDark ? 'vs-dark' : 'vs')
-
-    // 监听系统主题变化
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    const handleThemeChange = (e: MediaQueryListEvent) => {
-      monaco.editor.setTheme(e.matches ? 'vs-dark' : 'vs')
-    }
-    mediaQuery.addEventListener('change', handleThemeChange)
-
-    return () => {
-      mediaQuery.removeEventListener('change', handleThemeChange)
-    }
+    monaco.editor.setTheme(resolvedTheme === 'dark' ? 'vs-dark' : 'vs')
   }
+
+  useEffect(() => {
+    if (!monacoRef.current) return
+    monacoRef.current.editor.setTheme(resolvedTheme === 'dark' ? 'vs-dark' : 'vs')
+  }, [resolvedTheme])
 
   const handleEditorChange = (value: string | undefined) => {
     onChange(value || '')
@@ -168,6 +172,72 @@ export function MonacoEditor({
           {placeholder}
         </div>
       )}
+    </div>
+  )
+}
+
+export function MonacoDiffEditor({
+  original,
+  modified,
+  className,
+  minHeight = '320px',
+  height,
+  language = 'javascript',
+  readOnly = true,
+}: MonacoDiffEditorProps) {
+  const monacoRef = useRef<Monaco | null>(null)
+  const { resolvedTheme } = useTheme()
+
+  const handleEditorDidMount = (_editor: editor.IStandaloneDiffEditor, monaco: Monaco) => {
+    monacoRef.current = monaco
+
+    monaco.editor.setTheme(resolvedTheme === 'dark' ? 'vs-dark' : 'vs')
+  }
+
+  useEffect(() => {
+    if (!monacoRef.current) return
+    monacoRef.current.editor.setTheme(resolvedTheme === 'dark' ? 'vs-dark' : 'vs')
+  }, [resolvedTheme])
+
+  const finalHeight = height || minHeight
+
+  return (
+    <div
+      className={`rounded-md border border-input overflow-hidden ${className || ''}`}
+      style={height === 'flex' ? { height: '100%', display: 'flex', flexDirection: 'column' } : undefined}
+    >
+      <DiffEditor
+        height={height === 'flex' ? '100%' : finalHeight}
+        language={language}
+        original={original}
+        modified={modified}
+        onMount={handleEditorDidMount}
+        options={{
+          readOnly,
+          renderSideBySide: true,
+          originalEditable: false,
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          wordWrap: 'on',
+          automaticLayout: true,
+          folding: true,
+          renderOverviewRuler: false,
+          diffWordWrap: 'on',
+          scrollbar: {
+            vertical: 'auto',
+            horizontal: 'auto',
+            useShadows: false,
+            verticalScrollbarSize: 8,
+            horizontalScrollbarSize: 8,
+          },
+        }}
+        loading={
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-sm text-muted-foreground">
+            <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <span>加载 Diff 编辑器中...</span>
+          </div>
+        }
+      />
     </div>
   )
 }
