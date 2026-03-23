@@ -110,7 +110,8 @@ describe('rule-files', () => {
             fs.writeFileSync(ctx.settingsPath, JSON.stringify({ activeRuleFiles: ['nonexistent'] }))
 
             const result = mergeActiveRules(ctx)
-            expect(result).toEqual({})
+            expect(result.ruleMap).toEqual({})
+            expect(result.excludeMap).toEqual({})
         })
     })
 
@@ -127,7 +128,7 @@ describe('rule-files', () => {
 
             const result = mergeActiveRules(ctx)
 
-            expect(result['/api']).toBe('http://prod.local')
+            expect(result.ruleMap['/api']).toBe('http://prod.local')
         })
 
         it('should skip non-existent files', () => {
@@ -136,7 +137,8 @@ describe('rule-files', () => {
             fs.writeFileSync(ctx.settingsPath, JSON.stringify({ activeRuleFiles: ['nonexistent'] }))
 
             const result = mergeActiveRules(ctx)
-            expect(result).toEqual({})
+            expect(result.ruleMap).toEqual({})
+            expect(result.excludeMap).toEqual({})
         })
 
         it('should return empty object when no active files', () => {
@@ -145,7 +147,8 @@ describe('rule-files', () => {
             fs.writeFileSync(ctx.settingsPath, JSON.stringify({ activeRuleFiles: [] }))
 
             const result = mergeActiveRules(ctx)
-            expect(result).toEqual({})
+            expect(result.ruleMap).toEqual({})
+            expect(result.excludeMap).toEqual({})
         })
     })
 

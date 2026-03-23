@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { Application, Request, Response } from 'express'
 import { ServerContext, RuleMap } from './index'
-import { parseEprc } from '../helpers'
+import { parseEprcWithExclusions, ExcludeMap } from '../helpers'
 
 const DEFAULT_RULE_NAME = '默认规则'
 
@@ -71,7 +71,7 @@ export function listRuleFiles(ctx: ServerContext): RuleFileInfo[] {
         let ruleCount = 0
         try {
             const content = fs.readFileSync(filePath, 'utf8')
-            ruleCount = Object.keys(parseEprc(content)).length
+            ruleCount = Object.keys(parseEprcWithExclusions(content).ruleMap).length
         } catch { /* ignore */ }
         return {
             name,
@@ -81,26 +81,40 @@ export function listRuleFiles(ctx: ServerContext): RuleFileInfo[] {
     })
 }
 
+export interface MergedRules {
+    ruleMap: RuleMap;
+    excludeMap: ExcludeMap;
+}
+
 /**
- * Merge rules from all enabled rule files into a single ruleMap.
+ * Merge rules from all enabled rule files into a single ruleMap and excludeMap.
  */
-export function mergeActiveRules(ctx: ServerContext): RuleMap {
+export function mergeActiveRules(ctx: ServerContext): MergedRules {
     const dir = getRulesDir(ctx)
     ensureRulesDir(ctx)
     const activeNames = getActiveFileNames(ctx)
     const merged: RuleMap = {}
+    const mergedExclusions: ExcludeMap = {}
 
     for (const name of activeNames) {
         const filePath = path.join(dir, `${name}.txt`)
         if (!fs.existsSync(filePath)) continue
         try {
             const content = fs.readFileSync(filePath, 'utf8')
-            Object.assign(merged, parseEprc(content))
+            const { ruleMap, excludeMap } = parseEprcWithExclusions(content)
+            Object.assign(merged, ruleMap)
+            // Merge exclusions
+            for (const [pattern, exclusions] of Object.entries(excludeMap)) {
+                if (!mergedExclusions[pattern]) {
+                    mergedExclusions[pattern] = []
+                }
+                mergedExclusions[pattern].push(...exclusions)
+            }
         } catch (err) {
             console.error(`Failed to load rules from ${filePath}:`, err)
         }
     }
-    return merged
+    return { ruleMap: merged, excludeMap: mergedExclusions }
 }
 
 /**
@@ -172,7 +186,7 @@ export function registerRuleFilesRoutes(app: Application, ctx: ServerContext): v
 
             ctx.reloadAllRuleFiles()
 
-            const ruleCount = Object.keys(parseEprc(content)).length
+            const ruleCount = Object.keys(parseEprcWithExclusions(content).ruleMap).length
             res.write(JSON.stringify({ status: 'success', ruleFile: { name: safeName, enabled, ruleCount } }))
         } catch (err) {
             res.statusCode = 500

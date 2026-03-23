@@ -45,11 +45,11 @@ function useRuleFilter(rules: RuleItem[]) {
 
 describe('RuleConfig - Filter Functionality', () => {
   const mockRules: RuleItem[] = [
-    { enabled: true, rule: 'rule1', target: 'target1' },
-    { enabled: true, rule: 'rule2', target: 'target2' },
-    { enabled: true, rule: 'example.com', target: '127.0.0.1:3000' },
-    { enabled: false, rule: 'disabled.com', target: 'localhost:8080' },
-    { enabled: true, rule: 'api.test.com', target: 'target1' },
+    { enabled: true, rule: 'rule1', target: 'target1', exclusions: [] },
+    { enabled: true, rule: 'rule2', target: 'target2', exclusions: [] },
+    { enabled: true, rule: 'example.com', target: '127.0.0.1:3000', exclusions: [] },
+    { enabled: false, rule: 'disabled.com', target: 'localhost:8080', exclusions: [] },
+    { enabled: true, rule: 'api.test.com', target: 'target1', exclusions: [] },
   ]
 
   describe('Rule Name Filtering', () => {
@@ -235,23 +235,23 @@ describe('RuleConfig - Filter Functionality', () => {
 
     it('should filter out empty targets', () => {
       const rulesWithEmptyTarget: RuleItem[] = [
-        { enabled: true, rule: 'rule1', target: 'target1' },
-        { enabled: true, rule: 'rule2', target: '' },
-        { enabled: true, rule: 'rule3', target: '  ' },
+        { enabled: true, rule: 'rule1', target: 'target1', exclusions: [] },
+        { enabled: true, rule: 'rule2', target: '', exclusions: [] },
+        { enabled: true, rule: 'rule3', target: '  ', exclusions: [] },
       ]
       const { result } = renderHook(() => useRuleFilter(rulesWithEmptyTarget))
-      
+
       expect(result.current.uniqueTargets).toEqual(['target1'])
     })
 
     it('should deduplicate targets', () => {
       const rulesWithDuplicates: RuleItem[] = [
-        { enabled: true, rule: 'rule1', target: 'target1' },
-        { enabled: true, rule: 'rule2', target: 'target1' },
-        { enabled: true, rule: 'rule3', target: 'target2' },
+        { enabled: true, rule: 'rule1', target: 'target1', exclusions: [] },
+        { enabled: true, rule: 'rule2', target: 'target1', exclusions: [] },
+        { enabled: true, rule: 'rule3', target: 'target2', exclusions: [] },
       ]
       const { result } = renderHook(() => useRuleFilter(rulesWithDuplicates))
-      
+
       expect(result.current.uniqueTargets).toEqual(['target1', 'target2'])
     })
   })
@@ -283,11 +283,11 @@ describe('RuleConfig - Filter Functionality', () => {
 
     it('should handle special characters in filters', () => {
       const rulesWithSpecialChars: RuleItem[] = [
-        { enabled: true, rule: 'api.example.com', target: '127.0.0.1:3000' },
-        { enabled: true, rule: 'web-app.test.com', target: 'localhost:8080' },
+        { enabled: true, rule: 'api.example.com', target: '127.0.0.1:3000', exclusions: [] },
+        { enabled: true, rule: 'web-app.test.com', target: 'localhost:8080', exclusions: [] },
       ]
       const { result } = renderHook(() => useRuleFilter(rulesWithSpecialChars))
-      
+
       act(() => {
         result.current.setRuleFilter('.')
       })
@@ -297,12 +297,12 @@ describe('RuleConfig - Filter Functionality', () => {
 
     it('should handle rules with same target', () => {
       const rulesWithSameTarget: RuleItem[] = [
-        { enabled: true, rule: 'rule1', target: 'common-target' },
-        { enabled: true, rule: 'rule2', target: 'common-target' },
-        { enabled: true, rule: 'rule3', target: 'common-target' },
+        { enabled: true, rule: 'rule1', target: 'common-target', exclusions: [] },
+        { enabled: true, rule: 'rule2', target: 'common-target', exclusions: [] },
+        { enabled: true, rule: 'rule3', target: 'common-target', exclusions: [] },
       ]
       const { result } = renderHook(() => useRuleFilter(rulesWithSameTarget))
-      
+
       act(() => {
         result.current.setTargetFilter('common')
       })
@@ -315,10 +315,10 @@ describe('RuleConfig - Filter Functionality', () => {
         ({ rules }) => useRuleFilter(rules),
         { initialProps: { rules: mockRules } }
       )
-      
+
       expect(result.current.filteredRules).toHaveLength(5)
 
-      const newRules = [...mockRules, { enabled: true, rule: 'newRule', target: 'newTarget' }]
+      const newRules = [...mockRules, { enabled: true, rule: 'newRule', target: 'newTarget', exclusions: [] }]
       rerender({ rules: newRules })
 
       expect(result.current.filteredRules).toHaveLength(6)

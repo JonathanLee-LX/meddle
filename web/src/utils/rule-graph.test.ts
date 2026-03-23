@@ -4,10 +4,10 @@ import { analyzeRouteTarget, buildRuleGraph } from './rule-graph'
 
 describe('rule-graph', () => {
   const rules: RuleItem[] = [
-    { enabled: true, rule: '^https://api.example.com/users', target: '127.0.0.1:3000' },
-    { enabled: false, rule: '^https://api.example.com/admin', target: '127.0.0.1:3000' },
-    { enabled: true, rule: '^https://static.example.com/[assets]', target: 'localhost:8080' },
-    { enabled: true, rule: '^https://download.example.com/file', target: 'file:///tmp/demo.json' },
+    { enabled: true, rule: '^https://api.example.com/users', target: '127.0.0.1:3000', exclusions: [] },
+    { enabled: false, rule: '^https://api.example.com/admin', target: '127.0.0.1:3000', exclusions: [] },
+    { enabled: true, rule: '^https://static.example.com/[assets]', target: 'localhost:8080', exclusions: [] },
+    { enabled: true, rule: '^https://download.example.com/file', target: 'file:///tmp/demo.json', exclusions: [] },
   ]
 
   it('keeps global enabled order based on file order', () => {

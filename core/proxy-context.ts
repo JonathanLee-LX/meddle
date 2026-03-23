@@ -85,6 +85,7 @@ export function createProxyContext(): ProxyContext {
         pipelineGate,
 
         ruleMap: {},
+        excludeMap: {},
         currentMocksPath: null,
         mockRules: [],
         mockIdSeq: 1,

@@ -9,6 +9,7 @@ const log = _debug('log')
 
 interface ServerContextLike {
     ruleMap: Record<string, string>;
+    excludeMap: Record<string, string[]>;
     broadcastToAllClients: (data: any) => void;
     [key: string]: any;
 }
@@ -28,8 +29,11 @@ export function createRouteLoader(ctx: ProxyContext, serverContext: ServerContex
     }
 
     function reloadAllRuleFiles(): void {
-        ctx.ruleMap = mergeActiveRules(serverContext as any)
+        const { ruleMap, excludeMap } = mergeActiveRules(serverContext as any)
+        ctx.ruleMap = ruleMap
+        ctx.excludeMap = excludeMap
         serverContext.ruleMap = ctx.ruleMap
+        serverContext.excludeMap = ctx.excludeMap
         logRuleMap()
         serverContext.broadcastToAllClients({
             type: 'rulesUpdated',
@@ -39,8 +43,11 @@ export function createRouteLoader(ctx: ProxyContext, serverContext: ServerContex
 
     function initRouteRules(): void {
         const activeNames: string[] = ensureRouteRules(serverContext as any)
-        ctx.ruleMap = mergeActiveRules(serverContext as any)
+        const { ruleMap, excludeMap } = mergeActiveRules(serverContext as any)
+        ctx.ruleMap = ruleMap
+        ctx.excludeMap = excludeMap
         serverContext.ruleMap = ctx.ruleMap
+        serverContext.excludeMap = ctx.excludeMap
         logRuleMap()
 
         const rulesDir = path.join(ctx.epDir, 'route-rules')

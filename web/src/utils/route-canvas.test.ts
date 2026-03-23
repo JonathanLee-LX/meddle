@@ -5,9 +5,9 @@ import { buildRouteCanvasLayout } from './route-canvas'
 
 describe('route-canvas', () => {
   const rules: RuleItem[] = [
-    { enabled: true, rule: 'a.com', target: 'http://localhost:3000' },
-    { enabled: true, rule: 'b.com', target: 'http://localhost:3000' },
-    { enabled: false, rule: 'c.com', target: 'http://localhost:4000' },
+    { enabled: true, rule: 'a.com', target: 'http://localhost:3000', exclusions: [] },
+    { enabled: true, rule: 'b.com', target: 'http://localhost:3000', exclusions: [] },
+    { enabled: false, rule: 'c.com', target: 'http://localhost:4000', exclusions: [] },
   ]
 
   it('places all rules into one canvas layout with shared target nodes', () => {

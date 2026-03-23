@@ -47,6 +47,7 @@ export function createPluginBootstrapRunner(ctx: ProxyContext, mockHandler: Mock
             createRouterPlugin: createBuiltinRouterPlugin,
             findMockMatch: (url: string, method?: string) => mockHandler.matchMockRule(url, method || '*'),
             getRuleMap: () => ctx.ruleMap,
+            getExcludeMap: () => ctx.excludeMap,
             loggerPlugin: ctx.builtinLoggerPlugin,
         })
 

@@ -463,6 +463,7 @@ export interface BuiltinPluginsOptions {
     createRouterPlugin(options: RouterPluginOptions): Plugin;
     findMockMatch?(url: string, method?: string): MockRule | null;
     getRuleMap?(): Record<string, string>;
+    getExcludeMap?(): Record<string, string[]>;
     loggerPlugin?: Plugin;
 }
 
@@ -520,6 +521,7 @@ export interface ProxyContext {
     pipelineGate: PipelineGate;
 
     ruleMap: Record<string, string>;
+    excludeMap: Record<string, string[]>;
     currentMocksPath: string | null;
     mockRules: MockRuleEntry[];
     mockIdSeq: number;

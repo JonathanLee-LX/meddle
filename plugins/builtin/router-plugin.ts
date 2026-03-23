@@ -1,8 +1,13 @@
 import { Plugin, RouterPluginOptions, HookContext } from '../../core/types';
 
-export function createBuiltinRouterPlugin(options: RouterPluginOptions): Plugin {
+export interface RouterPluginOptionsWithExclusions extends RouterPluginOptions {
+    getExcludeMap?: () => Record<string, string[]>;
+}
+
+export function createBuiltinRouterPlugin(options: RouterPluginOptionsWithExclusions): Plugin {
     const getRuleMap = options.getRuleMap;
-    
+    const getExcludeMap = options.getExcludeMap;
+
     return {
         manifest: {
             id: 'builtin.router',
@@ -20,9 +25,10 @@ export function createBuiltinRouterPlugin(options: RouterPluginOptions): Plugin 
             if (!sourceUrl) return;
 
             const ruleMap = getRuleMap();
+            const excludeMap = getExcludeMap?.();
             // Import resolveTargetUrl dynamically to avoid circular dependency
             const { resolveTargetUrl } = require('../../helpers');
-            const mapped = resolveTargetUrl(sourceUrl, ruleMap);
+            const mapped = resolveTargetUrl(sourceUrl, ruleMap, excludeMap);
             if (mapped) {
                 ctx.setTarget(mapped);
                 ctx.meta.routerMatched = true;

@@ -40,6 +40,7 @@ export interface RuleItem {
   enabled: boolean
   rule: string
   target: string
+  exclusions: string[]
 }
 
 export interface MockRule {

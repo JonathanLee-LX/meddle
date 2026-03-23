@@ -54,7 +54,7 @@ interface SortableRuleRowProps {
   highlighted: boolean
   highlightRef: React.RefObject<HTMLTableRowElement | null>
   onToggle: () => void
-  onUpdateRule: (field: 'rule' | 'target', value: string) => void
+  onUpdateRule: (field: 'rule' | 'target' | 'exclusions', value: string | string[]) => void
   onDelete: () => void
   onMoveToTop: () => void
 }
@@ -85,8 +85,14 @@ const SortableRuleRow = memo(function SortableRuleRow({
   }
 
   const handleToggle = useCallback(() => onToggle(), [onToggle])
-  const handleUpdateRule = useCallback((field: 'rule' | 'target') => (e: React.ChangeEvent<HTMLInputElement>) => {
-    onUpdateRule(field, e.target.value)
+  const handleUpdateRule = useCallback((field: 'rule' | 'target' | 'exclusions') => (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (field === 'exclusions') {
+      // Parse exclusions from space-separated string
+      const values = e.target.value.split(/\s+/).filter(Boolean)
+      onUpdateRule(field, values)
+    } else {
+      onUpdateRule(field, e.target.value)
+    }
   }, [onUpdateRule])
   const handleDelete = useCallback(() => onDelete(), [onDelete])
   const handleMoveToTop = useCallback(() => onMoveToTop(), [onMoveToTop])
@@ -112,6 +118,9 @@ const SortableRuleRow = memo(function SortableRuleRow({
         <Input value={item.rule} onChange={handleUpdateRule('rule')} placeholder="example.com" className="h-8" />
       </TableCell>
       <TableCell>
+        <Input value={(item.exclusions || []).join(' ')} onChange={handleUpdateRule('exclusions')} placeholder="!/api !/ws" className="h-8" />
+      </TableCell>
+      <TableCell>
         <Input value={item.target} onChange={handleUpdateRule('target')} placeholder="127.0.0.1:3000" className="h-8" />
       </TableCell>
       <TableCell className="w-24">
@@ -135,7 +144,7 @@ interface FilteredRuleRowProps {
   highlighted: boolean
   highlightRef: React.RefObject<HTMLTableRowElement | null>
   onToggle: () => void
-  onUpdateRule: (field: 'rule' | 'target', value: string) => void
+  onUpdateRule: (field: 'rule' | 'target' | 'exclusions', value: string | string[]) => void
   onDelete: () => void
   onMoveToTop: () => void
 }
@@ -150,8 +159,13 @@ const FilteredRuleRow = memo(function FilteredRuleRow({
   onMoveToTop,
 }: FilteredRuleRowProps) {
   const handleToggle = useCallback(() => onToggle(), [onToggle])
-  const handleUpdateRule = useCallback((field: 'rule' | 'target') => (e: React.ChangeEvent<HTMLInputElement>) => {
-    onUpdateRule(field, e.target.value)
+  const handleUpdateRule = useCallback((field: 'rule' | 'target' | 'exclusions') => (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (field === 'exclusions') {
+      const values = e.target.value.split(/\s+/).filter(Boolean)
+      onUpdateRule(field, values)
+    } else {
+      onUpdateRule(field, e.target.value)
+    }
   }, [onUpdateRule])
   const handleDelete = useCallback(() => onDelete(), [onDelete])
   const handleMoveToTop = useCallback(() => onMoveToTop(), [onMoveToTop])
@@ -163,6 +177,7 @@ const FilteredRuleRow = memo(function FilteredRuleRow({
     >
       <TableCell><Checkbox checked={item.enabled} onCheckedChange={handleToggle} /></TableCell>
       <TableCell><Input value={item.rule} onChange={handleUpdateRule('rule')} placeholder="example.com" className="h-8" /></TableCell>
+      <TableCell><Input value={(item.exclusions || []).join(' ')} onChange={handleUpdateRule('exclusions')} placeholder="!/api !/ws" className="h-8" /></TableCell>
       <TableCell><Input value={item.target} onChange={handleUpdateRule('target')} placeholder="127.0.0.1:3000" className="h-8" /></TableCell>
       <TableCell>
         <div className="flex gap-1">
@@ -196,6 +211,7 @@ const GroupedRuleRow = memo(function GroupedRuleRow({
     <TableRow ref={highlighted ? highlightRef : undefined} className={highlighted ? 'bg-amber-100/60 dark:bg-amber-500/20 transition-colors' : undefined}>
       <TableCell><Checkbox checked={group.enabledState} onCheckedChange={handleToggle} /></TableCell>
       <TableCell><Input value={group.rules.filter(Boolean).join(' ')} onChange={handleUpdateRules} placeholder="example.com api.example.com" className="h-8" /></TableCell>
+      <TableCell className="text-muted-foreground text-xs">-</TableCell>
       <TableCell><Input value={group.target} onChange={handleUpdateTarget} placeholder="127.0.0.1:3000" className="h-8" /></TableCell>
       <TableCell><Button variant="ghost" size="sm" onClick={handleDelete} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></Button></TableCell>
     </TableRow>
@@ -327,7 +343,7 @@ export function RuleConfig(props: RuleConfigProps) {
     startTransition(() => setRules(prev => prev.map((r, i) => (i === index ? { ...r, enabled: !r.enabled } : r))))
   }, [setRules])
 
-  const updateRule = useCallback((index: number, field: 'rule' | 'target', value: string) => {
+  const updateRule = useCallback((index: number, field: 'rule' | 'target' | 'exclusions', value: string | string[]) => {
     setRules(prev => prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)))
   }, [setRules])
 
@@ -336,7 +352,7 @@ export function RuleConfig(props: RuleConfigProps) {
   }, [setRules])
 
   const addRule = useCallback(() => {
-    startTransition(() => setRules(prev => [{ enabled: true, rule: '', target: '' }, ...prev]))
+    startTransition(() => setRules(prev => [{ enabled: true, rule: '', target: '', exclusions: [] }, ...prev]))
     setHighlightIndex(0)
   }, [setRules])
 
@@ -421,7 +437,7 @@ export function RuleConfig(props: RuleConfigProps) {
         const sorted = [...indices].sort((a, b) => a - b)
         const first = prev[sorted[0]]
         if (!first) return prev
-        const replacement = (nextRules.length > 0 ? nextRules : ['']).map(rule => ({ enabled: first.enabled, target: first.target, rule }))
+        const replacement = (nextRules.length > 0 ? nextRules : ['']).map(rule => ({ enabled: first.enabled, target: first.target, rule, exclusions: first.exclusions }))
         const removeSet = new Set(sorted)
         const result: RuleItem[] = []
         prev.forEach((item, idx) => { if (idx === sorted[0]) { result.push(...replacement); return } if (!removeSet.has(idx)) result.push(item) })
@@ -435,7 +451,7 @@ export function RuleConfig(props: RuleConfigProps) {
   }, [setRules])
 
   const createToggleRuleCallback = useCallback((index: number) => () => toggleRule(index), [toggleRule])
-  const createUpdateRuleCallback = useCallback((index: number) => (field: 'rule' | 'target', value: string) => updateRule(index, field, value), [updateRule])
+  const createUpdateRuleCallback = useCallback((index: number) => (field: 'rule' | 'target' | 'exclusions', value: string | string[]) => updateRule(index, field, value), [updateRule])
   const createDeleteRuleCallback = useCallback((index: number) => () => deleteRule(index), [deleteRule])
   const createMoveToTopCallback = useCallback((index: number) => () => moveToTop(index), [moveToTop])
   const createToggleGroupCallback = useCallback((indices: number[], enabledState: boolean | 'indeterminate') => () => toggleGroup(indices, enabledState), [toggleGroup])
@@ -598,6 +614,7 @@ export function RuleConfig(props: RuleConfigProps) {
                 {!mergeByTarget && !ruleFilter && !targetFilter && <TableHead className="w-8"></TableHead>}
                 <TableHead className="w-12">启用</TableHead>
                 <TableHead>规则</TableHead>
+                <TableHead>排除</TableHead>
                 <TableHead>目标</TableHead>
                 <TableHead className="w-24">操作</TableHead>
               </TableRow>
@@ -605,19 +622,19 @@ export function RuleConfig(props: RuleConfigProps) {
             <TableBody>
               {!activeFileName ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     请选择或创建一个规则文件
                   </TableCell>
                 </TableRow>
               ) : rules.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     暂无规则，点击"添加规则"开始配置
                   </TableCell>
                 </TableRow>
               ) : filteredRules.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     没有匹配的规则，请调整筛选条件
                   </TableCell>
                 </TableRow>

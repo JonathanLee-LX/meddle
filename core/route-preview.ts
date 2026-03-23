@@ -1,5 +1,5 @@
-import type { RuleMap } from '../helpers'
-import { parseEprc, resolveTargetUrl } from '../helpers'
+import type { RuleMap, ExcludeMap } from '../helpers'
+import { parseEprcWithExclusions, resolveTargetUrl } from '../helpers'
 
 export type RouteTargetKind = 'empty' | 'file' | 'absolute-url' | 'host'
 
@@ -55,7 +55,7 @@ function buildNotes(kind: RouteTargetKind, target: string, resolvedUrl: string, 
     return notes
 }
 
-function findMatchedPattern(inputUrl: string, ruleMap: RuleMap): { pattern: string; target: string } | null {
+function findMatchedPattern(inputUrl: string, ruleMap: RuleMap, excludeMap?: ExcludeMap): { pattern: string; target: string } | null {
     for (const [pattern, target] of Object.entries(ruleMap)) {
         let matched = false
         try {
@@ -65,6 +65,10 @@ function findMatchedPattern(inputUrl: string, ruleMap: RuleMap): { pattern: stri
         }
 
         if (matched) {
+            // Check if this pattern is excluded
+            if (excludeMap?.[pattern]?.some(exc => new RegExp(exc).test(inputUrl))) {
+                continue // Skip this pattern, try next
+            }
             return { pattern, target }
         }
     }
@@ -80,8 +84,8 @@ export function previewRouteTarget(inputUrl: string, rulesText: string): RoutePr
         throw new Error('请输入合法的 URL')
     }
 
-    const ruleMap = parseEprc(rulesText)
-    const matchedRule = findMatchedPattern(parsedUrl.toString(), ruleMap)
+    const { ruleMap, excludeMap } = parseEprcWithExclusions(rulesText)
+    const matchedRule = findMatchedPattern(parsedUrl.toString(), ruleMap, excludeMap)
 
     if (!matchedRule) {
         return {
@@ -92,7 +96,7 @@ export function previewRouteTarget(inputUrl: string, rulesText: string): RoutePr
         }
     }
 
-    const resolvedUrl = resolveTargetUrl(parsedUrl.toString(), ruleMap) || parsedUrl.toString()
+    const resolvedUrl = resolveTargetUrl(parsedUrl.toString(), ruleMap, excludeMap) || parsedUrl.toString()
     const kind = getTargetKind(matchedRule.target)
 
     return {

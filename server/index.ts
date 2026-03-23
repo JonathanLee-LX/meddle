@@ -9,13 +9,15 @@ import { registerPipelineRoutes } from './pipeline'
 import { registerRefactorRoutes } from './refactor'
 import { registerRuleFilesRoutes } from './rule-files'
 
-// RuleMap type from helpers
+// RuleMap and ExcludeMap types from helpers
 export type RuleMap = Record<string, string>;
+export type ExcludeMap = Record<string, string[]>;
 
 // Server context interface
 export interface ServerContext {
     currentMocksPath: string | null
     ruleMap: RuleMap
+    excludeMap: ExcludeMap
     proxyRecordArr: Array<{
         id?: number
         method: string

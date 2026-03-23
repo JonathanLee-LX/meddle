@@ -5,6 +5,7 @@ import { listRuleFiles } from '../server/rule-files'
 
 interface ServerContextLike {
     ruleMap: Record<string, string>;
+    excludeMap: Record<string, string[]>;
     epDir?: string;
     settingsPath?: string;
     [key: string]: any;

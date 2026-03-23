@@ -42,6 +42,7 @@ let configDiag = null
 const serverContext = {
     currentMocksPath: ctx.currentMocksPath,
     ruleMap: ctx.ruleMap,
+    excludeMap: ctx.excludeMap,
     proxyRecordArr: ctx.proxyRecordArr,
     proxyRecordDetailMap: ctx.proxyRecordDetailMap,
     recordIdSeq: ctx.recordIdSeq,
@@ -76,7 +77,7 @@ const serverContext = {
     getMockFilePath: () => mockHandler.getMockFilePath(),
     performConfigDiagnostics: () => configDiag && configDiag.performConfigDiagnostics(),
     loadSettingsSync: () => configDiag && configDiag.loadSettingsSync(),
-    resolveTargetUrlForTest: (url) => resolveTargetUrl(url, ctx.ruleMap) || url,
+    resolveTargetUrlForTest: (url) => resolveTargetUrl(url, ctx.ruleMap, ctx.excludeMap) || url,
     canUsePipelineExecuteForTest: (source) => pluginIntercept.canUsePipelineExecuteForSource(source),
     matchMockRuleForTest: (url, method) => mockHandler.matchMockRule(url, method),
     shouldUseMockForTest: (source, rule) => !pluginIntercept.shouldUsePluginMockForRequest(source, rule),
@@ -120,7 +121,7 @@ const proxyServer = http.createServer((req, res) => {
     req.on('data', chunk => reqChunks.push(chunk))
     req.on('end', async () => {
         const reqBody = Buffer.concat(reqChunks)
-        const legacyResolvedTarget = resolveTargetUrl(source, ctx.ruleMap)
+        const legacyResolvedTarget = resolveTargetUrl(source, ctx.ruleMap, ctx.excludeMap)
         if (legacyResolvedTarget && legacyResolvedTarget.startsWith('file://')) {
             return handleMapLocalRequest(ctx, req, res, source, legacyResolvedTarget)
         }

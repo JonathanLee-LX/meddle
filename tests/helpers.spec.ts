@@ -3,6 +3,7 @@ import path from 'path'
 import { execFileSync } from 'child_process'
 import {
   parseEprc,
+  parseEprcWithExclusions,
   ruleMapToEprcText,
   resolveTargetUrl,
 } from '../helpers'
@@ -230,5 +231,123 @@ describe('helpers.ruleMapToEprcText - preserves rule format', () => {
   it('should handle empty rule map', () => {
     const text = ruleMapToEprcText({})
     expect(text).toBe('')
+  })
+})
+
+// ===== Exclusion pattern tests =====
+
+describe('helpers.parseEprcWithExclusions', () => {
+  it('parses single exclusion pattern', () => {
+    const content = 'xx.com !/api localhost:5173'
+    const { ruleMap, excludeMap } = parseEprcWithExclusions(content)
+    expect(ruleMap['xx.com']).toBe('localhost:5173')
+    expect(excludeMap['xx.com']).toEqual(['/api'])
+  })
+
+  it('parses multiple exclusion patterns', () => {
+    const content = 'xx.com !/api !/ws localhost:5173'
+    const { ruleMap, excludeMap } = parseEprcWithExclusions(content)
+    expect(ruleMap['xx.com']).toBe('localhost:5173')
+    expect(excludeMap['xx.com']).toEqual(['/api', '/ws'])
+  })
+
+  it('handles rules without exclusions', () => {
+    const content = 'xx.com localhost:5173'
+    const { ruleMap, excludeMap } = parseEprcWithExclusions(content)
+    expect(ruleMap['xx.com']).toBe('localhost:5173')
+    expect(excludeMap['xx.com']).toEqual([])
+  })
+
+  it('handles target-first format with exclusions', () => {
+    const content = '127.0.0.1:5173 xx.com !/api'
+    const { ruleMap, excludeMap } = parseEprcWithExclusions(content)
+    expect(ruleMap['xx.com']).toBe('127.0.0.1:5173')
+    expect(excludeMap['xx.com']).toEqual(['/api'])
+  })
+
+  it('handles multiple rules with same target and exclusions', () => {
+    const content = 'a.com b.com !/api localhost:5173'
+    const { ruleMap, excludeMap } = parseEprcWithExclusions(content)
+    expect(ruleMap['a.com']).toBe('localhost:5173')
+    expect(ruleMap['b.com']).toBe('localhost:5173')
+    expect(excludeMap['a.com']).toEqual(['/api'])
+    expect(excludeMap['b.com']).toEqual(['/api'])
+  })
+})
+
+describe('helpers.resolveTargetUrl with exclusions', () => {
+  it('matches URL not in exclusion list', () => {
+    const target = resolveTargetUrl(
+      'https://xx.com/src',
+      { 'xx\\.com': 'localhost:5173' },
+      { 'xx\\.com': ['/api'] }
+    )
+    expect(target).toBe('https://localhost:5173/src')
+  })
+
+  it('returns null when URL matches exclusion', () => {
+    const target = resolveTargetUrl(
+      'https://xx.com/api/users',
+      { 'xx\\.com': 'localhost:5173' },
+      { 'xx\\.com': ['/api'] }
+    )
+    expect(target).toBe(null)
+  })
+
+  it('falls through to next rule when excluded', () => {
+    const target = resolveTargetUrl(
+      'https://xx.com/api/users',
+      {
+        'xx\\.com': 'localhost:5173',
+        'xx\\.com/api': 'localhost:8080',
+      },
+      { 'xx\\.com': ['/api'] }
+    )
+    // The second rule 'xx\.com/api' matches and is NOT excluded, so it takes over
+    expect(target).toBe('https://localhost:8080/api/users')
+  })
+
+  it('works without excludeMap', () => {
+    const target = resolveTargetUrl(
+      'https://xx.com/api/users',
+      { 'xx\\.com': 'localhost:5173' }
+    )
+    expect(target).toBe('https://localhost:5173/api/users')
+  })
+})
+
+describe('helpers.ruleMapToEprcText with exclusions', () => {
+  it('outputs exclusions with ! prefix', () => {
+    const text = ruleMapToEprcText(
+      { 'xx\\.com': 'localhost:5173' },
+      { 'xx\\.com': ['/api', '/ws'] }
+    )
+    expect(text.includes('!/api')).toBeTruthy()
+    expect(text.includes('!/ws')).toBeTruthy()
+    expect(text.includes('localhost:5173')).toBeTruthy()
+  })
+
+  it('handles rules without exclusions', () => {
+    const text = ruleMapToEprcText(
+      { 'xx\\.com': 'localhost:5173' }
+    )
+    expect(text).not.toContain('!')
+    expect(text).toContain('localhost:5173')
+  })
+
+  it('separates rules with different exclusions', () => {
+    const text = ruleMapToEprcText(
+      {
+        'a\\.com': 'localhost:5173',
+        'b\\.com': 'localhost:5173',
+      },
+      {
+        'a\\.com': ['/api'],
+        'b\\.com': [],  // no exclusions
+      }
+    )
+    // Rules with different exclusion settings should be on separate lines
+    const lines = text.split('\n')
+    expect(lines.length).toBe(2)
   })
 })
