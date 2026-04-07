@@ -2,28 +2,82 @@
 
 const args = process.argv.slice(2)
 const command = args[0]
+const subcommand = args[1]
 
-if (command === 'doctor') {
-  require('./doctor.js')
-} else if (command === '--help' || command === '-h') {
+// Command routing map
+const commands = {
+  'doctor': './doctor.js',
+  'start': './commands/start.js',
+  'url': './commands/url.js',
+  'status': './commands/status.js',
+  'mock': './commands/mock/index.js',
+  'route': './commands/route/index.js'
+}
+
+// Check for --help flag
+if (command === '--help' || command === '-h' || command === 'help') {
+  showHelp()
+  process.exit(0)
+}
+
+// Handle nested commands (mock/route)
+if (command === 'mock' || command === 'route') {
+  require(commands[command])
+} else if (commands[command]) {
+  require(commands[command])
+} else if (!command || command.startsWith('--')) {
+  // No command or only flags - start proxy (default behavior)
+  require('../index.js')
+} else {
+  console.log(`Unknown command: ${command}`)
+  showHelp()
+  process.exit(1)
+}
+
+function showHelp() {
   console.log(`
 Easy Proxy - 开发代理工具
 
 用法:
-  ep              启动代理服务器
-  ep doctor       检查配置文件健康状况
-  ep --help       显示帮助信息
+  ep                          启动代理服务器 (默认)
+  ep start [--env <name>]     启动代理服务器 (指定环境)
+  ep doctor                   检查配置文件健康状况
+  ep url                      获取代理 URL
+  ep status                   查看代理状态
 
-选项:
-  --open          启动后自动打开浏览器并设置代理
+Mock 命令:
+  ep mock list [--json]       列出所有 mock 规则
+  ep mock add [options]       添加 mock 规则
+  ep mock update <id> [opts]  更新 mock 规则
+  ep mock delete <id>         删除 mock 规则
+  ep mock enable <id>         启用 mock 规则
+  ep mock disable <id>        禁用 mock 规则
+
+Route 命令:
+  ep route list [--json]      列出所有路由文件
+  ep route show <file> [--json] 查看路由文件规则
+  ep route active             查看当前激活的路由文件
+  ep route active set <file>  设置激活的路由文件
+  ep route create <name>      创建路由文件
+  ep route add <file> <pattern> <target>   添加路由规则
+  ep route update <file> <pattern> <target> 更新路由规则
+  ep route delete <file> <pattern> 删除路由规则
+
+全局选项:
+  --help, -h                  显示帮助信息
+  --json                      JSON 格式输出 (用于 list/show 命令)
+  --open                      启动后自动打开浏览器
 
 示例:
-  ep              # 启动代理服务器
-  ep --open       # 启动并打开浏览器
-  ep doctor       # 检查配置文件
+  ep                          # 启动代理服务器
+  ep --open                   # 启动并打开浏览器
+  ep doctor                   # 检查配置文件
+  ep mock list --json         # JSON 格式列出 mock 规则
+  ep mock add --name "API" --pattern "api.test.com" --status 200
+  ep route list               # 列出路由文件
+  ep route add dev-rules "api.test.com" "localhost:3000"
+  ep route active set beta-rules
 
 更多信息请访问: https://github.com/JonathanLee-LX/easy-proxy
   `)
-} else {
-  require("../index.js")
 }
