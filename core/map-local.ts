@@ -2,6 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import type { ProxyContext } from './types'
 import { appendProxyRecord } from './proxy-record'
+import { testRulePattern } from '../helpers'
 
 const MIME_TYPES: Record<string, string> = {
     '.html': 'text/html', '.htm': 'text/html', '.css': 'text/css',
@@ -36,7 +37,7 @@ export function handleMapLocalRequest(ctx: ProxyContext, req: any, res: any, sou
 
     function makeLogData(statusCode: number, duration: number) {
         // 查找匹配的路由规则
-        const matchedRule = Object.keys(ctx.ruleMap).find(pattern => new RegExp(pattern).test(source))
+        const matchedRule = Object.keys(ctx.ruleMap).find(pattern => testRulePattern(pattern, source))
         const matchedTarget = matchedRule ? ctx.ruleMap[matchedRule] : null
         return {
             id: recordId, method: req.method as string, source, target: fileUrl,

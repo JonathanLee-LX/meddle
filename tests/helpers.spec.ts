@@ -9,13 +9,6 @@ import {
 } from '../helpers'
 
 describe('helpers.parseEprc', () => {
-  it('parses target-first host format', () => {
-    const content = '127.0.0.1 a.com b.com'
-    const map = parseEprc(content)
-    expect(map['a.com']).toBe('127.0.0.1')
-    expect(map['b.com']).toBe('127.0.0.1')
-  })
-
   it('parses rule-first format', () => {
     const content = 'a.com b.com 10.0.0.1:8080'
     const map = parseEprc(content)
@@ -28,7 +21,7 @@ describe('helpers.parseEprc', () => {
 # comment
 // disabled line
 
-127.0.0.1 valid.com
+valid.com 127.0.0.1
 `
     const map = parseEprc(content)
     expect(map['valid.com']).toBe('127.0.0.1')
@@ -44,8 +37,8 @@ describe('helpers.ruleMapToEprcText', () => {
       'c.com': '10.0.0.2',
     })
     const lines = text.split('\n').sort()
-    expect(lines.includes('127.0.0.1 a.com b.com') || lines.includes('127.0.0.1 b.com a.com')).toBeTruthy()
-    expect(lines.includes('10.0.0.2 c.com')).toBeTruthy()
+    expect(lines.includes('a.com b.com 127.0.0.1') || lines.includes('b.com a.com 127.0.0.1')).toBeTruthy()
+    expect(lines.includes('c.com 10.0.0.2')).toBeTruthy()
   })
 })
 
@@ -98,6 +91,15 @@ describe('helpers.resolveTargetUrl', () => {
       { 'a\\.com': 'localhost:8080[not-exist]' },
     )
     expect(target).toBeTruthy()
+  })
+
+  it('supports wildcard host patterns for root domain and subdomains', () => {
+    expect(resolveTargetUrl('https://wps.cn/path', { '*.wps.cn': 'localhost:3000' }))
+      .toBe('https://localhost:3000/path')
+    expect(resolveTargetUrl('https://plus.wps.cn/path', { '*.wps.cn': 'localhost:3000' }))
+      .toBe('https://localhost:3000/path')
+    expect(resolveTargetUrl('https://deep.plus.wps.cn/path', { '*.wps.cn': 'localhost:3000' }))
+      .toBe('https://localhost:3000/path')
   })
 })
 
@@ -165,9 +167,9 @@ rule3 target3
 
   it('should handle mixed enabled and disabled rules', () => {
     const content = `
-127.0.0.1:3000 enabled1.com enabled2.com
-//127.0.0.1:3000 disabled.com
-192.168.1.1 active.com
+enabled1.com enabled2.com 127.0.0.1:3000
+//disabled.com 127.0.0.1:3000
+active.com 192.168.1.1
     `.trim()
     const map = parseEprc(content)
     expect(map['enabled1.com']).toBe('127.0.0.1:3000')
@@ -177,7 +179,7 @@ rule3 target3
   })
 
   it('should handle disabled rules with multiple domains', () => {
-    const content = '//127.0.0.1:8000 api.example.com web.example.com'
+    const content = '//api.example.com web.example.com 127.0.0.1:8000'
     const map = parseEprc(content)
     expect(map['api.example.com']).toBeUndefined()
     expect(map['web.example.com']).toBeUndefined()
@@ -201,31 +203,19 @@ rule3 target3
 })
 
 describe('helpers.ruleMapToEprcText - preserves rule format', () => {
-  it('should format rules with target first for IP addresses', () => {
+  it('should format grouped rules with target at the end', () => {
     const text = ruleMapToEprcText({
       'example.com': '127.0.0.1:3000',
       'api.example.com': '127.0.0.1:3000',
     })
-    expect(text.includes('127.0.0.1:3000')).toBeTruthy()
-    expect(text.includes('example.com')).toBeTruthy()
-    expect(text.includes('api.example.com')).toBeTruthy()
-  })
-
-  it('should format rules with target first for URLs', () => {
-    const text = ruleMapToEprcText({
-      'api.com': 'https://localhost:8000',
-      'web.com': 'https://localhost:8000',
-    })
-    expect(text.includes('https://localhost:8000')).toBeTruthy()
-    expect(text.includes('api.com')).toBeTruthy()
-    expect(text.includes('web.com')).toBeTruthy()
+    expect(text === 'example.com api.example.com 127.0.0.1:3000' || text === 'api.example.com example.com 127.0.0.1:3000').toBeTruthy()
   })
 
   it('should handle single rule', () => {
     const text = ruleMapToEprcText({
       'single.com': '192.168.1.1',
     })
-    expect(text.trim()).toBe('192.168.1.1 single.com')
+    expect(text.trim()).toBe('single.com 192.168.1.1')
   })
 
   it('should handle empty rule map', () => {
@@ -256,13 +246,6 @@ describe('helpers.parseEprcWithExclusions', () => {
     const { ruleMap, excludeMap } = parseEprcWithExclusions(content)
     expect(ruleMap['xx.com']).toBe('localhost:5173')
     expect(excludeMap['xx.com']).toEqual([])
-  })
-
-  it('handles target-first format with exclusions', () => {
-    const content = '127.0.0.1:5173 xx.com !/api'
-    const { ruleMap, excludeMap } = parseEprcWithExclusions(content)
-    expect(ruleMap['xx.com']).toBe('127.0.0.1:5173')
-    expect(excludeMap['xx.com']).toEqual(['/api'])
   })
 
   it('handles multiple rules with same target and exclusions', () => {

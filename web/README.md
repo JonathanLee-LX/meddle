@@ -97,6 +97,7 @@ export default defineConfig([
 - `VITE_MAX_JSON_MATCHES` - JSON最大匹配数（默认: 50000）
 - `VITE_MAX_HTML_MATCHES` - HTML最大匹配数（默认: 30000）
 - `VITE_MAX_JS_MATCHES` - JavaScript最大匹配数（默认: 30000）
+- `VITE_ENABLE_RULE_GRAPH_VIEW` - 是否开启规则页的“图表视图”（默认: `false`）
 
 ### 详细文档
 

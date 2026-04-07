@@ -151,6 +151,7 @@ function App() {
                 activeFileName={store.activeFileName}
                 fetchRuleFiles={store.fetchRuleFiles}
                 fetchFileContent={store.fetchFileContent}
+                fetchRuleFileRawContent={store.fetchRuleFileRawContent}
                 saveFileContent={store.saveFileContent}
                 createRuleFile={store.createRuleFile}
                 toggleRuleFile={store.toggleRuleFile}

@@ -7,6 +7,32 @@ import * as http from 'http';
 export type RuleMap = Record<string, string>;
 export type ExcludeMap = Record<string, string[]>;
 
+function looksLikeWildcardPattern(pattern: string): boolean {
+    if (!pattern.includes('*')) return false;
+    // Preserve explicit regex behavior when the pattern already uses regex syntax.
+    return !/[\\^$+?()[\]{}|]/.test(pattern);
+}
+
+function escapeRegexLiteral(value: string): string {
+    return value.replace(/[|\\{}()[\]^$+?.*]/g, '\\$&');
+}
+
+function wildcardPatternToRegex(pattern: string): RegExp {
+    const escaped = escapeRegexLiteral(pattern);
+    const withOptionalSubdomain = pattern.startsWith('*.')
+        ? escaped.replace(/^\\\*\\\./, '(?:[^/:?#]+\\.)*')
+        : escaped;
+    const regexSource = withOptionalSubdomain.replace(/\\\*/g, '.*');
+    return new RegExp(regexSource);
+}
+
+export function testRulePattern(pattern: string, input: string): boolean {
+    if (looksLikeWildcardPattern(pattern)) {
+        return wildcardPatternToRegex(pattern).test(input);
+    }
+    return new RegExp(pattern).test(input);
+}
+
 export function copyHeaders(sourceReq: http.IncomingMessage, targetReq: http.ClientRequest): http.ClientRequest {
     for (const name in sourceReq.headers) {
         if (Object.hasOwnProperty.call(sourceReq.headers, name)) {
@@ -24,10 +50,10 @@ export function resolveTargetUrl(url: string, ruleMap: RuleMap, excludeMap?: Exc
     const originUrlObj = new URL(url);
 
     for (const pattern of Object.keys(ruleMap)) {
-        if (!new RegExp(pattern).test(url)) continue;
+        if (!testRulePattern(pattern, url)) continue;
 
         // Check exclusions - if matched, skip this rule and try next
-        if (excludeMap?.[pattern]?.some(exc => new RegExp(exc).test(url))) {
+        if (excludeMap?.[pattern]?.some(exc => testRulePattern(exc, url))) {
             continue;
         }
 
@@ -94,8 +120,6 @@ export async function getFreePort(): Promise<number> {
 
 export const ROUTE_RULES_DIR = path.resolve(os.homedir(), '.ep', 'route-rules');
 
-const IP_PATTERN = /^\d+\.\d+\.\d+\.\d+(:\d+)?$/;
-const URL_PATTERN = /^https?:\/\//;
 const FILE_PATTERN = /^file:\/\//;
 const LOCAL_FILE_PATTERN = /^[A-Za-z]:\\|^\/|^\\/;
 
@@ -127,25 +151,10 @@ export function parseEprcWithExclusions(content: string): ParseEprcResult {
 
         if (regularParts.length < 2) return; // Need at least one rule and one target
 
-        let target: string;
-        let rules: string[];
-
-        if (FILE_PATTERN.test(regularParts[0]) || LOCAL_FILE_PATTERN.test(regularParts[0])) {
-            [target, ...rules] = regularParts;
-            if (!FILE_PATTERN.test(target)) {
-                if (LOCAL_FILE_PATTERN.test(target)) {
-                    target = 'file://' + (target.replace(/\\/g, '/'));
-                }
-            }
-        } else if (IP_PATTERN.test(regularParts[0]) || URL_PATTERN.test(regularParts[0])) {
-            [target, ...rules] = regularParts;
-        } else {
-            const reversed = [...regularParts].reverse();
-            target = reversed[0];
-            rules = reversed.slice(1);
-            if (LOCAL_FILE_PATTERN.test(target)) {
-                target = 'file://' + (target.replace(/\\/g, '/'));
-            }
+        let target = regularParts[regularParts.length - 1];
+        const rules = regularParts.slice(0, -1);
+        if (LOCAL_FILE_PATTERN.test(target) && !FILE_PATTERN.test(target)) {
+            target = 'file://' + (target.replace(/\\/g, '/'));
         }
 
         rules.forEach(rule => {
@@ -196,7 +205,6 @@ export function ruleMapToEprcText(ruleMap: RuleMap, excludeMap?: ExcludeMap): st
 
     return Object.values(byTargetAndExclusions)
         .map(({ target, rules, exclusions }) => {
-            const targetFirst = IP_PATTERN.test(target) || URL_PATTERN.test(target) || FILE_PATTERN.test(target);
             let displayTarget = target;
             if (FILE_PATTERN.test(target)) {
                 displayTarget = target.replace(/^file:\/\//, '').replace(/\//g, path.sep);
@@ -204,12 +212,7 @@ export function ruleMapToEprcText(ruleMap: RuleMap, excludeMap?: ExcludeMap): st
 
             const exclusionStr = exclusions.map(e => `!${e}`).join(' ');
             const rulesStr = rules.join(' ');
-
-            if (targetFirst) {
-                return exclusionStr ? `${displayTarget} ${rulesStr} ${exclusionStr}` : `${displayTarget} ${rulesStr}`;
-            } else {
-                return exclusionStr ? `${rulesStr} ${exclusionStr} ${displayTarget}` : `${rulesStr} ${displayTarget}`;
-            }
+            return exclusionStr ? `${rulesStr} ${exclusionStr} ${displayTarget}` : `${rulesStr} ${displayTarget}`;
         })
         .join('\n');
 }

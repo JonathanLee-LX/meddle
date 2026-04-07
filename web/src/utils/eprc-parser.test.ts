@@ -56,19 +56,6 @@ describe('eprc-parser', () => {
       expect(result[0].rule).toBe('example.com')
     })
 
-    it('should handle target-first format (IP or URL first)', () => {
-      const input = '192.168.1.1 api.example.com web.example.com'
-      const result = parseEprcRules(input)
-
-      expect(result).toHaveLength(2)
-      expect(result[0]).toEqual({
-        rule: 'api.example.com',
-        target: '192.168.1.1',
-        enabled: true,
-        exclusions: [],
-      })
-    })
-
     it('should handle URL as target', () => {
       const input = 'example.com https://target.com:8080'
       const result = parseEprcRules(input)
@@ -110,18 +97,6 @@ describe('eprc-parser', () => {
       })
     })
 
-    it('should parse exclusions with target-first format', () => {
-      const input = '127.0.0.1:5173 xx.com !/api'
-      const result = parseEprcRules(input)
-
-      expect(result).toHaveLength(1)
-      expect(result[0]).toEqual({
-        rule: 'xx.com',
-        target: '127.0.0.1:5173',
-        enabled: true,
-        exclusions: ['/api'],
-      })
-    })
   })
 
   describe('rulesToEprc', () => {

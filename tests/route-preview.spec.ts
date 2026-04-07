@@ -28,4 +28,15 @@ describe('previewRouteTarget', () => {
   it('rejects invalid urls', () => {
     expect(() => previewRouteTarget('not-a-url', 'foo bar')).toThrow('请输入合法的 URL')
   })
+
+  it('supports wildcard host patterns in preview', () => {
+    const result = previewRouteTarget(
+      'https://plus.wps.cn/docs/price/detail.html?source=navbar',
+      '*.wps.cn localhost:5173',
+    )
+
+    expect(result.matched).toBe(true)
+    expect(result.resolvedUrl).toBe('https://localhost:5173/docs/price/detail.html?source=navbar')
+    expect(result.matchedRule?.pattern).toBe('*.wps.cn')
+  })
 })

@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useMemo, useRef, useState, memo, useTransition, useDeferredValue } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
@@ -11,9 +12,10 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Plus, Save, Trash2, Layers, Filter, X, GripVertical, ArrowUpToLine, FolderOpen, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Plus, Save, Trash2, Filter, X, GripVertical, ArrowUpToLine, FolderOpen, ToggleLeft, ToggleRight, Sparkles, Wand2 } from 'lucide-react'
 import type { RuleItem, RuleFile } from '@/types'
 import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   DndContext,
   closestCenter,
@@ -34,6 +36,9 @@ import { CSS } from '@dnd-kit/utilities'
 import { buildRuleGraph } from '@/utils/rule-graph'
 import { RouteCanvas } from '@/components/route-canvas'
 import { RoutePreview } from '@/components/route-preview'
+import { FEATURE_FLAGS } from '@/lib/feature-flags'
+import { mergeRulesWithAI, generateRulesWithAI } from '@/lib/ai-rule-merge'
+import { rulesToEprc, parseEprcRules } from '@/utils/eprc-parser'
 
 interface RuleConfigProps {
   rules: RuleItem[]
@@ -42,6 +47,7 @@ interface RuleConfigProps {
   activeFileName: string | null
   fetchRuleFiles: () => Promise<RuleFile[]>
   fetchFileContent: (name: string) => Promise<void>
+  fetchRuleFileRawContent: (name: string) => Promise<string>
   saveFileContent: (name: string, items: RuleItem[]) => Promise<boolean>
   createRuleFile: (name: string, content?: string) => Promise<{ success: boolean; error?: string }>
   toggleRuleFile: (name: string, enabled: boolean) => Promise<boolean>
@@ -58,6 +64,45 @@ interface SortableRuleRowProps {
   onDelete: () => void
   onMoveToTop: () => void
 }
+
+interface ExclusionsInputProps {
+  exclusions: string[]
+  onCommit: (value: string[]) => void
+}
+
+function parseExclusionsInput(value: string): string[] {
+  return value.split(/\s+/).filter(Boolean)
+}
+
+const ExclusionsInput = memo(function ExclusionsInput({
+  exclusions,
+  onCommit,
+}: ExclusionsInputProps) {
+  const [draft, setDraft] = useState(exclusions.join(' '))
+
+  useEffect(() => {
+    setDraft(exclusions.join(' '))
+  }, [exclusions])
+
+  const commitDraft = useCallback(() => {
+    onCommit(parseExclusionsInput(draft))
+  }, [draft, onCommit])
+
+  return (
+    <Input
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commitDraft}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          commitDraft()
+        }
+      }}
+      placeholder="!/api !/ws"
+      className="h-8"
+    />
+  )
+})
 
 const SortableRuleRow = memo(function SortableRuleRow({
   id,
@@ -85,14 +130,11 @@ const SortableRuleRow = memo(function SortableRuleRow({
   }
 
   const handleToggle = useCallback(() => onToggle(), [onToggle])
-  const handleUpdateRule = useCallback((field: 'rule' | 'target' | 'exclusions') => (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (field === 'exclusions') {
-      // Parse exclusions from space-separated string
-      const values = e.target.value.split(/\s+/).filter(Boolean)
-      onUpdateRule(field, values)
-    } else {
-      onUpdateRule(field, e.target.value)
-    }
+  const handleUpdateRule = useCallback((field: 'rule' | 'target') => (e: React.ChangeEvent<HTMLInputElement>) => {
+    onUpdateRule(field, e.target.value)
+  }, [onUpdateRule])
+  const handleCommitExclusions = useCallback((value: string[]) => {
+    onUpdateRule('exclusions', value)
   }, [onUpdateRule])
   const handleDelete = useCallback(() => onDelete(), [onDelete])
   const handleMoveToTop = useCallback(() => onMoveToTop(), [onMoveToTop])
@@ -118,7 +160,7 @@ const SortableRuleRow = memo(function SortableRuleRow({
         <Input value={item.rule} onChange={handleUpdateRule('rule')} placeholder="example.com" className="h-8" />
       </TableCell>
       <TableCell>
-        <Input value={(item.exclusions || []).join(' ')} onChange={handleUpdateRule('exclusions')} placeholder="!/api !/ws" className="h-8" />
+        <ExclusionsInput exclusions={item.exclusions || []} onCommit={handleCommitExclusions} />
       </TableCell>
       <TableCell>
         <Input value={item.target} onChange={handleUpdateRule('target')} placeholder="127.0.0.1:3000" className="h-8" />
@@ -159,13 +201,11 @@ const FilteredRuleRow = memo(function FilteredRuleRow({
   onMoveToTop,
 }: FilteredRuleRowProps) {
   const handleToggle = useCallback(() => onToggle(), [onToggle])
-  const handleUpdateRule = useCallback((field: 'rule' | 'target' | 'exclusions') => (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (field === 'exclusions') {
-      const values = e.target.value.split(/\s+/).filter(Boolean)
-      onUpdateRule(field, values)
-    } else {
-      onUpdateRule(field, e.target.value)
-    }
+  const handleUpdateRule = useCallback((field: 'rule' | 'target') => (e: React.ChangeEvent<HTMLInputElement>) => {
+    onUpdateRule(field, e.target.value)
+  }, [onUpdateRule])
+  const handleCommitExclusions = useCallback((value: string[]) => {
+    onUpdateRule('exclusions', value)
   }, [onUpdateRule])
   const handleDelete = useCallback(() => onDelete(), [onDelete])
   const handleMoveToTop = useCallback(() => onMoveToTop(), [onMoveToTop])
@@ -177,7 +217,7 @@ const FilteredRuleRow = memo(function FilteredRuleRow({
     >
       <TableCell><Checkbox checked={item.enabled} onCheckedChange={handleToggle} /></TableCell>
       <TableCell><Input value={item.rule} onChange={handleUpdateRule('rule')} placeholder="example.com" className="h-8" /></TableCell>
-      <TableCell><Input value={(item.exclusions || []).join(' ')} onChange={handleUpdateRule('exclusions')} placeholder="!/api !/ws" className="h-8" /></TableCell>
+      <TableCell><ExclusionsInput exclusions={item.exclusions || []} onCommit={handleCommitExclusions} /></TableCell>
       <TableCell><Input value={item.target} onChange={handleUpdateRule('target')} placeholder="127.0.0.1:3000" className="h-8" /></TableCell>
       <TableCell>
         <div className="flex gap-1">
@@ -189,47 +229,22 @@ const FilteredRuleRow = memo(function FilteredRuleRow({
   )
 }, (prevProps, nextProps) => prevProps.item === nextProps.item && prevProps.highlighted === nextProps.highlighted)
 
-interface GroupedRuleRowProps {
-  group: { key: string; target: string; indices: number[]; rules: string[]; enabledState: boolean | 'indeterminate' }
-  highlighted: boolean
-  highlightRef: React.RefObject<HTMLTableRowElement | null>
-  onToggleGroup: () => void
-  onUpdateGroupRules: (input: string) => void
-  onUpdateGroupTarget: (target: string) => void
-  onDeleteGroup: () => void
-}
-
-const GroupedRuleRow = memo(function GroupedRuleRow({
-  group, highlighted, highlightRef, onToggleGroup, onUpdateGroupRules, onUpdateGroupTarget, onDeleteGroup,
-}: GroupedRuleRowProps) {
-  const handleToggle = useCallback(() => onToggleGroup(), [onToggleGroup])
-  const handleUpdateRules = useCallback((e: React.ChangeEvent<HTMLInputElement>) => onUpdateGroupRules(e.target.value), [onUpdateGroupRules])
-  const handleUpdateTarget = useCallback((e: React.ChangeEvent<HTMLInputElement>) => onUpdateGroupTarget(e.target.value), [onUpdateGroupTarget])
-  const handleDelete = useCallback(() => onDeleteGroup(), [onDeleteGroup])
-
-  return (
-    <TableRow ref={highlighted ? highlightRef : undefined} className={highlighted ? 'bg-amber-100/60 dark:bg-amber-500/20 transition-colors' : undefined}>
-      <TableCell><Checkbox checked={group.enabledState} onCheckedChange={handleToggle} /></TableCell>
-      <TableCell><Input value={group.rules.filter(Boolean).join(' ')} onChange={handleUpdateRules} placeholder="example.com api.example.com" className="h-8" /></TableCell>
-      <TableCell className="text-muted-foreground text-xs">-</TableCell>
-      <TableCell><Input value={group.target} onChange={handleUpdateTarget} placeholder="127.0.0.1:3000" className="h-8" /></TableCell>
-      <TableCell><Button variant="ghost" size="sm" onClick={handleDelete} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></Button></TableCell>
-    </TableRow>
-  )
-}, (prevProps, nextProps) => prevProps.group === nextProps.group && prevProps.highlighted === nextProps.highlighted)
-
 export function RuleConfig(props: RuleConfigProps) {
   const {
     rules, setRules,
     ruleFiles, activeFileName,
-    fetchRuleFiles, fetchFileContent, saveFileContent,
+    fetchRuleFiles, fetchFileContent, fetchRuleFileRawContent, saveFileContent,
     createRuleFile, toggleRuleFile, deleteRuleFile,
   } = props
 
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
-  const [mergeByTarget, setMergeByTarget] = useState(false)
-  const [viewMode, setViewMode] = useState<'table' | 'graph'>('graph')
+  const [aiMerging, setAiMerging] = useState(false)
+  const [aiGenerating, setAiGenerating] = useState(false)
+  const [aiMergeMessage, setAiMergeMessage] = useState<string | null>(null)
+  const [aiMergeError, setAiMergeError] = useState<string | null>(null)
+  const [aiRulePrompt, setAiRulePrompt] = useState('')
+  const [viewMode, setViewMode] = useState<'table' | 'graph'>('table')
   const [highlightIndex, setHighlightIndex] = useState<number | null>(null)
   const highlightRowRef = useRef<HTMLTableRowElement | null>(null)
 
@@ -332,6 +347,80 @@ export function RuleConfig(props: RuleConfigProps) {
     if (ok) fetchRuleFiles()
   }, [activeFileName, rules, saveFileContent, fetchRuleFiles])
 
+  const handleAIMerge = useCallback(async () => {
+    if (!activeFileName || rules.length === 0) return
+
+    setAiMerging(true)
+    setAiMergeMessage(null)
+    setAiMergeError(null)
+
+    try {
+      const enabledContextFiles = await Promise.all(
+        ruleFiles
+          .filter((file) => file.enabled && file.name !== activeFileName)
+          .map(async (file) => ({
+            name: file.name,
+            content: await fetchRuleFileRawContent(file.name),
+          }))
+      )
+
+      const mergedText = await mergeRulesWithAI(
+        rulesToEprc(rules),
+        enabledContextFiles,
+        aiRulePrompt
+      )
+      const mergedRules = parseEprcRules(mergedText)
+
+      if (rules.length > 0 && mergedRules.length === 0) {
+        throw new Error('AI 返回的规则为空，请调整提示词或检查模型输出')
+      }
+
+      setRules(mergedRules)
+      setAiMergeMessage(`AI 已完成规则合并：${rules.length} 条 -> ${mergedRules.length} 条。当前仅替换编辑区，未自动保存。`)
+    } catch (err) {
+      setAiMergeError(err instanceof Error ? err.message : 'AI 合并失败')
+    } finally {
+      setAiMerging(false)
+    }
+  }, [activeFileName, aiRulePrompt, fetchRuleFileRawContent, ruleFiles, rules, setRules])
+
+  const handleAIGenerate = useCallback(async () => {
+    if (!activeFileName) return
+
+    setAiGenerating(true)
+    setAiMergeMessage(null)
+    setAiMergeError(null)
+
+    try {
+      const enabledContextFiles = await Promise.all(
+        ruleFiles
+          .filter((file) => file.enabled && file.name !== activeFileName)
+          .map(async (file) => ({
+            name: file.name,
+            content: await fetchRuleFileRawContent(file.name),
+          }))
+      )
+
+      const generatedText = await generateRulesWithAI(
+        aiRulePrompt,
+        rulesToEprc(rules),
+        enabledContextFiles
+      )
+      const generatedRules = parseEprcRules(generatedText)
+
+      if (generatedRules.length === 0) {
+        throw new Error('AI 没有生成可用规则，请调整提示词后重试')
+      }
+
+      setRules((prev) => [...generatedRules, ...prev])
+      setAiMergeMessage(`AI 已生成 ${generatedRules.length} 条规则，并追加到当前编辑区顶部。当前未自动保存。`)
+    } catch (err) {
+      setAiMergeError(err instanceof Error ? err.message : 'AI 生成规则失败')
+    } finally {
+      setAiGenerating(false)
+    }
+  }, [activeFileName, aiRulePrompt, fetchRuleFileRawContent, ruleFiles, rules, setRules])
+
   // 删除规则文件
   const handleDelete = useCallback(async (name: string) => {
     if (!confirm(`确定要删除规则文件「${name}」吗？`)) return
@@ -379,11 +468,7 @@ export function RuleConfig(props: RuleConfigProps) {
     const raf = requestAnimationFrame(() => { highlightRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }) })
     const timer = setTimeout(() => setHighlightIndex(null), 1600)
     return () => { cancelAnimationFrame(raf); clearTimeout(timer) }
-  }, [rules, highlightIndex, mergeByTarget])
-
-  const parseRuleInput = useCallback((value: string) => value.split(/[\s,]+/).map(p => p.trim()).filter(Boolean), [])
-
-  type RuleGroup = { key: string; target: string; indices: number[]; rules: string[]; enabledState: boolean | 'indeterminate' }
+  }, [rules, highlightIndex])
 
   const filteredRules = useMemo(() => {
     if (!deferredRuleFilter && !deferredTargetFilter) return rules.map((item, index) => ({ item, index }))
@@ -400,64 +485,14 @@ export function RuleConfig(props: RuleConfigProps) {
     return Array.from(targets).sort()
   }, [rules])
 
-  const groupedRules = useMemo<RuleGroup[]>(() => {
-    const groups = new Map<string, RuleGroup>()
-    filteredRules.forEach(({ item, index: originalIndex }) => {
-      const nt = item.target.trim()
-      const key = nt === '' ? `__EMPTY__${originalIndex}` : nt
-      const existing = groups.get(key)
-      if (!existing) { groups.set(key, { key, target: item.target, indices: [originalIndex], rules: [item.rule], enabledState: item.enabled }); return }
-      existing.indices.push(originalIndex)
-      existing.rules.push(item.rule)
-    })
-    return Array.from(groups.values()).map(group => {
-      const cnt = group.indices.reduce((c, idx) => c + (rules[idx].enabled ? 1 : 0), 0)
-      let s: boolean | 'indeterminate' = false
-      if (cnt === 0) s = false; else if (cnt === group.indices.length) s = true; else s = 'indeterminate'
-      return { ...group, enabledState: s }
-    })
-  }, [filteredRules, rules])
-
   const graphData = useMemo(() => {
     return buildRuleGraph(rules, filteredRules.map(({ index }) => index))
   }, [rules, filteredRules])
-
-  const toggleGroup = useCallback((indices: number[], enabledState: boolean | 'indeterminate') => {
-    startTransition(() => { const next = enabledState !== true; const s = new Set(indices); setRules(prev => prev.map((item, idx) => (s.has(idx) ? { ...item, enabled: next } : item))) })
-  }, [setRules])
-
-  const updateGroupTarget = useCallback((indices: number[], target: string) => {
-    const s = new Set(indices); setRules(prev => prev.map((item, idx) => (s.has(idx) ? { ...item, target } : item)))
-  }, [setRules])
-
-  const updateGroupRules = useCallback((indices: number[], input: string) => {
-    const nextRules = parseRuleInput(input)
-    startTransition(() => {
-      setRules(prev => {
-        const sorted = [...indices].sort((a, b) => a - b)
-        const first = prev[sorted[0]]
-        if (!first) return prev
-        const replacement = (nextRules.length > 0 ? nextRules : ['']).map(rule => ({ enabled: first.enabled, target: first.target, rule, exclusions: first.exclusions }))
-        const removeSet = new Set(sorted)
-        const result: RuleItem[] = []
-        prev.forEach((item, idx) => { if (idx === sorted[0]) { result.push(...replacement); return } if (!removeSet.has(idx)) result.push(item) })
-        return result
-      })
-    })
-  }, [parseRuleInput, setRules])
-
-  const deleteGroup = useCallback((indices: number[]) => {
-    startTransition(() => { const s = new Set(indices); setRules(prev => prev.filter((_, idx) => !s.has(idx))) })
-  }, [setRules])
 
   const createToggleRuleCallback = useCallback((index: number) => () => toggleRule(index), [toggleRule])
   const createUpdateRuleCallback = useCallback((index: number) => (field: 'rule' | 'target' | 'exclusions', value: string | string[]) => updateRule(index, field, value), [updateRule])
   const createDeleteRuleCallback = useCallback((index: number) => () => deleteRule(index), [deleteRule])
   const createMoveToTopCallback = useCallback((index: number) => () => moveToTop(index), [moveToTop])
-  const createToggleGroupCallback = useCallback((indices: number[], enabledState: boolean | 'indeterminate') => () => toggleGroup(indices, enabledState), [toggleGroup])
-  const createUpdateGroupRulesCallback = useCallback((indices: number[]) => (input: string) => updateGroupRules(indices, input), [updateGroupRules])
-  const createUpdateGroupTargetCallback = useCallback((indices: number[]) => (target: string) => updateGroupTarget(indices, target), [updateGroupTarget])
-  const createDeleteGroupCallback = useCallback((indices: number[]) => () => deleteGroup(indices), [deleteGroup])
 
   return (
     <div className="space-y-4">
@@ -533,18 +568,103 @@ export function RuleConfig(props: RuleConfigProps) {
         </div>
       )}
 
+      <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-[linear-gradient(135deg,rgba(59,130,246,0.10),rgba(16,185,129,0.08)),linear-gradient(180deg,rgba(255,255,255,0.72),rgba(255,255,255,0.94))] shadow-sm dark:bg-[linear-gradient(135deg,rgba(59,130,246,0.18),rgba(16,185,129,0.12)),linear-gradient(180deg,rgba(10,10,10,0.84),rgba(10,10,10,0.96))]">
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
+        <div className="relative space-y-4 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/12 text-primary ring-1 ring-primary/20">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm font-semibold">AI 规则助手</div>
+                    <Badge variant="secondary" className="border border-primary/15 bg-primary/10 text-primary">
+                      推荐使用
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    用自然语言直接生成可用规则，或基于当前配置做安全合并，减少重复规则。
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                <span className="rounded-full border bg-background/70 px-2 py-1">支持通配符合并</span>
+                <span className="rounded-full border bg-background/70 px-2 py-1">可带额外优化提示词</span>
+                <span className="rounded-full border bg-background/70 px-2 py-1">结果写回当前编辑区</span>
+              </div>
+            </div>
+            <Badge variant="outline" className="self-start border-primary/20 bg-background/70 text-xs font-normal">
+              {activeFileName ? `当前文件：${activeFileName}` : '未选择规则文件'}
+            </Badge>
+          </div>
+
+          {aiMergeMessage && (
+            <Alert className="border-green-200 bg-green-50/80 dark:border-green-900 dark:bg-green-950/20">
+              <AlertDescription>{aiMergeMessage}</AlertDescription>
+            </Alert>
+          )}
+
+          {aiMergeError && (
+            <Alert variant="destructive">
+              <AlertDescription>{aiMergeError}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="space-y-2">
+            <div className="text-sm font-medium">AI 规则提示词</div>
+            <Textarea
+              value={aiRulePrompt}
+              onChange={(e) => setAiRulePrompt(e.target.value)}
+              placeholder="例如：将 wps.cn 域名都转发到 120.92.124.158 IP；或：优先使用通配符合并同一业务域名，不要把 openapi 相关域名并到 *.wps.cn。"
+              className="min-h-[104px] border-primary/15 bg-background/85 shadow-xs backdrop-blur-sm"
+            />
+          </div>
+
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="text-xs text-muted-foreground">
+              这段提示词同时用于“AI 生成规则”和“AI 合并规则”。生成规则时必填；合并规则时可留空。
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                onClick={handleAIGenerate}
+                disabled={!activeFileName || !aiRulePrompt.trim() || aiGenerating || aiMerging}
+                className="shadow-sm"
+              >
+                <Wand2 className="h-4 w-4" />
+                {aiGenerating ? 'AI 生成中...' : 'AI 生成规则'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAIMerge}
+                disabled={!activeFileName || rules.length === 0 || aiMerging || aiGenerating}
+                className="border-primary/25 bg-background/80 shadow-sm hover:bg-primary/5"
+              >
+                <Sparkles className="h-4 w-4" />
+                {aiMerging ? 'AI 合并中...' : 'AI 合并规则'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* 操作栏 */}
       <div className="flex items-center justify-between">
         <div className="space-y-2">
           {isPending && (
             <div className="text-xs text-muted-foreground">(更新中...)</div>
           )}
-          <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as 'table' | 'graph')}>
-            <TabsList variant="line">
-              <TabsTrigger value="table">表格视图</TabsTrigger>
-              <TabsTrigger value="graph">图表视图</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {FEATURE_FLAGS.ruleGraphView && (
+            <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as 'table' | 'graph')}>
+              <TabsList variant="line">
+                <TabsTrigger value="table">表格视图</TabsTrigger>
+                <TabsTrigger value="graph">图表视图</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Button variant={showFilters ? 'default' : 'outline'} size="sm" onClick={() => setShowFilters(v => !v)} title="显示/隐藏筛选器">
@@ -552,9 +672,6 @@ export function RuleConfig(props: RuleConfigProps) {
           </Button>
           {viewMode === 'table' && (
             <>
-              <Button variant={mergeByTarget ? 'default' : 'outline'} size="sm" onClick={() => setMergeByTarget(v => !v)} title="将同一目标的规则合并为一条记录">
-                <Layers className="h-4 w-4 mr-1" />{mergeByTarget ? '已按目标合并' : '按目标合并'}
-              </Button>
               <Button variant="outline" size="sm" onClick={addRule} disabled={!activeFileName}>
                 <Plus className="h-4 w-4 mr-1" />添加规则
               </Button>
@@ -606,12 +723,12 @@ export function RuleConfig(props: RuleConfigProps) {
         </div>
       )}
 
-      {viewMode === 'table' ? (
+      {viewMode === 'table' || !FEATURE_FLAGS.ruleGraphView ? (
         <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
-                {!mergeByTarget && !ruleFilter && !targetFilter && <TableHead className="w-8"></TableHead>}
+                {!ruleFilter && !targetFilter && <TableHead className="w-8"></TableHead>}
                 <TableHead className="w-12">启用</TableHead>
                 <TableHead>规则</TableHead>
                 <TableHead>排除</TableHead>
@@ -638,12 +755,6 @@ export function RuleConfig(props: RuleConfigProps) {
                     没有匹配的规则，请调整筛选条件
                   </TableCell>
                 </TableRow>
-              ) : mergeByTarget ? (
-                groupedRules.map(group => (
-                  <GroupedRuleRow key={group.key} group={group} highlighted={highlightIndex != null && group.indices.includes(highlightIndex)} highlightRef={highlightRowRef}
-                    onToggleGroup={createToggleGroupCallback(group.indices, group.enabledState)} onUpdateGroupRules={createUpdateGroupRulesCallback(group.indices)}
-                    onUpdateGroupTarget={createUpdateGroupTargetCallback(group.indices)} onDeleteGroup={createDeleteGroupCallback(group.indices)} />
-                ))
               ) : ruleFilter || targetFilter ? (
                 filteredRules.map(({ item, index }) => (
                   <FilteredRuleRow key={index} item={item} highlighted={highlightIndex === index} highlightRef={highlightRowRef}

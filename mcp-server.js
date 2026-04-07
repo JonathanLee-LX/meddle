@@ -31,8 +31,6 @@ function getProxyBaseUrl() {
     return DEFAULT_PROXY_BASE
 }
 
-const IP_PATTERN = /^\d+\.\d+\.\d+\.\d+(:\d+)?$/
-const URL_PATTERN = /^https?:\/\//
 const FILE_PATTERN = /^file:\/\//
 const LOCAL_FILE_PATTERN = /^[A-Za-z]:\\|^\/|^\\/
 
@@ -44,24 +42,10 @@ function parseEprc(content) {
         if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) return
         const parts = trimmed.split(/\s+/).filter(Boolean)
         if (parts.length < 2) return
-        let target
-        let rules
-        if (FILE_PATTERN.test(parts[0]) || LOCAL_FILE_PATTERN.test(parts[0])) {
-            target = parts[0]
-            rules = parts.slice(1)
-            if (!FILE_PATTERN.test(target) && LOCAL_FILE_PATTERN.test(target)) {
-                target = 'file://' + target.replace(/\\/g, '/')
-            }
-        } else if (IP_PATTERN.test(parts[0]) || URL_PATTERN.test(parts[0])) {
-            target = parts[0]
-            rules = parts.slice(1)
-        } else {
-            const reversed = [...parts].reverse()
-            target = reversed[0]
-            rules = reversed.slice(1)
-            if (LOCAL_FILE_PATTERN.test(target)) {
-                target = 'file://' + target.replace(/\\/g, '/')
-            }
+        let target = parts[parts.length - 1]
+        const rules = parts.slice(0, -1)
+        if (LOCAL_FILE_PATTERN.test(target) && !FILE_PATTERN.test(target)) {
+            target = 'file://' + target.replace(/\\/g, '/')
         }
         rules.forEach((rule) => { acc[rule] = target })
     })
@@ -79,12 +63,11 @@ function ruleMapToEprcText(ruleMap) {
     })
     return Object.entries(byTarget)
         .map(([target, rules]) => {
-            const targetFirst = IP_PATTERN.test(target) || URL_PATTERN.test(target) || FILE_PATTERN.test(target)
             let displayTarget = target
             if (FILE_PATTERN.test(target)) {
                 displayTarget = target.replace(/^file:\/\//, '').replace(/\//g, path.sep)
             }
-            return targetFirst ? `${displayTarget} ${rules.join(' ')}` : `${rules.join(' ')} ${displayTarget}`
+            return `${rules.join(' ')} ${displayTarget}`
         })
         .join('\n')
 }
@@ -375,7 +358,7 @@ mcpServer.registerTool('route_rule_create_file', {
     description: '创建新的路由规则文件（多套规则中的一套）。文件名不含 .txt，创建后可启用并往该文件中添加规则。',
     inputSchema: {
         name: z.string().describe('规则文件名称（不含 .txt），如 dev、staging；非法字符会被替换为下划线'),
-        content: z.string().optional().describe('初始规则内容，每行一条规则。格式：「pattern target」或「target pattern1 pattern2」。pattern 作为正则匹配请求 URL，支持 ^ $ 锚点。支持 [marker] 路径重写：在 pattern 中用 [path] 标记截断点，原始 URL 中 path 之后的部分会拼接到 target，例如「^https://cdn.com/[assets] localhost:8080」会将 https://cdn.com/assets/js/app.js 转发到 https://localhost:8080/js/app.js'),
+        content: z.string().optional().describe('初始规则内容，每行一条规则。格式：「pattern pattern1 ... !exclusion !exclusion2 ... target」，target 固定在最后，可配置多个 exclusion。pattern 作为正则匹配请求 URL，支持 ^ $ 锚点和通配符（如 *.wps.cn）。支持 [marker] 路径重写：在 pattern 中用 [path] 标记截断点，原始 URL 中 path 之后的部分会拼接到 target，例如「^https://cdn.com/[assets] localhost:8080」会将 https://cdn.com/assets/js/app.js 转发到 https://localhost:8080/js/app.js'),
         enabled: z.boolean().optional().describe('是否加入当前启用的规则集，默认 true')
     }
 }, async ({ name, content = '', enabled = true }) => {

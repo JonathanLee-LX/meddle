@@ -5,8 +5,6 @@
 
 const path = require('path')
 
-const IP_PATTERN = /^\d+\.\d+\.\d+\.\d+(:\d+)?$/
-const URL_PATTERN = /^https?:\/\//
 const FILE_PATTERN = /^file:\/\//
 const LOCAL_FILE_PATTERN = /^[A-Za-z]:\\|^\/|^\\/
 
@@ -36,25 +34,11 @@ function parseEprcWithExclusions(content) {
 
     if (regularParts.length < 2) return // Need at least one rule and one target
 
-    let target
-    let rules
+    let target = regularParts[regularParts.length - 1]
+    const rules = regularParts.slice(0, -1)
 
-    if (FILE_PATTERN.test(regularParts[0]) || LOCAL_FILE_PATTERN.test(regularParts[0])) {
-      target = regularParts[0]
-      rules = regularParts.slice(1)
-      if (!FILE_PATTERN.test(target) && LOCAL_FILE_PATTERN.test(target)) {
-        target = 'file://' + target.replace(/\\/g, '/')
-      }
-    } else if (IP_PATTERN.test(regularParts[0]) || URL_PATTERN.test(regularParts[0])) {
-      target = regularParts[0]
-      rules = regularParts.slice(1)
-    } else {
-      const reversed = [...regularParts].reverse()
-      target = reversed[0]
-      rules = reversed.slice(1)
-      if (LOCAL_FILE_PATTERN.test(target)) {
-        target = 'file://' + target.replace(/\\/g, '/')
-      }
+    if (LOCAL_FILE_PATTERN.test(target) && !FILE_PATTERN.test(target)) {
+      target = 'file://' + target.replace(/\\/g, '/')
     }
 
     rules.forEach(rule => {
@@ -111,7 +95,6 @@ function ruleMapToEprcText(ruleMap, excludeMap) {
 
   return Object.values(byTargetAndExclusions)
     .map(({ target, rules, exclusions }) => {
-      const targetFirst = IP_PATTERN.test(target) || URL_PATTERN.test(target) || FILE_PATTERN.test(target)
       let displayTarget = target
       if (FILE_PATTERN.test(target)) {
         displayTarget = target.replace(/^file:\/\//, '').replace(/\//g, path.sep)
@@ -119,12 +102,7 @@ function ruleMapToEprcText(ruleMap, excludeMap) {
 
       const exclusionStr = exclusions.map(e => `!${e}`).join(' ')
       const rulesStr = rules.join(' ')
-
-      if (targetFirst) {
-        return exclusionStr ? `${displayTarget} ${rulesStr} ${exclusionStr}` : `${displayTarget} ${rulesStr}`
-      } else {
-        return exclusionStr ? `${rulesStr} ${exclusionStr} ${displayTarget}` : `${rulesStr} ${displayTarget}`
-      }
+      return exclusionStr ? `${rulesStr} ${exclusionStr} ${displayTarget}` : `${rulesStr} ${displayTarget}`
     })
     .join('\n')
 }

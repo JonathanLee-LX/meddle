@@ -31,6 +31,92 @@ example.com 127.0.0.1:3000
 // disabled.com 127.0.0.1:3000
 ```
 
+#### 路由匹配逻辑
+
+当前路由规则的核心逻辑如下：
+
+1. **规则格式固定为 target 在最后**
+   - 仅支持：`pattern pattern1 ... !exclusion !exclusion2 ... target`
+   - `target` 必须放在最后
+   - 一个规则可以配置 0 个、1 个或多个 exclusion，全部写在 target 前
+   - 一行可以写多个 pattern，它们共享同一个 target 和 exclusion 列表
+
+2. **按文件内顺序逐条匹配**
+   - 请求进入后，会按规则在文件中的顺序依次匹配
+   - 命中第一条可用规则后立即停止，不再继续向后匹配
+   - 如果该规则因 exclusion 命中被跳过，才会继续检查下一条
+
+3. **pattern 支持正则和通配符**
+   - 显式正则：如 `^https://solution\.wps\.cn`
+   - 通配符：如 `*.wps.cn`
+   - `*.wps.cn` 会匹配：
+     - `https://wps.cn/...`
+     - `https://plus.wps.cn/...`
+     - `https://deep.plus.wps.cn/...`
+   - 不包含正则语法、但包含 `*` 的 pattern，会按通配符处理
+
+4. **pattern 匹配对象是完整请求 URL**
+   - 匹配时不是只看 host，而是看完整 URL
+   - 例如 `solution.wps.cn/console` 可以命中 `https://solution.wps.cn/console/app`
+
+5. **exclusion 只用于跳过当前规则**
+   - exclusion 写法：`!/api`、`!^https://a\.com/private`
+   - 支持多个 exclusion，例如：`open.wps.cn !/api !/oauth !/internal http://localhost:5173`
+   - exclusion 与 pattern 一样，对完整 URL 做匹配
+   - 只要任一 exclusion 命中，该规则立即失效，继续检查下一条规则
+
+6. **target 的生成规则**
+   - 如果 target 是 `file://` 或本地路径，则直接映射本地文件
+   - 如果 target 只是 host 或 host:port，则继承原请求的：
+     - 协议
+     - pathname
+     - query
+   - 如果 target 没写端口而原请求带端口，则继承原请求端口
+   - 如果原请求是 websocket，而 target 写成 `http(s)`，最终会自动转成 `ws(s)`
+
+7. **支持 `[marker]` 路径重写**
+   - pattern 中可写 `[marker]`
+   - 命中后会把原 URL 中 marker 后面的尾路径拼到 target 后面
+   - 例如：
+
+```txt
+^https://365.kdocs.cn[/3rd/work] https://localhost:13001
+```
+
+请求：
+
+```txt
+https://365.kdocs.cn/3rd/work/micro/app?a=1
+```
+
+会被改写为：
+
+```txt
+https://localhost:13001/micro/app?a=1
+```
+
+#### 推荐写法示例
+
+```txt
+# 单条规则
+solution.wps.cn http://localhost:8000
+
+# 多个 pattern 共用一个 target
+solution.wps.cn/console solution.wps.cn/dev-server https://localhost:8000
+
+# 带多个 exclusion
+open.wps.cn !/api !/oauth !/internal http://localhost:5173
+
+# 通配符
+*.wps.cn 127.0.0.1:3000
+
+# marker 重写
+^https://365.kdocs.cn[/3rd/work] https://localhost:13001
+
+# 禁用规则
+// solution.wps.cn http://localhost:8000
+```
+
 **管理方式**:
 - Web 界面："路由规则"标签页
 - 手动编辑文件

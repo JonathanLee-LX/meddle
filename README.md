@@ -39,6 +39,7 @@ ep --help
 - 项目目录配置（优先）：`.eprc`、`ep.config.json`、`ep.config.js`
 - 用户默认配置：`~/.ep/.eprc`
 - 支持 EPRC、JSON、JS 三种格式
+- EPRC 路由匹配规则、通配符、排除和 marker 重写说明见 [配置文件结构说明](./CONFIG_STRUCTURE.md)
 
 **Web 界面管理**:
 - 启动后访问 http://localhost:8899

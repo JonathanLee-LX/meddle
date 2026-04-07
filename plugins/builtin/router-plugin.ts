@@ -27,13 +27,13 @@ export function createBuiltinRouterPlugin(options: RouterPluginOptionsWithExclus
             const ruleMap = getRuleMap();
             const excludeMap = getExcludeMap?.();
             // Import resolveTargetUrl dynamically to avoid circular dependency
-            const { resolveTargetUrl } = require('../../helpers');
+            const { resolveTargetUrl, testRulePattern } = require('../../helpers');
             const mapped = resolveTargetUrl(sourceUrl, ruleMap, excludeMap);
             if (mapped) {
                 ctx.setTarget(mapped);
                 ctx.meta.routerMatched = true;
                 // 记录匹配的路由规则
-                const matchedPattern = Object.keys(ruleMap).find(pattern => new RegExp(pattern).test(sourceUrl));
+                const matchedPattern = Object.keys(ruleMap).find(pattern => testRulePattern(pattern, sourceUrl));
                 if (matchedPattern) {
                     ctx.meta.matchedRule = matchedPattern;
                     ctx.meta.matchedTarget = mapped;

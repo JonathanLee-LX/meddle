@@ -1,5 +1,5 @@
 import type { RuleMap, ExcludeMap } from '../helpers'
-import { parseEprcWithExclusions, resolveTargetUrl } from '../helpers'
+import { parseEprcWithExclusions, resolveTargetUrl, testRulePattern } from '../helpers'
 
 export type RouteTargetKind = 'empty' | 'file' | 'absolute-url' | 'host'
 
@@ -59,14 +59,14 @@ function findMatchedPattern(inputUrl: string, ruleMap: RuleMap, excludeMap?: Exc
     for (const [pattern, target] of Object.entries(ruleMap)) {
         let matched = false
         try {
-            matched = new RegExp(pattern).test(inputUrl)
+            matched = testRulePattern(pattern, inputUrl)
         } catch (err) {
             throw new Error(`规则 "${pattern}" 是无效的正则表达式: ${(err as Error).message}`)
         }
 
         if (matched) {
             // Check if this pattern is excluded
-            if (excludeMap?.[pattern]?.some(exc => new RegExp(exc).test(inputUrl))) {
+            if (excludeMap?.[pattern]?.some(exc => testRulePattern(exc, inputUrl))) {
                 continue // Skip this pattern, try next
             }
             return { pattern, target }

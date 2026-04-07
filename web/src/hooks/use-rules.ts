@@ -22,13 +22,17 @@ export function useRules() {
 
   const fetchFileContent = useCallback(async (name: string) => {
     try {
-      const res = await fetch(`/api/rule-files/${encodeURIComponent(name)}/content`)
-      const text = await res.text()
+      const text = await fetchRuleFileRawContent(name)
       setRules(parseEprcRules(text))
       setActiveFileName(name)
     } catch (err) {
       console.error('Failed to fetch file content:', err)
     }
+  }, [])
+
+  const fetchRuleFileRawContent = useCallback(async (name: string): Promise<string> => {
+    const res = await fetch(`/api/rule-files/${encodeURIComponent(name)}/content`)
+    return res.text()
   }, [])
 
   const saveFileContent = useCallback(async (name: string, items: RuleItem[]): Promise<boolean> => {
@@ -109,6 +113,7 @@ export function useRules() {
     activeFileName,
     fetchRuleFiles,
     fetchFileContent,
+    fetchRuleFileRawContent,
     saveFileContent,
     createRuleFile,
     toggleRuleFile,
