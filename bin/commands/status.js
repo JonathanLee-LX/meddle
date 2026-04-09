@@ -51,13 +51,14 @@ async function run() {
   }
 
   const totalRouteRules = routeFiles.reduce((sum, f) => sum + f.ruleCount, 0)
+  const totalExclusions = routeFiles.reduce((sum, f) => sum + f.excludeCount, 0)
 
   if (output.isJsonMode()) {
     output.jsonRaw({
       proxyUrl: url,
       running,
       mocks: { total: mockCount, active: activeMocks },
-      routes: { files: routeFiles.length, activeFiles: activeRoutes, totalRules: totalRouteRules }
+      routes: { files: routeFiles.length, activeFiles: activeRoutes, totalRules: totalRouteRules, totalExclusions }
     })
     return
   }
@@ -74,11 +75,15 @@ async function run() {
   output.kv('Files', routeFiles.length)
   output.kv('Active Files', activeRoutes)
   output.kv('Total Rules', totalRouteRules)
+  if (totalExclusions > 0) {
+    output.kv('Total Exclusions', totalExclusions)
+  }
 
   if (routeFiles.length > 0) {
     output.plain('')
     routeFiles.forEach(f => {
-      output.bullet(`${f.name} (${f.ruleCount} rules)`, f.enabled)
+      const excludeInfo = f.excludeCount > 0 ? `, ${f.excludeCount} exclusions` : ''
+      output.bullet(`${f.name} (${f.ruleCount} rules${excludeInfo})`, f.enabled)
     })
   }
 }

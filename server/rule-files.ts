@@ -52,6 +52,7 @@ export interface RuleFileInfo {
     name: string
     enabled: boolean
     ruleCount: number
+    excludeCount: number
 }
 
 /**
@@ -69,14 +70,21 @@ export function listRuleFiles(ctx: ServerContext): RuleFileInfo[] {
     return files.map(name => {
         const filePath = ruleFilePath(ctx, name)
         let ruleCount = 0
+        let excludeCount = 0
         try {
             const content = fs.readFileSync(filePath, 'utf8')
-            ruleCount = Object.keys(parseEprcWithExclusions(content).ruleMap).length
+            const { ruleMap, excludeMap } = parseEprcWithExclusions(content)
+            ruleCount = Object.keys(ruleMap).length
+            // Count total exclusions across all rules
+            for (const exclusions of Object.values(excludeMap)) {
+                excludeCount += exclusions.length
+            }
         } catch { /* ignore */ }
         return {
             name,
             enabled: activeNames.includes(name),
             ruleCount,
+            excludeCount,
         }
     })
 }

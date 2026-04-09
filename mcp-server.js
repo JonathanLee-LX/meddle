@@ -34,40 +34,81 @@ function getProxyBaseUrl() {
 const FILE_PATTERN = /^file:\/\//
 const LOCAL_FILE_PATTERN = /^[A-Za-z]:\\|^\/|^\\/
 
-/** 解析规则文件内容为 pattern -> target 对象（与 helpers.parseEprc 一致） */
-function parseEprc(content) {
-    const acc = Object.create(null)
+/** 解析规则文件内容为 pattern -> target 对象（与 helpers.parseEprcWithExclusions 一致） */
+function parseEprcWithExclusions(content) {
+    const ruleMap = Object.create(null)
+    const excludeMap = Object.create(null)
     content.split(/\r?\n/).forEach((line) => {
         const trimmed = line.trim()
         if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) return
         const parts = trimmed.split(/\s+/).filter(Boolean)
         if (parts.length < 2) return
-        let target = parts[parts.length - 1]
-        const rules = parts.slice(0, -1)
+
+        // Separate exclusions (tokens starting with !) from regular parts
+        const exclusions = []
+        const regularParts = parts.filter(p => {
+            if (p.startsWith('!')) {
+                exclusions.push(p.slice(1)) // Remove ! prefix
+                return false
+            }
+            return true
+        })
+
+        if (regularParts.length < 2) return // Need at least one rule and one target
+
+        let target = regularParts[regularParts.length - 1]
+        const rules = regularParts.slice(0, -1)
         if (LOCAL_FILE_PATTERN.test(target) && !FILE_PATTERN.test(target)) {
             target = 'file://' + target.replace(/\\/g, '/')
         }
-        rules.forEach((rule) => { acc[rule] = target })
+        rules.forEach((rule) => {
+            const bm = rule.match(/\[([^\]]+)\]/)
+            let patternKey
+            if (bm) {
+                patternKey = rule.replace(bm[0], bm[1])
+                ruleMap[patternKey] = target + bm[0]
+            } else {
+                patternKey = rule
+                ruleMap[patternKey] = target
+            }
+            // Always set exclusions (even empty array) to override any previous rule
+            excludeMap[patternKey] = exclusions.slice() // Copy the array
+        })
     })
-    return acc
+    return { ruleMap, excludeMap }
 }
 
-/** 将 pattern -> target 对象转回规则文件文本（与 helpers.ruleMapToEprcText 一致） */
-function ruleMapToEprcText(ruleMap) {
+function parseEprc(content) {
+    return parseEprcWithExclusions(content).ruleMap
+}
+
+/** 将 pattern -> target 对象转回规则文件文本（与 helpers.ruleMapToEprcText 一致，保留 exclusions） */
+function ruleMapToEprcText(ruleMap, excludeMap) {
     const entries = Object.entries(ruleMap)
     if (entries.length === 0) return ''
-    const byTarget = {}
+    const byTargetAndExclusions = {}
     entries.forEach(([rule, target]) => {
-        if (!byTarget[target]) byTarget[target] = []
-        byTarget[target].push(rule)
+        const bm = target.match(/\[([^\]]+)\]/)
+        const groupKey = bm ? target.replace(bm[0], '') : target
+        const displayRule = bm ? rule.replace(bm[1], bm[0]) : rule
+        const exclusions = excludeMap?.[rule] || []
+        const exclusionsKey = exclusions.join(',')
+        // Create a compound key that includes both target and exclusions
+        const compoundKey = `${groupKey}|||${exclusionsKey}`
+        if (!byTargetAndExclusions[compoundKey]) {
+            byTargetAndExclusions[compoundKey] = { target: groupKey, rules: [], exclusions }
+        }
+        byTargetAndExclusions[compoundKey].rules.push(displayRule)
     })
-    return Object.entries(byTarget)
-        .map(([target, rules]) => {
+    return Object.entries(byTargetAndExclusions)
+        .map(([, { target, rules, exclusions }]) => {
             let displayTarget = target
             if (FILE_PATTERN.test(target)) {
                 displayTarget = target.replace(/^file:\/\//, '').replace(/\//g, path.sep)
             }
-            return `${rules.join(' ')} ${displayTarget}`
+            const exclusionStr = exclusions.map(e => `!${e}`).join(' ')
+            const rulesStr = rules.join(' ')
+            return exclusionStr ? `${rulesStr} ${exclusionStr} ${displayTarget}` : `${rulesStr} ${displayTarget}`
         })
         .join('\n')
 }
@@ -266,7 +307,7 @@ mcpServer.registerTool('mock_rule_delete', {
 // ---------- 路由规则（需代理已启动，API 地址来自 start_proxy 或 ~/.ep/mcp-proxy-url.json） ----------
 
 mcpServer.registerTool('route_rule_list', {
-    description: '列出所有路由规则文件；可选指定 ruleFile 获取该文件下的规则列表（pattern -> target）。pattern 支持正则表达式和 [marker] 路径重写语法。',
+    description: '列出所有路由规则文件；可选指定 ruleFile 获取该文件下的规则列表（pattern -> target 及 exclusions）。pattern 支持正则表达式和 [marker] 路径重写语法。exclusions 以 ! 前缀表示排除规则，匹配 exclusions 的请求将跳过该路由规则。',
     inputSchema: {
         ruleFile: z.string().optional().describe('规则文件名（不含 .txt），不传则只返回文件列表')
     }
@@ -278,18 +319,24 @@ mcpServer.registerTool('route_rule_list', {
         }
         const name = encodeURIComponent(ruleFile.trim())
         const content = await proxyApi('GET', `/api/rule-files/${name}/content`)
-        const ruleMap = parseEprc(typeof content === 'string' ? content : String(content))
+        const { ruleMap, excludeMap } = parseEprcWithExclusions(typeof content === 'string' ? content : String(content))
         const displayRules = {}
         for (const [pat, tgt] of Object.entries(ruleMap)) {
             const bm = tgt.match(/\[([^\]]+)\]/)
-            if (bm) {
-                displayRules[pat.replace(bm[1], bm[0])] = tgt.replace(bm[0], '')
-            } else {
-                displayRules[pat] = tgt
+            const displayPat = bm ? pat.replace(bm[1], bm[0]) : pat
+            const displayTgt = bm ? tgt.replace(bm[0], '') : tgt
+            displayRules[displayPat] = {
+                target: displayTgt,
+                exclusions: excludeMap[pat] || []
             }
         }
+        // Calculate exclusion count
+        let totalExclusions = 0
+        for (const exclusions of Object.values(excludeMap)) {
+            totalExclusions += exclusions.length
+        }
         return {
-            content: [{ type: 'text', text: JSON.stringify({ ruleFile, rules: displayRules, count: Object.keys(displayRules).length }, null, 2) }]
+            content: [{ type: 'text', text: JSON.stringify({ ruleFile, rules: displayRules, ruleCount: Object.keys(displayRules).length, exclusionCount: totalExclusions }, null, 2) }]
         }
     } catch (e) {
         return { content: [{ type: 'text', text: e.message }], isError: true }
@@ -378,13 +425,14 @@ mcpServer.registerTool('route_rule_create_file', {
 })
 
 mcpServer.registerTool('route_rule_add', {
-    description: '在指定规则文件中添加一条路由规则（pattern -> target）。若 pattern 已存在则覆盖。支持 [marker] 路径重写语法。',
+    description: '在指定规则文件中添加一条路由规则（pattern -> target）。若 pattern 已存在则覆盖。支持 [marker] 路径重写语法和 exclusions 排除规则。exclusions 以 ! 前缀表示，匹配 exclusions 的请求将跳过该路由规则。',
     inputSchema: {
         ruleFile: z.string().describe('规则文件名（不含 .txt）'),
         pattern: z.string().describe('匹配请求 URL 的正则或主机名，如 example.com、^https://a\\.com/path$。支持 [marker] 路径重写：在 pattern 中用 [path] 标记截断点，URL 中 path 之后的部分会拼接到 target，例如 ^https://cdn.com/[assets]'),
-        target: z.string().describe('转发目标，如 http://localhost:3000 或 127.0.0.1:8080')
+        target: z.string().describe('转发目标，如 http://localhost:3000 或 127.0.0.1:8080'),
+        exclusions: z.array(z.string()).optional().describe('排除规则列表，匹配这些 pattern 的请求将跳过该路由规则。例如 ["api/health", "api/metrics"]')
     }
-}, async ({ ruleFile, pattern, target }) => {
+}, async ({ ruleFile, pattern, target, exclusions }) => {
     try {
         const name = encodeURIComponent(ruleFile.trim())
         let content
@@ -394,31 +442,35 @@ mcpServer.registerTool('route_rule_add', {
             return { content: [{ type: 'text', text: `规则文件不存在或代理未启动: ${err.message}` }], isError: true }
         }
         const text = typeof content === 'string' ? content : String(content)
-        const ruleMap = parseEprc(text)
+        const { ruleMap, excludeMap } = parseEprcWithExclusions(text)
         const pat = pattern.trim()
         const tgt = target.trim()
         const bm = pat.match(/\[([^\]]+)\]/)
         if (bm) {
             ruleMap[pat.replace(bm[0], bm[1])] = tgt + bm[0]
+            excludeMap[pat.replace(bm[0], bm[1])] = exclusions || []
         } else {
             ruleMap[pat] = tgt
+            excludeMap[pat] = exclusions || []
         }
-        const newContent = ruleMapToEprcText(ruleMap)
+        const newContent = ruleMapToEprcText(ruleMap, excludeMap)
         await proxyApi('PUT', `/api/rule-files/${name}/content`, { content: newContent })
-        return { content: [{ type: 'text', text: `已添加规则: ${pattern} -> ${target}` }] }
+        const exclusionInfo = exclusions && exclusions.length > 0 ? `，排除规则: ${exclusions.join(', ')}` : ''
+        return { content: [{ type: 'text', text: `已添加规则: ${pattern} -> ${target}${exclusionInfo}` }] }
     } catch (e) {
         return { content: [{ type: 'text', text: e.message }], isError: true }
     }
 })
 
 mcpServer.registerTool('route_rule_update', {
-    description: '修改指定规则文件中某条规则的 target（按 pattern 查找）。pattern 中如包含 [marker] 会自动匹配内部存储格式。',
+    description: '修改指定规则文件中某条规则的 target 和 exclusions（按 pattern 查找）。pattern 中如包含 [marker] 会自动匹配内部存储格式。exclusions 排除规则以 ! 前缀表示，匹配 exclusions 的请求将跳过该路由规则。',
     inputSchema: {
         ruleFile: z.string().describe('规则文件名（不含 .txt）'),
         pattern: z.string().describe('要修改的 pattern（需与现有规则一致，支持带 [marker] 的写法）'),
-        newTarget: z.string().describe('新的转发目标')
+        newTarget: z.string().optional().describe('新的转发目标'),
+        exclusions: z.array(z.string()).optional().describe('新的排除规则列表，匹配这些 pattern 的请求将跳过该路由规则。设为空数组 [] 可清除所有排除规则')
     }
-}, async ({ ruleFile, pattern, newTarget }) => {
+}, async ({ ruleFile, pattern, newTarget, exclusions }) => {
     try {
         const name = encodeURIComponent(ruleFile.trim())
         const pat = pattern.trim()
@@ -429,17 +481,25 @@ mcpServer.registerTool('route_rule_update', {
             return { content: [{ type: 'text', text: `规则文件不存在或代理未启动: ${err.message}` }], isError: true }
         }
         const text = typeof content === 'string' ? content : String(content)
-        const ruleMap = parseEprc(text)
+        const { ruleMap, excludeMap } = parseEprcWithExclusions(text)
         const bm = pat.match(/\[([^\]]+)\]/)
         const internalKey = bm ? pat.replace(bm[0], bm[1]) : pat
         if (!Object.prototype.hasOwnProperty.call(ruleMap, internalKey)) {
             return { content: [{ type: 'text', text: `未找到 pattern: ${pat}` }], isError: true }
         }
-        const tgt = newTarget.trim()
-        ruleMap[internalKey] = bm ? tgt + bm[0] : tgt
-        const newContent = ruleMapToEprcText(ruleMap)
+        if (newTarget) {
+            const tgt = newTarget.trim()
+            ruleMap[internalKey] = bm ? tgt + bm[0] : tgt
+        }
+        if (exclusions !== undefined) {
+            excludeMap[internalKey] = exclusions
+        }
+        const newContent = ruleMapToEprcText(ruleMap, excludeMap)
         await proxyApi('PUT', `/api/rule-files/${name}/content`, { content: newContent })
-        return { content: [{ type: 'text', text: `已更新规则: ${pat} -> ${newTarget}` }] }
+        const targetInfo = newTarget ? `目标: ${newTarget}` : ''
+        const exclusionInfo = exclusions !== undefined ? (exclusions.length > 0 ? `排除规则: ${exclusions.join(', ')}` : '已清除排除规则') : ''
+        const parts = [targetInfo, exclusionInfo].filter(Boolean).join(', ')
+        return { content: [{ type: 'text', text: `已更新规则: ${pat}${parts ? ` (${parts})` : ''}` }] }
     } catch (e) {
         return { content: [{ type: 'text', text: e.message }], isError: true }
     }
@@ -462,14 +522,15 @@ mcpServer.registerTool('route_rule_delete', {
             return { content: [{ type: 'text', text: `规则文件不存在或代理未启动: ${err.message}` }], isError: true }
         }
         const text = typeof content === 'string' ? content : String(content)
-        const ruleMap = parseEprc(text)
+        const { ruleMap, excludeMap } = parseEprcWithExclusions(text)
         const bm = pat.match(/\[([^\]]+)\]/)
         const internalKey = bm ? pat.replace(bm[0], bm[1]) : pat
         if (!Object.prototype.hasOwnProperty.call(ruleMap, internalKey)) {
             return { content: [{ type: 'text', text: `未找到 pattern: ${pat}` }], isError: true }
         }
         delete ruleMap[internalKey]
-        const newContent = ruleMapToEprcText(ruleMap)
+        delete excludeMap[internalKey]
+        const newContent = ruleMapToEprcText(ruleMap, excludeMap)
         await proxyApi('PUT', `/api/rule-files/${name}/content`, { content: newContent })
         return { content: [{ type: 'text', text: `已删除规则: ${pat}` }] }
     } catch (e) {

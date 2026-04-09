@@ -101,6 +101,31 @@ describe('rule-files', () => {
             expect(result).toHaveLength(1)
             expect(result[0].name).toBe('test')
         })
+
+        it('should count exclusions correctly', () => {
+            const ruleDir = path.join(tempDir, 'route-rules')
+            fs.mkdirSync(ruleDir, { recursive: true })
+            // Rule with 2 exclusions
+            fs.writeFileSync(path.join(ruleDir, 'with-exclude.txt'), '/api http://dev.local !/api/health !/api/metrics\n/other http://other.local')
+            // Rule with no exclusions
+            fs.writeFileSync(path.join(ruleDir, 'no-exclude.txt'), '/api http://prod.local')
+
+            const settingsDir = path.dirname(ctx.settingsPath)
+            fs.mkdirSync(settingsDir, { recursive: true })
+            fs.writeFileSync(ctx.settingsPath, JSON.stringify({ activeRuleFiles: ['with-exclude'] }))
+
+            const result = listRuleFiles(ctx)
+
+            const withExcludeFile = result.find(f => f.name === 'with-exclude')
+            expect(withExcludeFile?.ruleCount).toBe(2)
+            expect(withExcludeFile?.excludeCount).toBe(2)
+            expect(withExcludeFile?.enabled).toBe(true)
+
+            const noExcludeFile = result.find(f => f.name === 'no-exclude')
+            expect(noExcludeFile?.ruleCount).toBe(1)
+            expect(noExcludeFile?.excludeCount).toBe(0)
+            expect(noExcludeFile?.enabled).toBe(false)
+        })
     })
 
     describe('mergeActiveRules', () => {

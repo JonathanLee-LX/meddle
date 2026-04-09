@@ -178,14 +178,21 @@ function listRuleFiles() {
   return files.map(name => {
     const filePath = getRuleFilePath(name)
     let ruleCount = 0
+    let excludeCount = 0
     try {
       const content = fs.readFileSync(filePath, 'utf8')
-      ruleCount = Object.keys(parseEprc(content)).length
+      const { ruleMap, excludeMap } = parseEprcWithExclusions(content)
+      ruleCount = Object.keys(ruleMap).length
+      // Count total exclusions across all rules
+      for (const exclusions of Object.values(excludeMap)) {
+        excludeCount += exclusions.length
+      }
     } catch (_) {}
     return {
       name,
       enabled: activeNames.includes(name),
-      ruleCount
+      ruleCount,
+      excludeCount
     }
   })
 }
@@ -279,7 +286,7 @@ function setRuleFileEnabled(name, enabled) {
 
 // ========== Parser (imported) ==========
 
-const { parseEprc, ruleMapToEprcText } = require('./parsers')
+const { parseEprc, parseEprcWithExclusions, ruleMapToEprcText } = require('./parsers')
 
 module.exports = {
   // Settings
@@ -309,5 +316,6 @@ module.exports = {
 
   // Parser (re-exported)
   parseEprc,
+  parseEprcWithExclusions,
   ruleMapToEprcText
 }
