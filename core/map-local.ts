@@ -36,8 +36,13 @@ export function handleMapLocalRequest(ctx: ProxyContext, req: any, res: any, sou
     req.resume()
 
     function makeLogData(statusCode: number, duration: number) {
-        // 查找匹配的路由规则
-        const matchedRule = Object.keys(ctx.ruleMap).find(pattern => testRulePattern(pattern, source))
+        // 查找匹配的路由规则（考虑排除条件）
+        const matchedRule = Object.keys(ctx.ruleMap).find(pattern => {
+            if (!testRulePattern(pattern, source)) return false
+            // 检查是否被排除条件跳过
+            if (ctx.excludeMap?.[pattern]?.some(exc => testRulePattern(exc, source))) return false
+            return true
+        })
         const matchedTarget = matchedRule ? ctx.ruleMap[matchedRule] : null
         return {
             id: recordId, method: req.method as string, source, target: fileUrl,

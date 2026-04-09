@@ -32,8 +32,13 @@ export function createBuiltinRouterPlugin(options: RouterPluginOptionsWithExclus
             if (mapped) {
                 ctx.setTarget(mapped);
                 ctx.meta.routerMatched = true;
-                // 记录匹配的路由规则
-                const matchedPattern = Object.keys(ruleMap).find(pattern => testRulePattern(pattern, sourceUrl));
+                // 记录匹配的路由规则 (考虑排除条件)
+                const matchedPattern = Object.keys(ruleMap).find(pattern => {
+                    if (!testRulePattern(pattern, sourceUrl)) return false;
+                    // 检查是否被排除条件跳过
+                    if (excludeMap?.[pattern]?.some(exc => testRulePattern(exc, sourceUrl))) return false;
+                    return true;
+                });
                 if (matchedPattern) {
                     ctx.meta.matchedRule = matchedPattern;
                     ctx.meta.matchedTarget = mapped;
