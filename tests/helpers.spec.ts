@@ -6,6 +6,7 @@ import {
   parseEprcWithExclusions,
   ruleMapToEprcText,
   resolveTargetUrl,
+  testRulePattern,
 } from '../helpers'
 
 describe('helpers.parseEprc', () => {
@@ -332,5 +333,174 @@ describe('helpers.ruleMapToEprcText with exclusions', () => {
     // Rules with different exclusion settings should be on separate lines
     const lines = text.split('\n')
     expect(lines.length).toBe(2)
+  })
+})
+
+// ===== testRulePattern tests for simple patterns =====
+
+describe('helpers.testRulePattern', () => {
+  it('matches simple domain pattern with dots as literals', () => {
+    // cloudcdn.qwps.cn should match literally, not treat . as regex wildcard
+    expect(testRulePattern('cloudcdn.qwps.cn', 'https://cloudcdn.qwps.cn/path')).toBe(true)
+    expect(testRulePattern('cloudcdn.qwps.cn', 'https://cloudcdnXqwpsYcn/path')).toBe(false)
+  })
+
+  it('preserves regex behavior for patterns with regex syntax', () => {
+    // Patterns with regex metacharacters should still work as regex
+    expect(testRulePattern('^https://a\\.com', 'https://a.com/path')).toBe(true)
+    expect(testRulePattern('^https://a\\.com', 'https://b.com/a.com/path')).toBe(false)
+  })
+})
+
+// ===== Exclusion with simple domain patterns =====
+
+describe('helpers.resolveTargetUrl with domain exclusion', () => {
+  it('excludes exact domain match from wildcard rule', () => {
+    const ruleMap = { '*.wps.cn': '120.92.124.158' }
+    const excludeMap = { '*.wps.cn': ['cloudcdn.qwps.cn'] }
+
+    // cloudcdn.qwps.cn matches *.wps.cn but should be excluded
+    expect(resolveTargetUrl('https://cloudcdn.qwps.cn/path', ruleMap, excludeMap)).toBe(null)
+
+    // Other subdomains should still work
+    expect(resolveTargetUrl('https://plus.wps.cn/path', ruleMap, excludeMap)).toBe('https://120.92.124.158/path')
+  })
+
+  it('handles multiple exclusion patterns', () => {
+    const ruleMap = { '*.wps.cn': '120.92.124.158' }
+    const excludeMap = { '*.wps.cn': ['cdn.wps.cn', 'static.wps.cn'] }
+
+    expect(resolveTargetUrl('https://cdn.wps.cn/assets/app.js', ruleMap, excludeMap)).toBe(null)
+    expect(resolveTargetUrl('https://static.wps.cn/style.css', ruleMap, excludeMap)).toBe(null)
+    expect(resolveTargetUrl('https://api.wps.cn/users', ruleMap, excludeMap)).toBe('https://120.92.124.158/users')
+  })
+
+  it('exclusion pattern with dots matches literally', () => {
+    const ruleMap = { '*.com': 'proxy.local' }
+    const excludeMap = { '*.com': ['cdn.example.com'] }
+
+    // cdn.example.com should be excluded
+    expect(resolveTargetUrl('https://cdn.example.com/file.js', ruleMap, excludeMap)).toBe(null)
+
+    // cdnXexampleYcom should NOT match the exclusion (dots are literal)
+    expect(resolveTargetUrl('https://cdnXexampleYcom/file.js', ruleMap, excludeMap)).toBe('https://proxy.local/file.js')
+  })
+
+  it('falls through to next rule when excluded', () => {
+    const ruleMap = {
+      '*.wps.cn': '120.92.124.158',
+      'cloudcdn\\.qwps\\.cn': 'localhost:3000',
+    }
+    const excludeMap = { '*.wps.cn': ['cloudcdn.qwps.cn'] }
+
+    // First rule is excluded, second rule should match
+    const result = resolveTargetUrl('https://cloudcdn.qwps.cn/bundle.js', ruleMap, excludeMap)
+    expect(result).toBe('https://localhost:3000/bundle.js')
+  })
+})
+
+// ===== Full scenario test matching user-reported issue =====
+
+describe('helpers.resolveTargetUrl - real world scenario', () => {
+  it('matches user reported issue: cloudcdn.qwps.cn exclusion', () => {
+    // Simulating the user's actual rule:
+    // *.wps.cn !cloudcdn.qwps.cn 120.92.124.158
+    const content = '*.wps.cn !cloudcdn.qwps.cn 120.92.124.158'
+    const { ruleMap, excludeMap } = parseEprcWithExclusions(content)
+
+    const testUrl = 'https://cloudcdn.qwps.cn/open/web_open-homepage/index-DYjEn_Uk.js'
+
+    // Should NOT match because cloudcdn.qwps.cn is excluded
+    const result = resolveTargetUrl(testUrl, ruleMap, excludeMap)
+    expect(result).toBe(null)
+  })
+
+  it('verifies preview matches actual routing behavior', () => {
+    // Multiple rules scenario
+    const content = `
+saas-sys-beta.kso.net 120.92.124.158
+*.wps.cn !cloudcdn.qwps.cn 120.92.124.158
+*.kdocs.cn 120.92.124.158
+    `.trim()
+
+    const { ruleMap, excludeMap } = parseEprcWithExclusions(content)
+
+    // cloudcdn.qwps.cn should be excluded
+    expect(resolveTargetUrl('https://cloudcdn.qwps.cn/bundle.js', ruleMap, excludeMap)).toBe(null)
+
+    // Other wps.cn subdomains should work
+    expect(resolveTargetUrl('https://plus.wps.cn/api/data', ruleMap, excludeMap)).toBe('https://120.92.124.158/api/data')
+
+    // kdocs.cn should work
+    expect(resolveTargetUrl('https://365.kdocs.cn/docs', ruleMap, excludeMap)).toBe('https://120.92.124.158/docs')
+  })
+
+  it('handles exclusion with path pattern', () => {
+    const content = '*.kdocs.cn !/3rd/account/api https://localhost:13001'
+    const { ruleMap, excludeMap } = parseEprcWithExclusions(content)
+
+    // URL with excluded path should not match
+    expect(resolveTargetUrl('https://365.kdocs.cn/3rd/account/api/login', ruleMap, excludeMap)).toBe(null)
+
+    // URL without excluded path should match
+    expect(resolveTargetUrl('https://365.kdocs.cn/docs/page', ruleMap, excludeMap)).toBe('https://localhost:13001/docs/page')
+  })
+})
+
+// ===== Critical test: excludeMap must be passed to resolveTargetUrl =====
+
+describe('helpers.resolveTargetUrl - excludeMap parameter is required', () => {
+  it('returns wrong result when excludeMap is missing (bug scenario)', () => {
+    const ruleMap = { '*.wps.cn': '120.92.124.158' }
+    const excludeMap = { '*.wps.cn': ['cloudcdn.qwps.cn'] }
+    const testUrl = 'https://cloudcdn.qwps.cn/bundle.js'
+
+    // Correct behavior: pass excludeMap
+    const correctResult = resolveTargetUrl(testUrl, ruleMap, excludeMap)
+    expect(correctResult).toBe(null) // Excluded, should not match
+
+    // Bug scenario: omit excludeMap (what was happening in index.js)
+    const buggyResult = resolveTargetUrl(testUrl, ruleMap) // No excludeMap!
+    expect(buggyResult).toBe('https://120.92.124.158/bundle.js') // Incorrectly matches!
+
+    // This test documents why excludeMap must ALWAYS be passed
+    expect(correctResult).not.toBe(buggyResult)
+  })
+
+  it('demonstrates preview vs actual routing consistency', () => {
+    // Simulates the data flow:
+    // Preview: uses rulesText -> parseEprcWithExclusions -> resolveTargetUrl(ruleMap, excludeMap)
+    // Actual: should also use resolveTargetUrl(ruleMap, excludeMap)
+
+    const rulesText = '*.wps.cn !cloudcdn.qwps.cn 120.92.124.158'
+    const { ruleMap, excludeMap } = parseEprcWithExclusions(rulesText)
+    const testUrl = 'https://cloudcdn.qwps.cn/open/web_open-homepage/index-DYjEn_Uk.js'
+
+    // Preview path (correct)
+    const previewResult = resolveTargetUrl(testUrl, ruleMap, excludeMap)
+
+    // Actual routing should use the same call
+    const actualResult = resolveTargetUrl(testUrl, ruleMap, excludeMap)
+
+    // They MUST be consistent
+    expect(previewResult).toBe(actualResult)
+    expect(previewResult).toBe(null) // Both should show no match
+  })
+
+  it('ensures all URL types respect exclusions', () => {
+    const ruleMap = { '*.example.com': 'proxy.local' }
+    const excludeMap = { '*.example.com': ['cdn.example.com'] }
+
+    // HTTP request
+    expect(resolveTargetUrl('http://cdn.example.com/file.js', ruleMap, excludeMap)).toBe(null)
+    expect(resolveTargetUrl('http://api.example.com/data', ruleMap, excludeMap)).toBe('http://proxy.local/data')
+
+    // HTTPS request
+    expect(resolveTargetUrl('https://cdn.example.com/file.js', ruleMap, excludeMap)).toBe(null)
+    expect(resolveTargetUrl('https://api.example.com/data', ruleMap, excludeMap)).toBe('https://proxy.local/data')
+
+    // WebSocket request
+    expect(resolveTargetUrl('wss://cdn.example.com/socket', ruleMap, excludeMap)).toBe(null)
+    expect(resolveTargetUrl('wss://api.example.com/socket', ruleMap, excludeMap)).toBe('wss://proxy.local/socket')
   })
 })

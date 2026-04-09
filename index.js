@@ -237,7 +237,7 @@ localWSServer.addListener('connection', (client, req) => {})
 // ===== HTTPS CONNECT 处理 =====
 proxyServer.on('connect', async (req, socket, header) => {
     const originHost = req.url.split(':')[0]
-    const needDecrypt = !!resolveTargetUrl('https://' + req.url + '/', ctx.ruleMap)
+    const needDecrypt = !!resolveTargetUrl('https://' + req.url + '/', ctx.ruleMap, ctx.excludeMap)
     proxyDebug('received connect request....', needDecrypt ? '(decrypt)' : '(tunnel)')
 
     socket.on('end', () => {})
@@ -281,7 +281,7 @@ proxyServer.on('connect', async (req, socket, header) => {
                     req.on('data', chunk => reqChunks.push(chunk))
                     req.on('end', async () => {
                         const reqBody = Buffer.concat(reqChunks)
-                        const legacyResolvedTarget = resolveTargetUrl(source, ctx.ruleMap)
+                        const legacyResolvedTarget = resolveTargetUrl(source, ctx.ruleMap, ctx.excludeMap)
                         if (legacyResolvedTarget && legacyResolvedTarget.startsWith('file://')) {
                             return handleMapLocalRequest(ctx, req, res, source, legacyResolvedTarget)
                         }
@@ -368,7 +368,7 @@ proxyServer.on('connect', async (req, socket, header) => {
                     socket._wsUpgradeHandled = true
                     wss.handleUpgrade(req, socket, head, (ws) => {
                         const source = 'wss://' + (req.headers.host || originHost) + req.url
-                        let targetUrl = resolveTargetUrl(source, ctx.ruleMap)
+                        let targetUrl = resolveTargetUrl(source, ctx.ruleMap, ctx.excludeMap)
                         if (!targetUrl) targetUrl = source
 
                         const outHeaders = { ...req.headers }

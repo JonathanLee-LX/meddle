@@ -13,6 +13,12 @@ function looksLikeWildcardPattern(pattern: string): boolean {
     return !/[\\^$+?()[\]{}|]/.test(pattern);
 }
 
+function isSimplePattern(pattern: string): boolean {
+    // A pattern is "simple" if it doesn't contain any regex special characters
+    // and should be treated as a literal string (with possible * wildcards)
+    return !/[\\^$+?()[\]{}|]/.test(pattern) && !pattern.includes('*');
+}
+
 function escapeRegexLiteral(value: string): string {
     return value.replace(/[|\\{}()[\]^$+?.*]/g, '\\$&');
 }
@@ -29,6 +35,12 @@ function wildcardPatternToRegex(pattern: string): RegExp {
 export function testRulePattern(pattern: string, input: string): boolean {
     if (looksLikeWildcardPattern(pattern)) {
         return wildcardPatternToRegex(pattern).test(input);
+    }
+    // For simple patterns without regex syntax, treat as literal with escaped dots
+    if (isSimplePattern(pattern)) {
+        // Escape dots and other regex metacharacters for literal matching
+        const escaped = escapeRegexLiteral(pattern);
+        return new RegExp(escaped).test(input);
     }
     return new RegExp(pattern).test(input);
 }

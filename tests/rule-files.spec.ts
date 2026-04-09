@@ -119,8 +119,8 @@ describe('rule-files', () => {
         it('should merge rules from active files', () => {
             const ruleDir = path.join(tempDir, 'route-rules')
             fs.mkdirSync(ruleDir, { recursive: true })
-            fs.writeFileSync(path.join(ruleDir, 'dev.txt'), 'http://dev.local /api')
-            fs.writeFileSync(path.join(ruleDir, 'prod.txt'), 'http://prod.local /api')
+            fs.writeFileSync(path.join(ruleDir, 'dev.txt'), '/api http://dev.local')
+            fs.writeFileSync(path.join(ruleDir, 'prod.txt'), '/api http://prod.local')
 
             const settingsDir = path.dirname(ctx.settingsPath)
             fs.mkdirSync(settingsDir, { recursive: true })
