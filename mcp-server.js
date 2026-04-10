@@ -307,7 +307,7 @@ mcpServer.registerTool('mock_rule_delete', {
 // ---------- 路由规则（需代理已启动，API 地址来自 start_proxy 或 ~/.ep/mcp-proxy-url.json） ----------
 
 mcpServer.registerTool('route_rule_list', {
-    description: '列出所有路由规则文件；可选指定 ruleFile 获取该文件下的规则列表（pattern -> target 及 exclusions）。pattern 支持正则表达式和 [marker] 路径重写语法。exclusions 以 ! 前缀表示排除规则，匹配 exclusions 的请求将跳过该路由规则。',
+    description: '列出所有路由规则文件；可选指定 ruleFile 获取该文件下的规则列表（pattern -> target 及 exclusions）。路由匹配规则：按文件内顺序逐条匹配，pattern 对完整 URL 匹配，支持正则/通配符/[marker]路径重写/exclusions排除规则。',
     inputSchema: {
         ruleFile: z.string().optional().describe('规则文件名（不含 .txt），不传则只返回文件列表')
     }
@@ -402,10 +402,10 @@ mcpServer.registerTool('route_rule_active_set', {
 })
 
 mcpServer.registerTool('route_rule_create_file', {
-    description: '创建新的路由规则文件（多套规则中的一套）。文件名不含 .txt，创建后可启用并往该文件中添加规则。',
+    description: '创建新的路由规则文件（多套规则中的一套）。文件名不含 .txt，创建后可启用并往该文件中添加规则。路由匹配规则：按文件内顺序逐条匹配，命中第一条后立即停止。',
     inputSchema: {
         name: z.string().describe('规则文件名称（不含 .txt），如 dev、staging；非法字符会被替换为下划线'),
-        content: z.string().optional().describe('初始规则内容，每行一条规则。格式：「pattern pattern1 ... !exclusion !exclusion2 ... target」，target 固定在最后，可配置多个 exclusion。pattern 作为正则匹配请求 URL，支持 ^ $ 锚点和通配符（如 *.wps.cn）。支持 [marker] 路径重写：在 pattern 中用 [path] 标记截断点，原始 URL 中 path 之后的部分会拼接到 target，例如「^https://cdn.com/[assets] localhost:8080」会将 https://cdn.com/assets/js/app.js 转发到 https://localhost:8080/js/app.js'),
+        content: z.string().optional().describe('初始规则内容，每行一条规则。格式：「pattern1 pattern2 ... !exclusion1 !exclusion2 ... target」。规则：多个 pattern 共享同一 target；target 固定在最后；! 前缀表示 exclusion。pattern 匹配完整 URL，支持正则/通配符(如 *.wps.cn)/[marker]路径重写。target 若仅 host:port 则继承原请求协议/path/query。'),
         enabled: z.boolean().optional().describe('是否加入当前启用的规则集，默认 true')
     }
 }, async ({ name, content = '', enabled = true }) => {
@@ -425,12 +425,12 @@ mcpServer.registerTool('route_rule_create_file', {
 })
 
 mcpServer.registerTool('route_rule_add', {
-    description: '在指定规则文件中添加一条路由规则（pattern -> target）。若 pattern 已存在则覆盖。支持 [marker] 路径重写语法和 exclusions 排除规则。exclusions 以 ! 前缀表示，匹配 exclusions 的请求将跳过该路由规则。',
+    description: '在指定规则文件中添加一条路由规则（pattern -> target）。若 pattern 已存在则覆盖。路由匹配规则：按文件内顺序逐条匹配，命中第一条后立即停止。pattern 对完整 URL 匹配（非仅 host）。支持 [marker] 路径重写和 exclusions 排除规则。',
     inputSchema: {
         ruleFile: z.string().describe('规则文件名（不含 .txt）'),
-        pattern: z.string().describe('匹配请求 URL 的正则或主机名，如 example.com、^https://a\\.com/path$。支持 [marker] 路径重写：在 pattern 中用 [path] 标记截断点，URL 中 path 之后的部分会拼接到 target，例如 ^https://cdn.com/[assets]'),
-        target: z.string().describe('转发目标，如 http://localhost:3000 或 127.0.0.1:8080'),
-        exclusions: z.array(z.string()).optional().describe('排除规则列表，匹配这些 pattern 的请求将跳过该路由规则。例如 ["api/health", "api/metrics"]')
+        pattern: z.string().describe('匹配完整请求 URL。支持：(1) 正则表达式，如 ^https://a\\.com/api； (2) 通配符，如 *.wps.cn 匹配 wps.cn、plus.wps.cn、deep.plus.wps.cn；(3) [marker] 路径重写，如 ^https://cdn.com/[assets] 将 assets 后的路径拼接到 target'),
+        target: z.string().describe('转发目标。若仅 host:port 则继承原请求的协议、pathname、query；若完整 URL 则直接使用；若原请求是 websocket 而 target 是 http(s)，自动转为 ws(s)'),
+        exclusions: z.array(z.string()).optional().describe('排除规则列表，匹配完整 URL。若任一 exclusion 命中则跳过此规则继续匹配下一条。如 ["api/health", "^https://a\\.com/internal"]')
     }
 }, async ({ ruleFile, pattern, target, exclusions }) => {
     try {
@@ -463,12 +463,12 @@ mcpServer.registerTool('route_rule_add', {
 })
 
 mcpServer.registerTool('route_rule_update', {
-    description: '修改指定规则文件中某条规则的 target 和 exclusions（按 pattern 查找）。pattern 中如包含 [marker] 会自动匹配内部存储格式。exclusions 排除规则以 ! 前缀表示，匹配 exclusions 的请求将跳过该路由规则。',
+    description: '修改指定规则文件中某条规则的 target 和 exclusions（按 pattern 查找）。pattern 中如包含 [marker] 会自动匹配内部存储格式。',
     inputSchema: {
         ruleFile: z.string().describe('规则文件名（不含 .txt）'),
         pattern: z.string().describe('要修改的 pattern（需与现有规则一致，支持带 [marker] 的写法）'),
-        newTarget: z.string().optional().describe('新的转发目标'),
-        exclusions: z.array(z.string()).optional().describe('新的排除规则列表，匹配这些 pattern 的请求将跳过该路由规则。设为空数组 [] 可清除所有排除规则')
+        newTarget: z.string().optional().describe('新的转发目标。若仅 host:port 则继承原请求的协议、pathname、query；若完整 URL 则直接使用'),
+        exclusions: z.array(z.string()).optional().describe('新的排除规则列表，匹配完整 URL。设为空数组 [] 可清除所有排除规则')
     }
 }, async ({ ruleFile, pattern, newTarget, exclusions }) => {
     try {
@@ -533,6 +533,75 @@ mcpServer.registerTool('route_rule_delete', {
         const newContent = ruleMapToEprcText(ruleMap, excludeMap)
         await proxyApi('PUT', `/api/rule-files/${name}/content`, { content: newContent })
         return { content: [{ type: 'text', text: `已删除规则: ${pat}` }] }
+    } catch (e) {
+        return { content: [{ type: 'text', text: e.message }], isError: true }
+    }
+})
+
+mcpServer.registerTool('route_preview', {
+    description: '预览指定 URL 的路由转发目标。模拟路由匹配过程，返回命中的规则、目标地址和解析后的完整 URL。用于 Agent 验证路由规则是否正确配置。匹配逻辑与实际代理一致：按规则顺序匹配，pattern 对完整 URL 匹配，支持正则/通配符/[marker]路径重写/exclusions排除规则。',
+    inputSchema: {
+        url: z.string().describe('待预览的完整 URL，如 https://api.example.com/v1/users'),
+        ruleFile: z.string().optional().describe('可选的规则文件名（不含 .txt），不传则使用所有已激活的规则文件'),
+        rulesText: z.string().optional().describe('可选的自定义规则文本（多行），用于测试临时规则；若提供则忽略 ruleFile 参数')
+    }
+}, async ({ url, ruleFile, rulesText }) => {
+    try {
+        let actualRulesText = rulesText
+
+        if (!actualRulesText) {
+            // Get rules from specified file or all active files
+            const base = getProxyBaseUrl()
+
+            if (ruleFile) {
+                // Use specified rule file
+                const content = await proxyApi('GET', `/api/rule-files/${encodeURIComponent(ruleFile.trim())}/content`)
+                actualRulesText = typeof content === 'string' ? content : String(content)
+            } else {
+                // Use all active rule files
+                const files = await proxyApi('GET', '/api/rule-files')
+                const activeFiles = Array.isArray(files) ? files.filter(item => item && item.enabled) : []
+
+                const contents = []
+                for (const file of activeFiles) {
+                    const content = await proxyApi('GET', `/api/rule-files/${encodeURIComponent(file.name)}/content`)
+                    if (content) {
+                        contents.push(typeof content === 'string' ? content : String(content))
+                    }
+                }
+                actualRulesText = contents.join('\n')
+            }
+        }
+
+        if (!actualRulesText || !actualRulesText.trim()) {
+            return {
+                content: [{ type: 'text', text: '无可用规则：请先创建并激活路由规则文件，或提供 rulesText 参数' }],
+                isError: true
+            }
+        }
+
+        // Call preview API
+        const result = await proxyApi('POST', '/api/rules/preview', { url: url.trim(), rulesText: actualRulesText })
+
+        // Format output
+        const output = {
+            inputUrl: result.inputUrl,
+            matched: result.matched,
+            resolvedUrl: result.resolvedUrl,
+            notes: result.notes
+        }
+
+        if (result.matched && result.matchedRule) {
+            output.matchedRule = {
+                pattern: result.matchedRule.pattern,
+                target: result.matchedRule.target,
+                kind: result.matchedRule.kind
+            }
+        }
+
+        return {
+            content: [{ type: 'text', text: JSON.stringify(output, null, 2) }]
+        }
     } catch (e) {
         return { content: [{ type: 'text', text: e.message }], isError: true }
     }
