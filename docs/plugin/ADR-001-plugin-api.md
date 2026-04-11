@@ -24,10 +24,10 @@
 ```ts
 export type PluginManifest = {
   id: string
-  name: string
+  name?: string                 // 可选，未提供时使用 id 作为显示名
   version: string
   apiVersion: '1.x'
-  type: 'builtin' | 'local'
+  type?: 'builtin' | 'local'    // 可选，默认 local
   permissions: Permission[]
   hooks: HookName[]
   priority?: number
@@ -39,6 +39,7 @@ export type PluginManifest = {
 #### 约束
 
 - `id` 全局唯一，格式建议 `org.plugin-name`。
+- `name` 可选，未提供时使用 `id` 作为显示名。
 - `apiVersion` 采用主版本兼容策略（`1.x`）。
 - 未声明在 `hooks` 的回调不会被注册。
 - `priority` 默认 `100`，数字越小优先级越高。
@@ -53,11 +54,11 @@ export type Plugin = {
   stop?(): Promise<void> | void
   dispose?(): Promise<void> | void
 
-  onRequestStart?(ctx: RequestContext): Promise<void> | void
-  onBeforeProxy?(ctx: RequestContext): Promise<void> | void
+  onRequestStart?(ctx: HookContext): Promise<void> | void
+  onBeforeProxy?(ctx: HookContext): Promise<void> | void
   onBeforeResponse?(ctx: ResponseContext): Promise<void> | void
   onAfterResponse?(ctx: ResponseContext): Promise<void> | void
-  onError?(ctx: ErrorContext): Promise<void> | void
+  onError?(ctx: ErrorContext): Promise<void> | void  // ⚠️ 待实现
 }
 ```
 
@@ -67,6 +68,14 @@ export type Plugin = {
 - `start`: 插件启用时调用。
 - `stop`: 插件停用时调用。
 - `dispose`: 插件卸载时调用，释放资源。
+
+#### Hook 语义
+
+- `onRequestStart`: 请求进入代理，适合打点/预处理。
+- `onBeforeProxy`: 即将转发前，可短路、改写 target。
+- `onBeforeResponse`: 响应返回前，可加工响应。
+- `onAfterResponse`: 响应完成后（异步），适合日志持久化。
+- `onError`: ⚠️ **待实现** - 任意阶段出错后调用。
 
 ### 2.3 Hook 协议（V1）
 
@@ -94,80 +103,95 @@ export type Plugin = {
 - 用途：日志持久化、异步分析、指标上报。
 - 限制：不得阻塞主链路；长任务需排入异步队列。
 
-#### `onError(ctx)`
+#### `onError(ctx)` 
 
 - 时机：任意阶段出现错误后。
 - 用途：记录、告警、补偿动作。
 - 限制：不得抛出未处理异常。
 
-### 2.4 上下文对象（关键字段）
+### 2.4 上下文对象（当前实现）
+
+当前实现的上下文对象如下：
 
 ```ts
-type BaseContext = {
-  requestId: string
-  traceId: string
-  now: number
-  pluginId: string
-}
-
-type RequestContext = BaseContext & {
+type HookContext = {
   request: {
-    method: string
-    url: string
-    headers: Record<string, string>
-    body?: Buffer | string
+    method?: string
+    url?: string
+    headers?: Record<string, string | string[]>
+    body?: any
   }
-  target?: string
+  target: string
   meta: Record<string, unknown>
+  shortCircuited: boolean
+  shortCircuitResponse: Response | null
+  log: Logger
   setTarget(target: string): void
-  respond(resp: ShortCircuitResponse): void
+  respond(resp: Response): void
 }
 
-type ResponseContext = BaseContext & {
-  request: RequestContext['request']
+type ResponseContext = {
+  request: HookContext['request']
+  target: string
+  meta: Record<string, unknown>
   response: {
     statusCode: number
-    headers: Record<string, string>
-    body?: Buffer | string
+    headers: Record<string, string | string[]>
+    body: string | Buffer
   }
-  meta: Record<string, unknown>
+  log: Logger
 }
 
-type ErrorContext = BaseContext & {
+type ErrorContext = {
+  request: HookContext['request']
+  target: string
+  meta: Record<string, unknown>
   phase: HookName
   error: Error
-  meta: Record<string, unknown>
+  log: Logger
 }
 ```
 
 ### 2.5 能力 API（PluginContext）
 
+**当前实现**：
+
 ```ts
 type PluginContext = {
-  log: {
-    debug(msg: string, data?: unknown): void
-    info(msg: string, data?: unknown): void
-    warn(msg: string, data?: unknown): void
-    error(msg: string, data?: unknown): void
-  }
-  config: {
-    get<T = unknown>(key: string, fallback?: T): T
-    set<T = unknown>(key: string, value: T): void
-  }
-  store: {
-    get<T = unknown>(key: string): T | undefined
-    set<T = unknown>(key: string, value: T): void
-    delete(key: string): void
-  }
-  eventBus: {
-    emit(topic: string, payload: unknown): void
-    on(topic: string, handler: (payload: unknown) => void): () => void
-  }
-  http?: {
-    fetch(input: string, init?: RequestInit): Promise<Response>
-  }
+  manifest: PluginManifest
+  log: Logger                    // 日志接口（自动添加 plugin id 前缀）
+  config: PluginConfigAPI        // 配置读写 API
+  store: PluginStoreAPI          // 插件私有存储
+  eventBus: PluginEventBusAPI    // 事件总线
+  [key: string]: any             // 预留动态扩展
+}
+
+type PluginConfigAPI = {
+  get<T = unknown>(key: string, fallback?: T): T
+  set<T = unknown>(key: string, value: T): void
+}
+
+type PluginStoreAPI = {
+  get<T = unknown>(key: string): T | undefined
+  set<T = unknown>(key: string, value: T): void
+  delete(key: string): void
+  clear(): void
+}
+
+type PluginEventBusAPI = {
+  emit(topic: string, payload: unknown): void
+  on(topic: string, handler: (payload: unknown) => void): () => void
+  off(topic: string, handler?: (payload: unknown) => void): void
 }
 ```
+
+**存储位置**：
+- 配置：`~/.ep/plugins-data/{plugin-id}.json`
+- 存储：`~/.ep/plugins-data/{plugin-id}.store.json`
+
+> HTTP API (`http?: HttpAPI`) 当前尚未实现。
+
+## 3. 错误与超时策略
 
 ## 3. 错误与超时策略
 

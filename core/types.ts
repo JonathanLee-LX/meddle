@@ -8,6 +8,9 @@ export interface Logger {
     info(...args: any[]): void;
 }
 
+// Hook names for plugin lifecycle
+export type HookName = 'onRequestStart' | 'onBeforeProxy' | 'onBeforeResponse' | 'onAfterResponse' | 'onError' | 'upstream';
+
 export interface PluginManifest {
     id: string;
     name?: string;
@@ -29,11 +32,36 @@ export interface Plugin {
     onBeforeProxy?(context: HookContext): void | Promise<void>;
     onBeforeResponse?(context: ResponseContext): void | Promise<void>;
     onAfterResponse?(context: ResponseContext): void | Promise<void>;
+    onError?(context: ErrorContext): void | Promise<void>;
     [hookName: string]: any;
+}
+
+// Plugin Context APIs
+
+export interface PluginConfigAPI {
+    get<T = unknown>(key: string, fallback?: T): T;
+    set<T = unknown>(key: string, value: T): void;
+}
+
+export interface PluginStoreAPI {
+    get<T = unknown>(key: string): T | undefined;
+    set<T = unknown>(key: string, value: T): void;
+    delete(key: string): void;
+    clear(): void;
+}
+
+export interface PluginEventBusAPI {
+    emit(topic: string, payload: unknown): void;
+    on(topic: string, handler: (payload: unknown) => void): () => void;
+    off(topic: string, handler?: (payload: unknown) => void): void;
 }
 
 export interface PluginContext {
     manifest: PluginManifest;
+    log: Logger;
+    config: PluginConfigAPI;
+    store: PluginStoreAPI;
+    eventBus: PluginEventBusAPI;
     [key: string]: any;
 }
 
@@ -69,6 +97,15 @@ export interface ResponseContext {
     meta: Record<string, any>;
     response: Response;
     log: Logger;  // 插件日志接口
+}
+
+export interface ErrorContext {
+    request: Request;
+    target: string;
+    meta: Record<string, any>;
+    phase: HookName;
+    error: Error;
+    log: Logger;
 }
 
 export interface PipelineDecision {

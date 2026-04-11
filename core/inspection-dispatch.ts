@@ -1,4 +1,4 @@
-import { InspectionStage, HookContext, ResponseContext, Logger } from './types'
+import { InspectionStage, HookContext, ResponseContext, ErrorContext, Logger } from './types'
 
 function hasDifferentHeaders(a: Record<string, string>, b: Record<string, string>): boolean {
     return JSON.stringify(a) !== JSON.stringify(b)
@@ -23,13 +23,15 @@ function cloneResponse(response: any) {
     }
 }
 
+type DispatchContext = HookContext | ResponseContext | ErrorContext
+
 export async function dispatchWithInspection(
     dispatcher: any,
     logger: Logger,
     hookName: string,
-    context: HookContext | ResponseContext,
+    context: DispatchContext,
 ): Promise<any[]> {
-    const stages = (context as HookContext).meta?._inspectionStages as InspectionStage[] | undefined
+    const stages = (context as any).meta?._inspectionStages as InspectionStage[] | undefined
     const fallbackBefore = {
         target: (context as HookContext).target,
         shortCircuited: (context as HookContext).shortCircuited,

@@ -6,10 +6,12 @@ import { loadCustomPlugins } from './custom-plugin-loader'
 import { createBuiltinPlugins } from '../plugins/builtin'
 import { createBuiltinRouterPlugin } from '../plugins/builtin/router-plugin'
 import { createBuiltinMockPlugin } from '../plugins/builtin/mock-plugin'
+import { createPluginContextFactory } from './plugin-context-factory'
 import type { ProxyContext, MockHandler, Plugin } from './types'
 
 export function createPluginBootstrapRunner(ctx: ProxyContext, mockHandler: MockHandler) {
     let loadedCustomPlugins: Plugin[] = []
+    const contextFactory = createPluginContextFactory()
 
     async function loadCustomPluginsInternal(customPluginsDir: string): Promise<Plugin[]> {
         let customPlugins: Plugin[] = []
@@ -58,7 +60,7 @@ export function createPluginBootstrapRunner(ctx: ProxyContext, mockHandler: Mock
         await bootstrapPlugins({
             pluginManager: ctx.pluginManager,
             plugins: allPlugins,
-            contextFactory: (manifest: any) => ({ manifest, log: console }),
+            contextFactory,
         })
 
         restoreDisabledPlugins()
@@ -87,7 +89,7 @@ export function createPluginBootstrapRunner(ctx: ProxyContext, mockHandler: Mock
         for (const newPlugin of newCustomPlugins) {
             try {
                 ctx.pluginManager.register(newPlugin)
-                const context = { manifest: newPlugin.manifest, log: console }
+                const context = contextFactory(newPlugin.manifest)
                 await newPlugin.setup(context)
                 if (typeof newPlugin.start === 'function') await newPlugin.start!()
                 console.log(chalk.green(`已热加载插件: ${newPlugin.manifest.id}`))

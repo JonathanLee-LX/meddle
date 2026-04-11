@@ -10,7 +10,34 @@
   - 安装和使用说明
   - 配置文件格式
   - MCP Server 使用
-  - 浏览器控制工具
+
+### 配置文档
+
+- **[CONFIG_STRUCTURE.md](../CONFIG_STRUCTURE.md)** - 配置文件结构说明
+  - 目录结构
+  - 路由规则配置 (.eprc)
+  - Mock 规则配置
+  - 系统设置
+  - SSL 证书
+
+## API 和 CLI 文档
+
+- **[API Reference](./API_REFERENCE.md)** ⭐ HTTP API 完整文档
+  - Pipeline API（模式切换、Shadow 统计）
+  - Plugins API（插件管理、生成、测试）
+  - Mock Rules API
+  - Route Rules API
+  - Rule Files API
+  - Logs API
+  - Config API
+  - Refactor API
+
+- **[CLI Reference](./CLI_REFERENCE.md)** ⭐ CLI 命令完整文档
+  - Proxy Commands（启动、环境配置）
+  - Diagnostic Commands（doctor、status）
+  - Mock Commands（list/add/update/delete）
+  - Route Commands（list/show/active/add/update/delete）
+  - 全局选项和环境变量
 
 ## 插件开发文档
 
@@ -95,30 +122,30 @@
 
 #### 插件运行时
 
-- **[core/plugin-runtime.js](../core/plugin-runtime.js)**
+- **[core/plugin-runtime.ts](../core/plugin-runtime.ts)**
   - `PluginManager` - 插件管理器
   - `HookDispatcher` - Hook 调度器
   - `validateManifest` - Manifest 验证
   - `runWithTimeout` - 超时控制
 
-- **[core/plugin-bootstrap.js](../core/plugin-bootstrap.js)**
+- **[core/plugin-bootstrap.ts](../core/plugin-bootstrap.ts)**
   - `bootstrapPlugins` - 插件启动流程
 
-- **[core/plugin-health.js](../core/plugin-health.js)**
+- **[core/plugin-health.ts](../core/plugin-health.ts)**
   - `buildPluginHealth` - 插件健康状态构建
 
 ### 测试文件
 
-- **[tests/plugin-runtime.spec.js](../tests/plugin-runtime.spec.js)**
+- **[tests/plugin-runtime.spec.ts](../tests/plugin-runtime.spec.ts)**
   - PluginManager 测试
   - HookDispatcher 测试
   - 优先级调度测试
   - 超时和统计测试
 
-- **[tests/plugin-bootstrap.spec.js](../tests/plugin-bootstrap.spec.js)**
+- **[tests/plugin-bootstrap.spec.ts](../tests/plugin-bootstrap.spec.ts)**
   - 插件启动流程测试
 
-- **[tests/plugin-health.spec.js](../tests/plugin-health.spec.js)**
+- **[tests/plugin-health.spec.ts](../tests/plugin-health.spec.ts)**
   - 健康状态构建测试
 
 ## 快速导航
@@ -138,8 +165,8 @@
   → 查看 [README.md](../README.md)
 
 - **插件运行时是如何工作的？**
-  → 查看 [core/plugin-runtime.js](../core/plugin-runtime.js) 源码
-  → 查看 [tests/plugin-runtime.spec.js](../tests/plugin-runtime.spec.js) 测试用例
+  → 查看 [core/plugin-runtime.ts](../core/plugin-runtime.ts) 源码
+  → 查看 [tests/plugin-runtime.spec.ts](../tests/plugin-runtime.spec.ts) 测试用例
 
 - **有哪些插件示例？**
   → 查看 [插件系统完整开发指南](./plugin/PLUGIN_SYSTEM_GUIDE.md) 第 10 章节
@@ -150,4 +177,4 @@
 
 ---
 
-最后更新：2026-02-26
+最后更新：2026-04-11（代码实现一致性校对）

@@ -1,4 +1,4 @@
-import { Plugin, LoggerPluginOptions, HookContext, ResponseContext, LoggerEntry, LoggerSummary } from '../../core/types';
+import { Plugin, LoggerPluginOptions, HookContext, ResponseContext, ErrorContext, LoggerEntry, LoggerSummary } from '../../core/types';
 
 type StatusBucket = '2xx' | '3xx' | '4xx' | '5xx' | 'other';
 
@@ -88,7 +88,7 @@ export function createBuiltinLoggerPlugin(options: LoggerPluginOptions = {}): Lo
             
             if (entries.length > maxEntries) entries.shift();
         },
-        onError(ctx: any): void {
+        onError(ctx: ErrorContext): void {
             entries.push({
                 type: 'error',
                 phase: ctx.phase,

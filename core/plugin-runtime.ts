@@ -1,11 +1,12 @@
-import { 
-    Plugin, 
-    PluginManifest, 
-    PluginState, 
+import {
+    Plugin,
+    PluginManifest,
+    PluginState,
     PluginContext,
     PluginManagerOptions,
     HookContext,
     ResponseContext,
+    ErrorContext,
     HookDispatcherOptions,
     HookDispatchOptions,
     HookDispatchResult,
@@ -34,13 +35,15 @@ function cloneResponse(response: any) {
     };
 }
 
-function snapshotHookContext(hookContext: HookContext | ResponseContext) {
+function snapshotHookContext(hookContext: HookContext | ResponseContext | ErrorContext) {
     return {
         target: (hookContext as HookContext).target,
         shortCircuited: (hookContext as HookContext).shortCircuited,
         requestHeaders: normalizeHeaders((hookContext as any).request?.headers),
         response: cloneResponse((hookContext as any).response),
         shortCircuitResponse: cloneResponse((hookContext as HookContext).shortCircuitResponse),
+        phase: (hookContext as ErrorContext).phase,
+        error: (hookContext as ErrorContext).error,
     };
 }
 
@@ -160,8 +163,8 @@ export class HookDispatcher {
     }
 
     async dispatch(
-        hookName: string, 
-        hookContext: HookContext | ResponseContext, 
+        hookName: string,
+        hookContext: HookContext | ResponseContext | ErrorContext,
         options: HookDispatchOptions = {}
     ): Promise<HookDispatchResult[]> {
         const timeoutMs = options.timeoutMs || this.defaultTimeoutMs;

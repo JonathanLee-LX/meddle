@@ -50,9 +50,9 @@ example.com 127.0.0.1:3000
    - 显式正则：如 `^https://solution\.wps\.cn`
    - 通配符：如 `*.wps.cn`
    - `*.wps.cn` 会匹配：
-     - `https://wps.cn/...`
      - `https://plus.wps.cn/...`
      - `https://deep.plus.wps.cn/...`
+   - ⚠️ **注意**：`*.wps.cn` **不会匹配** `https://wps.cn/...`（无子域名的情况），因为通配符 `*.` 表示至少有一个子域名
    - 不包含正则语法、但包含 `*` 的 pattern，会按通配符处理
 
 4. **pattern 匹配对象是完整请求 URL**
@@ -67,10 +67,13 @@ example.com 127.0.0.1:3000
 
 6. **target 的生成规则**
    - 如果 target 是 `file://` 或本地路径，则直接映射本地文件
-   - 如果 target 只是 host 或 host:port，则继承原请求的：
+   - 如果 target 只是 host 或 host:port（无自定义 path），则继承原请求的：
      - 协议
      - pathname
      - query
+   - 如果 target 包含自定义 path（如 `localhost:3000/api`），则**不继承原请求的 pathname**，只使用 target 的 path
+     - 例如：规则 `api.com localhost:3000/v2`，原请求 `/users/list` → 最终 `/v2`（丢弃原 path）
+     - 如果需要保留原 path 并加前缀，请使用 `[marker]` 重写：`api.com[/] localhost:3000/v2`
    - 如果 target 没写端口而原请求带端口，则继承原请求端口
    - 如果原请求是 websocket，而 target 写成 `http(s)`，最终会自动转成 `ws(s)`
 
@@ -136,12 +139,54 @@ open.wps.cn !/api !/oauth !/internal http://localhost:5173
       "urlPattern": "/api/user",
       "method": "GET",
       "statusCode": 200,
+      "headers": { "Content-Type": "application/json" },
+      "bodyType": "inline",
       "body": "{\"name\":\"test\"}",
+      "delay": 0,
       "enabled": true
     }
   ]
 }
 ```
+
+#### Mock 规则字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | number | 规则 ID（自动生成） |
+| `name` | string | 规则名称 |
+| `urlPattern` | string | URL 匹配模式（支持正则） |
+| `method` | string | HTTP 方法（`*` 表示所有方法） |
+| `statusCode` | number | 响应状态码（默认 200） |
+| `headers` | object | 自定义响应头 |
+| `bodyType` | string | 响应体类型（见下文） |
+| `body` | string | 响应体内容 |
+| `delay` | number | 响应延迟（毫秒） |
+| `enabled` | boolean | 是否启用 |
+
+#### bodyType 类型说明
+
+| 类型 | 说明 | body 格式 |
+|------|------|----------|
+| `inline` | 内联文本/JSON（默认） | 直接写文本或 JSON 字符串 |
+| `file` | 本地文件 | 支持 `file://` 或本地绝对路径 |
+| `base64` | Base64 编码数据 | 格式：`data:mime;base64,xxx` |
+
+**示例**：
+
+```json
+// inline 类型（默认）
+{ "bodyType": "inline", "body": "{\"status\": \"ok\"}" }
+
+// file 类型
+{ "bodyType": "file", "body": "file:///path/to/response.json" }
+{ "bodyType": "file", "body": "/absolute/path/to/image.png" }
+
+// base64 类型（用于图片等二进制）
+{ "bodyType": "inline", "body": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..." }
+```
+
+> ⚠️ **注意**：内置 Mock 插件只处理 `bodyType: 'inline'` 的规则。`file` 和 `base64` 类型由传统 Mock 处理器处理。
 
 **管理方式**:
 - Web 界面："Mock"标签页（推荐）
