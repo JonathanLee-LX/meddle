@@ -284,6 +284,21 @@ function setRuleFileEnabled(name, enabled) {
   setActiveRuleFileNames(activeNames)
 }
 
+/**
+ * Get content of all active rule files merged
+ */
+function getActiveRuleFilesContent() {
+  const activeNames = getActiveRuleFileNames()
+  const contents = []
+  for (const name of activeNames) {
+    const content = getRuleFileContent(name)
+    if (content) {
+      contents.push(content)
+    }
+  }
+  return contents.join('\n')
+}
+
 // ========== Parser (imported) ==========
 
 const { parseEprc, parseEprcWithExclusions, ruleMapToEprcText } = require('./parsers')
@@ -309,6 +324,7 @@ module.exports = {
   getRuleFilePath,
   listRuleFiles,
   getRuleFileContent,
+  getActiveRuleFilesContent,
   saveRuleFileContent,
   createRuleFile,
   deleteRuleFile,
