@@ -55,10 +55,11 @@ export type Plugin = {
   dispose?(): Promise<void> | void
 
   onRequestStart?(ctx: HookContext): Promise<void> | void
+  onAfterRequest?(ctx: RequestSentContext): Promise<void> | void
   onBeforeProxy?(ctx: HookContext): Promise<void> | void
   onBeforeResponse?(ctx: ResponseContext): Promise<void> | void
   onAfterResponse?(ctx: ResponseContext): Promise<void> | void
-  onError?(ctx: ErrorContext): Promise<void> | void  // ⚠️ 待实现
+  onError?(ctx: ErrorContext): Promise<void> | void
 }
 ```
 
@@ -73,9 +74,10 @@ export type Plugin = {
 
 - `onRequestStart`: 请求进入代理，适合打点/预处理。
 - `onBeforeProxy`: 即将转发前，可短路、改写 target。
+- `onAfterRequest`: 请求处理阶段完成，即将发送到上游，适合审计/统计。
 - `onBeforeResponse`: 响应返回前，可加工响应。
 - `onAfterResponse`: 响应完成后（异步），适合日志持久化。
-- `onError`: ⚠️ **待实现** - 任意阶段出错后调用。
+- `onError`: 任意阶段出错后调用。
 
 ### 2.3 Hook 协议（V1）
 
@@ -90,6 +92,12 @@ export type Plugin = {
 - 时机：即将发起上游请求之前。
 - 用途：改写 target、请求头、请求体；执行 mock 短路。
 - 限制：若调用 `ctx.respond()`，必须终止后续转发。
+
+#### `onAfterRequest(ctx)`
+
+- 时机：请求处理阶段完成，即将发送到上游（`executeUpstream` 之前）。
+- 用途：记录请求发送时间、审计日志、请求阶段统计。
+- 限制：此时请求内容已确定，修改无效。
 
 #### `onBeforeResponse(ctx)`
 
@@ -140,6 +148,14 @@ type ResponseContext = {
     body: string | Buffer
   }
   log: Logger
+}
+
+type RequestSentContext = {
+  request: HookContext['request']
+  target: string
+  meta: Record<string, unknown>
+  log: Logger
+  requestSentAt?: number  // 请求发送时间戳
 }
 
 type ErrorContext = {

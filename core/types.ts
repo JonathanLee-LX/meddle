@@ -9,7 +9,7 @@ export interface Logger {
 }
 
 // Hook names for plugin lifecycle
-export type HookName = 'onRequestStart' | 'onBeforeProxy' | 'onBeforeResponse' | 'onAfterResponse' | 'onError' | 'upstream';
+export type HookName = 'onRequestStart' | 'onAfterRequest' | 'onBeforeProxy' | 'onBeforeResponse' | 'onAfterResponse' | 'onError' | 'upstream';
 
 export interface PluginManifest {
     id: string;
@@ -29,6 +29,7 @@ export interface Plugin {
     stop?(): void | Promise<void>;
     dispose?(): void | Promise<void>;
     onRequestStart?(context: HookContext): void | Promise<void>;
+    onAfterRequest?(context: RequestSentContext): void | Promise<void>;
     onBeforeProxy?(context: HookContext): void | Promise<void>;
     onBeforeResponse?(context: ResponseContext): void | Promise<void>;
     onAfterResponse?(context: ResponseContext): void | Promise<void>;
@@ -97,6 +98,15 @@ export interface ResponseContext {
     meta: Record<string, any>;
     response: Response;
     log: Logger;  // 插件日志接口
+}
+
+// Context for onAfterRequest: request has been sent, waiting for response
+export interface RequestSentContext {
+    request: Request;
+    target: string;
+    meta: Record<string, any>;
+    log: Logger;  // 插件日志接口
+    requestSentAt?: number;  // 请求发送时间戳（可选）
 }
 
 export interface ErrorContext {

@@ -6,6 +6,7 @@ import {
     PipelineExecuteInput,
     HookContext,
     ResponseContext,
+    RequestSentContext,
     ErrorContext,
     Request,
     Response,
@@ -136,6 +137,20 @@ export function createPipeline(options: PipelineOptions): Pipeline {
             }
 
             let upstream: any;
+
+            // onAfterRequest: 请求处理阶段完成，即将发送到上游
+            const requestSentContext = createRequestSentContext(
+                request,
+                decision.target,
+                decision.meta
+            );
+            try {
+                await dispatchWithInspection(dispatcher, logger, 'onAfterRequest', requestSentContext);
+            } catch (error: any) {
+                await dispatchOnError(dispatcher, logger, request, decision.target, decision.meta, 'onAfterRequest', error);
+                throw error;
+            }
+
             try {
                 upstream = await input.executeUpstream(decision.target, decision.meta);
             } catch (error: any) {
@@ -209,6 +224,20 @@ function createResponseContext(
             headers: response.headers || {},
             body: response.body || '',
         },
+    };
+}
+
+function createRequestSentContext(
+    request: Request,
+    target: string,
+    meta: Record<string, any>
+): RequestSentContext {
+    return {
+        request,
+        target,
+        meta,
+        log: console,  // 为插件提供日志接口
+        requestSentAt: Date.now(),
     };
 }
 

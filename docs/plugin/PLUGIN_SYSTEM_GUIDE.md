@@ -157,6 +157,7 @@ permissions: [
 hooks: [
   'onRequestStart',
   'onBeforeProxy',
+  'onAfterRequest',
   'onAfterResponse'
 ]
 ```
@@ -259,6 +260,7 @@ export type Plugin = {
   
   // Hook 方法
   onRequestStart?(ctx: RequestContext): Promise<void> | void
+  onAfterRequest?(ctx: RequestSentContext): Promise<void> | void
   onBeforeProxy?(ctx: RequestContext): Promise<void> | void
   onBeforeResponse?(ctx: ResponseContext): Promise<void> | void
   onAfterResponse?(ctx: ResponseContext): Promise<void> | void
@@ -399,6 +401,8 @@ onRequestStart ─────→ 请求进入代理
     ↓
 onBeforeProxy ──────→ 即将转发前（可短路）
     ↓
+onAfterRequest ─────→ 请求处理阶段完成，即将发送到上游
+    ↓
     转发到上游
     ↓
 onBeforeResponse ───→ 响应返回前
@@ -510,6 +514,50 @@ async onBeforeProxy(ctx) {
   
   // 删除敏感头
   delete ctx.request.headers['Cookie']
+}
+```
+
+#### onAfterRequest(ctx: RequestSentContext)
+
+**触发时机：** 请求处理阶段完成，即将发送到上游（在 `executeUpstream` 之前）
+
+**用途：**
+- 记录请求发送时间
+- 请求阶段统计
+- 请求审计日志
+- 取消/中止请求（通过抛出错误）
+
+**限制：**
+- 此时请求内容已确定，修改无效
+- 不应执行耗时操作（会影响请求发送）
+
+**上下文：**
+```typescript
+interface RequestSentContext {
+  request: Request       // 原请求信息
+  target: string         // 最终目标地址
+  meta: Record<string, any>  // 元数据
+  log: Logger            // 日志接口
+  requestSentAt?: number // 请求发送时间戳
+}
+```
+
+**示例：**
+```javascript
+async onAfterRequest(ctx) {
+  // 记录请求发送时间
+  ctx.meta.requestSentAt = ctx.requestSentAt || Date.now()
+  
+  // 请求审计日志
+  this.logger.info('Request sent to upstream', {
+    method: ctx.request.method,
+    url: ctx.request.url,
+    target: ctx.target,
+    sentAt: ctx.meta.requestSentAt
+  })
+  
+  // 请求阶段统计
+  this.stats.requestsSent++
 }
 ```
 

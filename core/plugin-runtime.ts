@@ -6,6 +6,7 @@ import {
     PluginManagerOptions,
     HookContext,
     ResponseContext,
+    RequestSentContext,
     ErrorContext,
     HookDispatcherOptions,
     HookDispatchOptions,
@@ -35,13 +36,14 @@ function cloneResponse(response: any) {
     };
 }
 
-function snapshotHookContext(hookContext: HookContext | ResponseContext | ErrorContext) {
+function snapshotHookContext(hookContext: HookContext | ResponseContext | RequestSentContext | ErrorContext) {
     return {
         target: (hookContext as HookContext).target,
         shortCircuited: (hookContext as HookContext).shortCircuited,
         requestHeaders: normalizeHeaders((hookContext as any).request?.headers),
         response: cloneResponse((hookContext as any).response),
         shortCircuitResponse: cloneResponse((hookContext as HookContext).shortCircuitResponse),
+        requestSentAt: (hookContext as RequestSentContext).requestSentAt,
         phase: (hookContext as ErrorContext).phase,
         error: (hookContext as ErrorContext).error,
     };

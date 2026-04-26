@@ -518,6 +518,27 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
             const requestHeadersChanged = JSON.stringify(initialRequestSnapshot.headers) !== JSON.stringify(modifiedRequestSnapshot.headers)
             const requestBodyChanged = initialRequestSnapshot.body !== modifiedRequestSnapshot.body
 
+            // --- Phase 1.5: onAfterRequest (请求处理阶段完成，即将发送) ---
+            if (!shortCircuited && hooks.includes('onAfterRequest')) {
+                const hookFn = (targetPlugin as Record<string, unknown>).onAfterRequest
+                if (typeof hookFn === 'function') {
+                    const hookCtx = {
+                        log: testLogger,
+                        request: requestMutable,
+                        target: currentTarget,
+                        meta: { _test: true, _pluginRequestStartAt: Date.now() },
+                        requestSentAt: Date.now(),
+                    }
+                    const t0 = Date.now()
+                    try {
+                        await (hookFn as (c: unknown) => Promise<void>).call(targetPlugin, hookCtx)
+                        hookResults['onAfterRequest'] = { status: 'success', duration: Date.now() - t0 }
+                    } catch (e) {
+                        hookResults['onAfterRequest'] = { status: 'error', duration: Date.now() - t0, error: (e as Error).message, stack: (e as Error).stack }
+                    }
+                }
+            }
+
             // --- Phase 2: 发起真实 HTTP 请求 ---
             if (!shortCircuited) {
                 if (!realResponse) {

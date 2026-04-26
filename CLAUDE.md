@@ -61,7 +61,7 @@ Express routes for Web UI and CLI:
 
 **Hook execution order (by priority):**
 ```
-onRequestStart → onBeforeProxy → upstream → onBeforeResponse → onAfterResponse → onError
+onRequestStart → onBeforeProxy → onAfterRequest → upstream → onBeforeResponse → onAfterResponse → onError
 ```
 
 **Hook timeout:** 10ms default per hook (`runWithTimeout` in plugin-runtime.ts)

@@ -1,4 +1,4 @@
-import { InspectionStage, HookContext, ResponseContext, ErrorContext, Logger } from './types'
+import { InspectionStage, HookContext, ResponseContext, RequestSentContext, ErrorContext, Logger } from './types'
 
 function hasDifferentHeaders(a: Record<string, string>, b: Record<string, string>): boolean {
     return JSON.stringify(a) !== JSON.stringify(b)
@@ -23,7 +23,7 @@ function cloneResponse(response: any) {
     }
 }
 
-type DispatchContext = HookContext | ResponseContext | ErrorContext
+type DispatchContext = HookContext | ResponseContext | RequestSentContext | ErrorContext
 
 export async function dispatchWithInspection(
     dispatcher: any,
