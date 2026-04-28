@@ -8,6 +8,7 @@ import { registerMocksRoutes } from './mocks'
 import { registerPipelineRoutes } from './pipeline'
 import { registerRefactorRoutes } from './refactor'
 import { registerRuleFilesRoutes } from './rule-files'
+import { applySecurityMiddleware, SecurityConfig } from './security-middleware'
 
 // RuleMap and ExcludeMap types from helpers
 export type RuleMap = Record<string, string>;
@@ -130,8 +131,14 @@ export interface ServerContext {
  * @param serverContext - The server context containing all state and helpers
  * @returns Express app as a handler function compatible with (req, res) signature
  */
-export function createApp(serverContext: ServerContext): Application {
+export function createApp(serverContext: ServerContext, securityConfig?: SecurityConfig): Application {
     const app = express()
+
+    // Apply security middleware first
+    const { token } = applySecurityMiddleware(app, serverContext.epDir, securityConfig)
+
+    // Store auth token in context for use by other modules
+    ;(app as unknown as { authToken: string }).authToken = token
 
     // Middleware to parse JSON bodies
     app.use(express.json({ limit: '50mb' }))
@@ -146,6 +153,11 @@ export function createApp(serverContext: ServerContext): Application {
     registerPipelineRoutes(app, serverContext)
     registerRefactorRoutes(app, serverContext)
     registerRuleFilesRoutes(app, serverContext)
+
+    // Health check endpoint (no auth required)
+    app.get('/api/health', (_req, res) => {
+        res.json({ status: 'ok', timestamp: Date.now() })
+    })
 
     // Export helper references for backward compatibility
     ;(app as unknown as { serverContext: ServerContext }).serverContext = serverContext

@@ -14,6 +14,11 @@ const _debug = require('debug')
 
 const proxyDebug = _debug('proxy')
 
+// ===== SSL 验证配置 =====
+// 生产环境建议设置为 true
+const EP_SSL_VERIFY = process.env.EP_SSL_VERIFY === 'true' || process.env.EP_SSL_VERIFY === '1'
+const SSL_REJECT_UNAUTHORIZED = EP_SSL_VERIFY || false // 默认宽松，开发用
+
 // ===== 共享上下文 =====
 const { createProxyContext } = require('./dist/core/proxy-context')
 const ctx = createProxyContext()
@@ -379,7 +384,7 @@ proxyServer.on('connect', async (req, socket, header) => {
                         } catch (_) {}
 
                         const proxyWs = new WebSocket(targetUrl, ws.protocol || [], {
-                            rejectUnauthorized: false,
+                            rejectUnauthorized: SSL_REJECT_UNAUTHORIZED,
                             headers: outHeaders
                         })
                         const OPEN = 1

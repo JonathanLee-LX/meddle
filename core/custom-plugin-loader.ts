@@ -6,6 +6,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { Plugin, Logger } from './types';
+import {
+    validatePermissions,
+    logPermissionWarnings,
+    shouldAllowPlugin,
+    wrapPluginWithPermissionChecks,
+    getSecurityWarning
+} from './plugin-permissions';
 
 export interface CustomPluginLoaderOptions {
     pluginsDir: string;
@@ -24,15 +31,15 @@ async function loadPluginFile(filePath: string, logger?: Logger): Promise<Plugin
             }
             return null;
         }
-        
+
         let actualFilePath = filePath;
-        
+
         // 使用Node.js的require加载JavaScript模块
         // 清除require缓存，确保加载最新版本
         delete require.cache[require.resolve(actualFilePath)];
-        
+
         const pluginModule = require(actualFilePath);
-        
+
         // 插件可能通过exports.plugin或module.exports导出
         const pluginObj = pluginModule.plugin || pluginModule.default || pluginModule;
 
@@ -45,7 +52,28 @@ async function loadPluginFile(filePath: string, logger?: Logger): Promise<Plugin
             throw new Error('插件必须包含 manifest 和 setup 方法');
         }
 
-        return pluginObj as Plugin;
+        // ===== 权限检查 =====
+        const permResult = validatePermissions(pluginObj.manifest);
+        logPermissionWarnings(permResult, logger || console, pluginObj.manifest.id);
+
+        // 显示安全警告
+        if (logger) {
+            logger.warn(getSecurityWarning(pluginObj.manifest));
+        }
+
+        // 检查是否允许加载
+        if (!shouldAllowPlugin(permResult)) {
+            if (logger) {
+                logger.error(`插件 ${pluginObj.manifest.id} 包含危险权限，已被阻止加载`);
+                logger.error(`设置环境变量 EP_BLOCK_DANGEROUS_PLUGINS=false 可允许加载`);
+            }
+            return null;
+        }
+
+        // 包装插件以添加权限检查
+        const wrappedPlugin = wrapPluginWithPermissionChecks(pluginObj, logger);
+
+        return wrappedPlugin as Plugin;
     } catch (error: any) {
         if (logger) {
             logger.error(`加载插件文件 ${filePath} 失败:`, error.message);
