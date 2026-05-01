@@ -17,7 +17,7 @@ import {
 
 const DEFAULT_HOOK_TIMEOUT_MS = 10;
 
-function normalizeHeaders(headers: Record<string, any> | undefined): Record<string, string> {
+function normalizeHeaders(headers: Record<string, string | string[] | undefined> | undefined): Record<string, string> {
     const out: Record<string, string> = {};
     if (!headers || typeof headers !== 'object') return out;
     for (const [key, value] of Object.entries(headers)) {
@@ -27,7 +27,7 @@ function normalizeHeaders(headers: Record<string, any> | undefined): Record<stri
     return out;
 }
 
-function cloneResponse(response: any) {
+function cloneResponse(response: Partial<{ statusCode: number; headers: Record<string, string | string[]>; body: string | Buffer }> | null | undefined) {
     if (!response || typeof response !== 'object') return null;
     return {
         statusCode: response.statusCode || 200,

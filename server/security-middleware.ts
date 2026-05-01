@@ -123,6 +123,11 @@ export function isPathSafe(requestedPath: string, baseDir: string): boolean {
         return false
     }
 
+    // Check for null bytes (potential path traversal bypass)
+    if (normalizedRequested.includes('\0')) {
+        return false
+    }
+
     // Check for suspicious patterns
     const suspiciousPatterns = [
         '..',
@@ -222,9 +227,9 @@ export function createSecurityHeadersMiddleware() {
 /**
  * Rate limiting middleware (simple in-memory)
  */
-const rateLimitStore = new Map<string, { count: number; resetAt: number }>()
+export const rateLimitStore = new Map<string, { count: number; resetAt: number }>()
 const RATE_LIMIT_WINDOW = 60000 // 1 minute
-const RATE_LIMIT_MAX = 100 // 100 requests per minute
+export const RATE_LIMIT_MAX = 100 // 100 requests per minute
 
 export function createRateLimitMiddleware() {
     return (req: Request, res: Response, next: NextFunction) => {

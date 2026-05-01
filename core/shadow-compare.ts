@@ -1,9 +1,10 @@
-import { 
-    ShadowCompareEntry, 
-    ShadowCompareStats, 
+import {
+    ShadowCompareEntry,
+    ShadowCompareStats,
     ShadowCompareTrackerOptions,
     ShadowDiffItem,
-    ShadowSample
+    ShadowSample,
+    IShadowCompareTracker
 } from './types';
 
 interface ShadowCompareState {
@@ -15,15 +16,9 @@ interface ShadowCompareState {
     lastUpdatedAt: number | null;
 }
 
-export interface ShadowCompareTracker {
-    record(entry: ShadowCompareEntry): boolean;
-    getStats(): ShadowCompareStats;
-    reset(): void;
-}
-
 export function createShadowCompareTracker(
     options: ShadowCompareTrackerOptions = {}
-): ShadowCompareTracker {
+): IShadowCompareTracker {
     const maxSamples = typeof options.maxSamples === 'number' ? options.maxSamples : 20;
     const maxTopDiffs = typeof options.maxTopDiffs === 'number' ? options.maxTopDiffs : 10;
     const state: ShadowCompareState = {
