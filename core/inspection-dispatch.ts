@@ -1,10 +1,10 @@
-import { InspectionStage, HookContext, ResponseContext, RequestSentContext, ErrorContext, Logger } from './types'
+import { InspectionStage, HookContext, ResponseContext, RequestSentContext, ErrorContext, Logger, IHookDispatcher, HookDispatchResult } from './types'
 
 function hasDifferentHeaders(a: Record<string, string>, b: Record<string, string>): boolean {
     return JSON.stringify(a) !== JSON.stringify(b)
 }
 
-function normalizeHeaders(headers: Record<string, any> | undefined): Record<string, string> {
+function normalizeHeaders(headers: Record<string, string | string[] | undefined> | undefined): Record<string, string> {
     const out: Record<string, string> = {}
     if (!headers || typeof headers !== 'object') return out
     for (const [key, value] of Object.entries(headers)) {
@@ -14,7 +14,7 @@ function normalizeHeaders(headers: Record<string, any> | undefined): Record<stri
     return out
 }
 
-function cloneResponse(response: any) {
+function cloneResponse(response: Partial<{ statusCode: number; headers: Record<string, string | string[]>; body: string | Buffer }> | null | undefined) {
     if (!response || typeof response !== 'object') return null
     return {
         statusCode: response.statusCode || 200,
@@ -26,11 +26,11 @@ function cloneResponse(response: any) {
 type DispatchContext = HookContext | ResponseContext | RequestSentContext | ErrorContext
 
 export async function dispatchWithInspection(
-    dispatcher: any,
+    dispatcher: IHookDispatcher,
     logger: Logger,
     hookName: string,
     context: DispatchContext,
-): Promise<any[]> {
+): Promise<HookDispatchResult[]> {
     const stages = (context as any).meta?._inspectionStages as InspectionStage[] | undefined
     const fallbackBefore = {
         target: (context as HookContext).target,
@@ -129,8 +129,8 @@ export async function dispatchWithInspection(
                             responseStatusCode: shortCircuitResponse.statusCode,
                             responseStatusCodeAfter: shortCircuitResponse.statusCode,
                             responseHeadersBefore: {},
-                            responseHeaders: normalizeHeaders(shortCircuitResponse.headers as Record<string, any>),
-                            responseHeadersAfter: normalizeHeaders(shortCircuitResponse.headers as Record<string, any>),
+                            responseHeaders: normalizeHeaders(shortCircuitResponse.headers as Record<string, string | string[] | undefined>),
+                            responseHeadersAfter: normalizeHeaders(shortCircuitResponse.headers as Record<string, string | string[] | undefined>),
                             responseBodyBefore: '',
                             responseBody: typeof shortCircuitResponse.body === 'string' ? shortCircuitResponse.body : '',
                             responseBodyAfter: typeof shortCircuitResponse.body === 'string' ? shortCircuitResponse.body : '',

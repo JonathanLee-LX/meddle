@@ -136,8 +136,8 @@ export interface PipelineResult {
 export type PluginMode = 'off' | 'shadow' | 'on';
 
 export interface PipelineOptions {
-    pluginManager: any;
-    dispatcher: any;
+    pluginManager: IPluginManager;
+    dispatcher: IHookDispatcher;
     logger?: Logger;
     mode?: string;
 }
@@ -147,13 +147,13 @@ export interface Pipeline {
     setMode(mode: PluginMode): void;
     evaluateRequest(request: Request, initialTarget: string): Promise<PipelineDecision>;
     execute(input: PipelineExecuteInput): Promise<PipelineResult>;
-    pluginManager: any;
+    pluginManager: IPluginManager;
 }
 
 export interface PipelineExecuteInput {
     request?: Request;
     initialTarget?: string;
-    executeUpstream(target: string, meta: Record<string, any>): Promise<any>;
+    executeUpstream(target: string, meta: Record<string, any>): Promise<UpstreamResult>;
 }
 
 export interface HookDispatchResult {
@@ -201,6 +201,29 @@ export interface HookDispatcherOptions {
     defaultTimeoutMs?: number;
 }
 
+export interface IPluginManager {
+    register(plugin: Plugin): void;
+    getAll(): Plugin[];
+    getState(pluginId: string): PluginState;
+    setState(pluginId: string, state: PluginState): void;
+    unregister(pluginId: string): void;
+    setup(contextFactory: (manifest: PluginManifest) => PluginContext): Promise<void>;
+    start(): Promise<void>;
+}
+
+export interface IHookDispatcher {
+    dispatch(hookName: string, hookContext: HookContext | ResponseContext | RequestSentContext | ErrorContext, options?: HookDispatchOptions): Promise<HookDispatchResult[]>;
+    getPluginStats(): Record<string, PluginStats>;
+}
+
+export interface UpstreamResult {
+    response?: Partial<Response>;
+    shortCircuited?: boolean;
+    target?: string;
+    meta?: Record<string, any>;
+    [key: string]: any;
+}
+
 export interface HookDispatchOptions {
     timeoutMs?: number;
 }
@@ -242,6 +265,12 @@ export interface ShadowCompareStats {
 export interface ShadowCompareTrackerOptions {
     maxSamples?: number;
     maxTopDiffs?: number;
+}
+
+export interface IShadowCompareTracker {
+    record(entry: ShadowCompareEntry): boolean;
+    getStats(): ShadowCompareStats;
+    reset(): void;
 }
 
 export interface ReadinessResult {
@@ -402,7 +431,7 @@ export interface RefactorStatus {
 }
 
 export interface BootstrapPluginsOptions {
-    pluginManager: any;
+    pluginManager: IPluginManager;
     plugins?: Plugin[];
     contextFactory?(manifest: PluginManifest): PluginContext;
 }
@@ -559,11 +588,11 @@ export interface ProxyContext {
     ENABLE_BUILTIN_LOGGER_PLUGIN: boolean;
     ENABLE_BUILTIN_MOCK_PLUGIN: boolean;
 
-    pluginManager: any;
-    hookDispatcher: any;
+    pluginManager: IPluginManager;
+    hookDispatcher: IHookDispatcher;
     requestPipeline: Pipeline;
     builtinLoggerPlugin: Plugin;
-    shadowCompareTracker: any;
+    shadowCompareTracker: IShadowCompareTracker;
     onModeGate: OnModeGate;
     pipelineGate: PipelineGate;
 

@@ -2,6 +2,7 @@ import { Application, Request, Response } from 'express'
 import * as fs from 'fs'
 import * as path from 'path'
 import { ServerContext } from './index'
+import { isPathSafe } from './security-middleware'
 
 type TestPlugin = {
     manifest: {
@@ -53,12 +54,11 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             const { generatePluginStream, cleanAIResponse } = require('../core/plugin-generator')
 
-            // 设置 SSE 响应头
+            // 设置 SSE 响应头 - CORS 已由 security-middleware 处理
             res.writeHead(200, {
                 'Content-Type': 'text/event-stream',
                 'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-                'Access-Control-Allow-Origin': '*'
+                'Connection': 'keep-alive'
             })
 
             // 发送初始事件
@@ -117,7 +117,41 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
                 fs.mkdirSync(pluginsDir, { recursive: true })
             }
 
-            const filePath = path.resolve(pluginsDir, data.filename)
+            // 安全检查：验证文件名
+            const filename = data.filename
+            if (!filename || typeof filename !== 'string') {
+                res.statusCode = 400
+                res.write(JSON.stringify({ error: '缺少 filename 参数' }))
+                res.end()
+                return
+            }
+
+            // 检查文件名是否安全（不允许路径遍历）
+            if (filename.includes('..') || filename.includes('/') || filename.includes('\\') || filename.includes('~')) {
+                res.statusCode = 400
+                res.write(JSON.stringify({ error: '非法的文件名' }))
+                res.end()
+                return
+            }
+
+            // 只允许 .js 文件
+            if (!filename.endsWith('.js')) {
+                res.statusCode = 400
+                res.write(JSON.stringify({ error: '只允许保存 .js 文件' }))
+                res.end()
+                return
+            }
+
+            const filePath = path.resolve(pluginsDir, filename)
+
+            // 再次验证最终路径是否在 plugins 目录内
+            if (!isPathSafe(filePath, pluginsDir)) {
+                res.statusCode = 403
+                res.write(JSON.stringify({ error: '非法的文件路径' }))
+                res.end()
+                return
+            }
+
             fs.writeFileSync(filePath, data.code, 'utf8')
 
             console.log(`已保存插件: ${data.filename}`)
@@ -178,7 +212,8 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
             const pluginsDir = path.resolve(epDir, 'plugins')
             const filePath = path.resolve(pluginsDir, filename)
 
-            if (!filePath.startsWith(pluginsDir)) {
+            // 安全检查
+            if (!isPathSafe(filePath, pluginsDir)) {
                 res.status(403).json({ error: '非法的文件路径' })
                 return
             }
@@ -202,7 +237,8 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
             const pluginsDir = path.resolve(epDir, 'plugins')
             const filePath = path.resolve(pluginsDir, filename)
 
-            if (!filePath.startsWith(pluginsDir)) {
+            // 安全检查
+            if (!isPathSafe(filePath, pluginsDir)) {
                 res.status(403).json({ error: '非法的文件路径' })
                 return
             }
@@ -235,7 +271,7 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
             const filePath = path.resolve(pluginsDir, filename)
 
             // 安全检查：确保文件在 plugins 目录内
-            if (!filePath.startsWith(pluginsDir)) {
+            if (!isPathSafe(filePath, pluginsDir)) {
                 res.statusCode = 403
                 res.write(JSON.stringify({ error: '非法的文件路径' }))
                 res.end()
@@ -324,8 +360,7 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
             res.writeHead(200, {
                 'Content-Type': 'text/event-stream',
                 'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-                'Access-Control-Allow-Origin': '*'
+                'Connection': 'keep-alive'
             })
 
             res.write('event: start\n')
@@ -363,8 +398,7 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
             res.writeHead(200, {
                 'Content-Type': 'text/event-stream',
                 'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-                'Access-Control-Allow-Origin': '*'
+                'Connection': 'keep-alive'
             })
 
             res.write('event: start\n')
@@ -547,6 +581,9 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
                     const parsed = new URL(currentTarget)
                 const transport = parsed.protocol === 'https:' ? https : http
 
+                // SSL 验证配置 - 默认宽松（开发用），可通过环境变量 EP_SSL_VERIFY=true 开启严格验证
+                const SSL_REJECT_UNAUTHORIZED = process.env.EP_SSL_VERIFY === 'true' || process.env.EP_SSL_VERIFY === '1'
+
                 const fetchStart = Date.now()
                 try {
                     realResponse = await new Promise<{ statusCode: number; headers: Record<string, string>; body: string }>((resolve, reject) => {
@@ -557,7 +594,7 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
                             method: requestMutable.method,
                             headers: requestMutable.headers,
                             timeout: 15000,
-                            rejectUnauthorized: false,
+                            rejectUnauthorized: SSL_REJECT_UNAUTHORIZED,
                         }
                         const outReq = (transport as typeof https).request(reqOpts, (inRes) => {
                             const chunks: Buffer[] = []
