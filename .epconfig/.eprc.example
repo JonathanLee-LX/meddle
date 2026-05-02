@@ -16,7 +16,7 @@
 # ============================================================
 
 # 单个域名 → IP:端口
-solution.wps.cn http://localhost:8000
+solution.example.com http://localhost:8000
 
 # 完整 URL 匹配
 api.example.com/v2/users https://127.0.0.1:3000
@@ -27,20 +27,20 @@ api.example.com/v2/users https://127.0.0.1:3000
 # ============================================================
 # 2. 通配符：*.domain.com
 # ============================================================
-# *.wps.cn 匹配: plus.wps.cn, deep.plus.wps.cn 等
-# 不匹配: wps.cn (无子域名)
-*.wps.cn 127.0.0.1:3000
+# *.example.com 匹配: plus.example.com, deep.plus.example.com 等
+# 不匹配: example.com (无子域名)
+*.example.com 127.0.0.1:3000
 
 # ============================================================
 # 3. 多 pattern 共享一个 target
 # ============================================================
-solution.wps.cn/console solution.wps.cn/dev-server https://localhost:8000
+solution.example.com/console solution.example.com/dev-server https://localhost:8000
 
 # ============================================================
 # 4. Exclusions：排除特定路径
 # ============================================================
-# 匹配 open.wps.cn 的所有请求，但排除 /api、/oauth、/internal 路径
-open.wps.cn !/api !/oauth !/internal http://localhost:5173
+# 匹配 open.example.com 的所有请求，但排除 /api、/oauth、/internal 路径
+open.example.com !/api !/oauth !/internal http://localhost:5173
 
 # 正则 exclusion
 ^https://example\.com !^/private !^/admin https://localhost:3000
@@ -49,9 +49,9 @@ open.wps.cn !/api !/oauth !/internal http://localhost:5173
 # 5. [marker] 路径重写
 # ============================================================
 # 将 marker 后面的路径拼到 target 后面
-# 请求: https://365.kdocs.cn/3rd/work/micro/app?a=1
+# 请求: https://app.example.org/3rd/work/micro/app?a=1
 # 结果: https://localhost:13001/micro/app?a=1
-^https://365.kdocs.cn[/3rd/work] https://localhost:13001
+^https://app\.example\.org[/3rd/work] https://localhost:13001
 
 # marker 也可简写为 [/]
 # 请求: https://cdn.example.com/assets/js/app.js
