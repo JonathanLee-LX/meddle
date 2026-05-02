@@ -84,10 +84,11 @@ proxyServer.on('request', createHttpProxyHandler(ctx, mockHandler, pluginInterce
 }))
 
 // WebSocket log server with heartbeat mechanism
+// Note: We don't bind to server here, we handle upgrade manually to filter paths
 const WS_HEARTBEAT_INTERVAL = 30000  // 30 seconds
 const WS_HEARTBEAT_TIMEOUT = 10000   // 10 seconds timeout
 
-const localWSServer = new WebSocketServer({ server: proxyServer })
+const localWSServer = new WebSocketServer({ noServer: true })
 ctx.localWSServer = localWSServer
 
 localWSServer.addListener('connection', (client, req) => {
@@ -123,10 +124,12 @@ localWSServer.on('close', () => {
 // HTTPS CONNECT handler
 proxyServer.on('connect', createConnectHandler(ctx, mockHandler, pluginIntercept, { SSL_REJECT_UNAUTHORIZED }))
 
-// WebSocket upgrade handler
-proxyServer.on('upgrade', (req, socket, header) => {
+// WebSocket upgrade handler - only handle /ws path, destroy others
+proxyServer.on('upgrade', (req, socket, head) => {
     if (req.url === '/ws' || req.url.startsWith('/ws?')) {
-        localWSServer.handleUpgrade(req, socket, header)
+        localWSServer.handleUpgrade(req, socket, head, (ws) => {
+            localWSServer.emit('connection', ws, req)
+        })
     } else {
         socket.destroy()
     }
