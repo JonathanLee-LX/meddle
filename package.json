@@ -1,8 +1,9 @@
 {
   "name": "easy-dev-proxy",
-  "version": "1.0.0",
-  "description": "",
+  "version": "1.0.1",
+  "description": "A development proxy server with plugin system, mock support, HTTPS interception, and web UI",
   "main": "index.js",
+  "types": "dist/core/types.d.ts",
   "scripts": {
     "build": "tsc",
     "build:watch": "tsc --watch",
@@ -23,15 +24,49 @@
     "typecheck": "tsc --noEmit",
     "mcp": "node mcp-server.js",
     "build:web": "cd web && pnpm run build",
-    "dev:web": "cd web && pnpm run dev",
-    "postinstall": "cd web && pnpm install && pnpm run build"
+    "dev:web": "cd web && pnpm run dev"
   },
   "bin": {
     "ep": "bin/index"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "files": [
+    "bin/",
+    "dist/",
+    "web/dist/",
+    "index.js",
+    "proxy-handler.js",
+    "proxy-connect.js",
+    "proxy-bootstrap.js",
+    "mcp-server.js",
+    "helpers.js",
+    "plugins/",
+    "docs/",
+    "CLAUDE.md",
+    "CONFIG_STRUCTURE.md",
+    "README.md"
+  ],
+  "keywords": [
+    "proxy",
+    "dev-proxy",
+    "mock",
+    "https-proxy",
+    "debug",
+    "development",
+    "plugin"
+  ],
+  "author": "JonathanLee-LX",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JonathanLee-LX/easy-proxy"
+  },
+  "homepage": "https://github.com/JonathanLee-LX/easy-proxy#readme",
+  "bugs": {
+    "url": "https://github.com/JonathanLee-LX/easy-proxy/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
     "chalk": "^4.1.2",
@@ -47,17 +82,17 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.1",
     "@types/debug": "^4.1.12",
     "@types/express": "^5.0.6",
     "@types/node": "^18.19.130",
     "@types/ws": "^8.5.4",
-    "@eslint/js": "^9.39.1",
     "@vitest/coverage-v8": "^4.1.0",
     "eslint": "^9.39.1",
     "globals": "^16.5.0",
     "nodemon": "^2.0.20",
-    "typescript-eslint": "^8.46.4",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.4",
     "vitest": "^4.0.18"
   }
 }
