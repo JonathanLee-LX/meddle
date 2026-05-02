@@ -83,10 +83,42 @@ proxyServer.on('request', createHttpProxyHandler(ctx, mockHandler, pluginInterce
     SSL_REJECT_UNAUTHORIZED, expressApp, serverContext, proxyServer
 }))
 
-// WebSocket log server
+// WebSocket log server with heartbeat mechanism
+const WS_HEARTBEAT_INTERVAL = 30000  // 30 seconds
+const WS_HEARTBEAT_TIMEOUT = 10000   // 10 seconds timeout
+
 const localWSServer = new WebSocketServer({ server: proxyServer })
 ctx.localWSServer = localWSServer
-localWSServer.addListener('connection', (client, req) => {})
+
+localWSServer.addListener('connection', (client, req) => {
+    client.isAlive = true
+    client.lastPong = Date.now()
+
+    client.on('pong', () => {
+        client.isAlive = true
+        client.lastPong = Date.now()
+    })
+
+    client.on('close', () => {
+        client.isAlive = false
+    })
+})
+
+// Heartbeat check loop - terminate dead connections
+const heartbeatInterval = setInterval(() => {
+    localWSServer.clients.forEach(client => {
+        if (client.isAlive === false || Date.now() - client.lastPong > WS_HEARTBEAT_TIMEOUT) {
+            client.terminate()
+            return
+        }
+        client.isAlive = false
+        client.ping()
+    })
+}, WS_HEARTBEAT_INTERVAL)
+
+localWSServer.on('close', () => {
+    clearInterval(heartbeatInterval)
+})
 
 // HTTPS CONNECT handler
 proxyServer.on('connect', createConnectHandler(ctx, mockHandler, pluginIntercept, { SSL_REJECT_UNAUTHORIZED }))

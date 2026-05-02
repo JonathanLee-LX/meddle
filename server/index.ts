@@ -8,6 +8,7 @@ import { registerMocksRoutes } from './mocks'
 import { registerPipelineRoutes } from './pipeline'
 import { registerRefactorRoutes } from './refactor'
 import { registerRuleFilesRoutes } from './rule-files'
+import { registerSystemRoutes, ServerContextWithSystem } from './system'
 import { applySecurityMiddleware, SecurityConfig } from './security-middleware'
 
 // RuleMap and ExcludeMap types from helpers
@@ -153,6 +154,7 @@ export function createApp(serverContext: ServerContext, securityConfig?: Securit
     registerPipelineRoutes(app, serverContext)
     registerRefactorRoutes(app, serverContext)
     registerRuleFilesRoutes(app, serverContext)
+    registerSystemRoutes(app, serverContext as unknown as ServerContextWithSystem)
 
     // Health check endpoint (no auth required)
     app.get('/api/health', (_req, res) => {

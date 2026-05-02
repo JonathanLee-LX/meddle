@@ -561,9 +561,13 @@ export interface ProxyRecord {
 
 export interface ProxyRecordDetail {
     requestHeaders: Record<string, string | string[] | undefined>;
-    requestBody?: string;
+    requestBody?: string;           // In-memory body (for small bodies < memoryThreshold)
+    requestBodyCachePath?: string;  // File path for cached body (for large bodies)
+    requestBodySize?: number;       // Original body size in bytes
     responseHeaders: Record<string, string | string[] | undefined>;
-    responseBody?: string;
+    responseBody?: string;          // In-memory body
+    responseBodyCachePath?: string; // File path for cached body
+    responseBodySize?: number;      // Original body size in bytes
     statusCode: number;
     statusMessage?: string;
     method: string;
@@ -581,6 +585,8 @@ export interface ProxyContext {
     MAX_RECORD_SIZE: number;
     MAX_DETAIL_SIZE: number;
     MAX_BODY_SIZE: number;
+    BODY_MEMORY_THRESHOLD: number;  // Threshold for storing body in memory vs file
+    CACHE_DIR_MAX_SIZE: number;     // Max cache directory size in bytes
     SHADOW_WARN_MIN_SAMPLES: number;
     SHADOW_WARN_DIFF_RATE: number;
     PLUGIN_ON_HOSTS: Set<string>;
@@ -595,6 +601,8 @@ export interface ProxyContext {
     shadowCompareTracker: IShadowCompareTracker;
     onModeGate: OnModeGate;
     pipelineGate: PipelineGate;
+    bodyCacheManager: any;  // Body cache manager instance
+    memoryMonitor: any;     // Memory monitor instance
 
     ruleMap: Record<string, string>;
     excludeMap: Record<string, string[]>;
