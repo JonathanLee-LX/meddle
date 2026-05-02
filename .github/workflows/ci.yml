@@ -45,6 +45,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - run: pnpm run build
+
       - run: pnpm test -- --coverage
       - run: cd web && pnpm test:run -- --coverage
 
