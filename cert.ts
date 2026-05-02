@@ -82,14 +82,14 @@ function openCertForUser(rootCAPath: string): void {
             console.log('  1. 双击证书 -> 展开「Trust」');
             console.log('  2. 将「When using this certificate」设为「Always Trust」');
             console.log('  3. 关闭窗口并输入密码保存\n');
-        } catch (err) {
+        } catch (_err) {
             console.log('证书路径:', rootCAPath);
         }
     } else if (platform === 'win32') {
         try {
             execSync(`start "" "${rootCAPath}"`, { stdio: 'inherit' });
             console.log('\n已打开证书，请按系统提示安装并信任。\n');
-        } catch (err) {
+        } catch (_err) {
             console.log('证书路径:', rootCAPath);
         }
     }
@@ -128,7 +128,7 @@ async function trustRootCA(): Promise<void> {
                 stdio: 'inherit'
             });
             console.log('根证书已成功添加到系统信任。');
-        } catch (err) {
+        } catch (_err) {
             console.error('自动添加失败，正在打开证书文件供手动添加...');
             openCertForUser(rootCAPath);
         }
