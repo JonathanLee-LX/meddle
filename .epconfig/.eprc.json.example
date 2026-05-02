@@ -1,5 +1,0 @@
-{
-  "10.23.10.11": ["kdocs.cn", "www.kdocs.cn", "web.wps.cn", "api.kdocs.cn"],
-  "127.0.0.1": ["localhost.wbridge.kdocs.cn"],
-  "https://localhost:8000": ["solution.wps.cn/console", "solution.wps.cn/dev-server"]
-}

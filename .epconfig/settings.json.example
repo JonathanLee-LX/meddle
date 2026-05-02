@@ -1,0 +1,53 @@
+{
+  "__comment__": "Easy Proxy 系统设置示例。复制为 ~/.ep/settings.json 使用。所有字段均为可选。删除所有 __ 前缀的注释字段即可直接使用。",
+
+  "theme": "system",
+  "fontSize": "medium",
+
+  "rulesFilePath": "",
+  "mocksFilePath": "",
+
+  "activeRuleFiles": ["host-beta"],
+
+  "aiConfig": {
+    "enabled": false,
+    "provider": "openai",
+    "apiKey": "",
+    "baseUrl": "",
+    "model": "gpt-4o-mini",
+    "models": [
+      {
+        "id": "1",
+        "name": "GPT-4o Mini",
+        "provider": "openai",
+        "apiKey": "",
+        "baseUrl": "https://api.openai.com/v1/chat/completions",
+        "model": "gpt-4o-mini"
+      },
+      {
+        "id": "2",
+        "name": "Claude Haiku",
+        "provider": "anthropic",
+        "apiKey": "",
+        "baseUrl": "https://api.anthropic.com/v1/messages",
+        "model": "claude-haiku-4-5-20251001"
+      }
+    ],
+    "activeModelId": "1"
+  },
+
+  "__field_reference__": {
+    "theme": "主题: light | dark | system",
+    "fontSize": "字体大小: small | medium | large",
+    "rulesFilePath": "自定义路由规则文件路径（可选）。留空使用默认 ~/.ep/.eprc",
+    "mocksFilePath": "自定义 Mock 规则文件路径（可选）。留空使用默认 ~/.ep/mocks.json",
+    "activeRuleFiles": "当前激活的路由规则文件列表。文件位于 ~/.ep/route-rules/*.txt",
+    "aiConfig.enabled": "是否启用 AI 功能（插件生成、规则建议等）",
+    "aiConfig.provider": "AI 服务商: openai | anthropic | custom",
+    "aiConfig.apiKey": "API 密钥。该字段会自动加密存储到磁盘",
+    "aiConfig.baseUrl": "API 端点 URL。OpenAI: https://api.openai.com/v1/chat/completions",
+    "aiConfig.model": "默认使用的模型名称",
+    "aiConfig.models": "多模型配置列表。可在 Web UI 中切换模型",
+    "aiConfig.activeModelId": "当前激活的模型 ID（对应 models 列表中的 id）"
+  }
+}

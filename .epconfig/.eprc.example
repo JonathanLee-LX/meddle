@@ -1,5 +1,82 @@
-// 复制为 .eprc 使用，格式：IP domain1 [domain2] ...
-// 表示将 domain1、domain2 等域名解析到指定 IP
-10.23.10.11 kdocs.cn www.kdocs.cn web.wps.cn
-10.23.10.11 api.kdocs.cn account.kdocs.cn
-https://localhost:8000 solution.wps.cn/console solution.wps.cn/dev-server
+# ============================================================
+# Easy Proxy 路由规则示例文件
+# 复制为 ~/.epconfig/.eprc.{env} 或 ~/.ep/.eprc 使用
+# 启动: ep start --env {env}
+# ============================================================
+#
+# 格式: pattern [pattern2 ...] [!exclusion1 !exclusion2 ...] target
+#   - target 必须放在最后
+#   - 一行可写多个 pattern，共享同一个 target 和 exclusion 列表
+#   - 支持 0 个或多个 exclusion，全部写在 target 之前
+#   - 规则按文件顺序逐条匹配，命中第一条即停止
+#   - 以 # 或 // 开头的行视为注释/禁用规则
+
+# ============================================================
+# 1. 基础规则：pattern → target
+# ============================================================
+
+# 单个域名 → IP:端口
+solution.wps.cn http://localhost:8000
+
+# 完整 URL 匹配
+api.example.com/v2/users https://127.0.0.1:3000
+
+# 正则匹配（以 ^ 开头或包含正则特殊字符）
+^https://api\.example\.com/.* https://127.0.0.1:8080
+
+# ============================================================
+# 2. 通配符：*.domain.com
+# ============================================================
+# *.wps.cn 匹配: plus.wps.cn, deep.plus.wps.cn 等
+# 不匹配: wps.cn (无子域名)
+*.wps.cn 127.0.0.1:3000
+
+# ============================================================
+# 3. 多 pattern 共享一个 target
+# ============================================================
+solution.wps.cn/console solution.wps.cn/dev-server https://localhost:8000
+
+# ============================================================
+# 4. Exclusions：排除特定路径
+# ============================================================
+# 匹配 open.wps.cn 的所有请求，但排除 /api、/oauth、/internal 路径
+open.wps.cn !/api !/oauth !/internal http://localhost:5173
+
+# 正则 exclusion
+^https://example\.com !^/private !^/admin https://localhost:3000
+
+# ============================================================
+# 5. [marker] 路径重写
+# ============================================================
+# 将 marker 后面的路径拼到 target 后面
+# 请求: https://365.kdocs.cn/3rd/work/micro/app?a=1
+# 结果: https://localhost:13001/micro/app?a=1
+^https://365.kdocs.cn[/3rd/work] https://localhost:13001
+
+# marker 也可简写为 [/]
+# 请求: https://cdn.example.com/assets/js/app.js
+# 结果: https://localhost:3000/assets/js/app.js
+^https://cdn\.example\.com[/] https://localhost:3000
+
+# ============================================================
+# 6. target 规则说明
+# ============================================================
+
+# host-only target → 继承原请求的协议、pathname、query
+api.example.com 127.0.0.1:3000
+# 请求 https://api.example.com/v1/users?page=1 → https://127.0.0.1:3000/v1/users?page=1
+
+# target 含自定义 path → 丢弃原 pathname
+api.example.com localhost:3000/v2
+# 请求 https://api.example.com/users/list → https://localhost:3000/v2
+
+# 本地文件映射
+cdn.example.com/static file:///path/to/local/static
+
+# ============================================================
+# 7. 禁用/注释规则
+# ============================================================
+// disabled.example.com 127.0.0.1:3000
+
+# 这是注释行，不会被解析
+# example.com 127.0.0.1:4000
