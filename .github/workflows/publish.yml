@@ -30,6 +30,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Install web dependencies
+        run: cd web && pnpm install
+
       - name: Build web frontend
         run: pnpm run build:web
 
