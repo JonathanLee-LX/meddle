@@ -242,7 +242,7 @@ ${requirement.permissions ? `需要的权限：${requirement.permissions.join(',
                             fullCode += content;
                             onChunk(content);
                         }
-                    } catch (e) {
+                    } catch (_e) {
                         // 忽略解析错误
                     }
                 }
@@ -348,7 +348,7 @@ ${requirement.permissions ? `需要的权限：${requirement.permissions.join(',
                                 onChunk(content);
                             }
                         }
-                    } catch (e) {
+                    } catch (_e) {
                         // 忽略解析错误
                     }
                 }
@@ -415,7 +415,7 @@ function extractManifest(code: string): any {
             permissions,
             hooks
         };
-    } catch (error) {
+    } catch (_error) {
         // 返回默认 manifest
         return {
             id: 'local.unknown',

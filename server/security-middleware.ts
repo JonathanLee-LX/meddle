@@ -45,7 +45,7 @@ export function getOrCreateAuthToken(epDir: string): string {
             if (existingToken && existingToken.length >= 16) {
                 return existingToken
             }
-        } catch (e) {
+        } catch (_e) {
             // Ignore read errors
         }
     }
@@ -57,8 +57,8 @@ export function getOrCreateAuthToken(epDir: string): string {
         console.log(`[security] Generated new auth token, saved to ${tokenPath}`)
         console.log(`[security] Token: ${newToken}`)
         console.log(`[security] Use this token in X-EP-Auth header or query param _ep_auth`)
-    } catch (e) {
-        console.error('[security] Failed to save auth token file:', e)
+    } catch (_e) {
+        console.error('[security] Failed to save auth token file:', _e)
     }
 
     return newToken
@@ -334,7 +334,7 @@ export function decryptSensitiveData(encryptedData: string, token: string): stri
         decrypted += decipher.final('utf8')
 
         return decrypted
-    } catch (e) {
+    } catch (_e) {
         return null
     }
 }

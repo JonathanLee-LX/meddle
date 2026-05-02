@@ -19,6 +19,8 @@
     "prepublish": "npm run build && npm run test",
     "start:open": "npm run build && node index.js --open",
     "doctor": "node bin/doctor.js",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "mcp": "node mcp-server.js",
     "build:web": "cd web && pnpm run build",
     "dev:web": "cd web && pnpm run dev",
@@ -49,8 +51,12 @@
     "@types/express": "^5.0.6",
     "@types/node": "^18.19.130",
     "@types/ws": "^8.5.4",
+    "@eslint/js": "^9.39.1",
     "@vitest/coverage-v8": "^4.1.0",
+    "eslint": "^9.39.1",
+    "globals": "^16.5.0",
     "nodemon": "^2.0.20",
+    "typescript-eslint": "^8.46.4",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   }

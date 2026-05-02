@@ -345,10 +345,9 @@ describe('wrapPluginWithPermissionChecks', () => {
   })
 
   it('copies non-hook methods (start, stop, dispose)', () => {
-    let startCalled = false
     const plugin = makePlugin({
       manifest: makeManifest({ id: 'lifecycle.test' }),
-      start: async () => { startCalled = true },
+      start: async () => {},
       stop: async () => {},
       dispose: () => {},
     })

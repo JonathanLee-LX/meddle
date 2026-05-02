@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import * as fs from 'fs'
 import * as path from 'path'
-import { RuleMap, ServerContext } from '../server/index'
+import { ServerContext } from '../server/index'
 import {
     listRuleFiles,
     mergeActiveRules,

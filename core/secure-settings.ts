@@ -57,7 +57,7 @@ export function decryptValue(encryptedValue: string): string {
         decrypted += decipher.final('utf8')
 
         return decrypted
-    } catch (e) {
+    } catch (_e) {
         // Decryption failed, return original value
         return encryptedValue
     }
@@ -131,7 +131,7 @@ export class SecureSettingsManager {
                 const content = fs.readFileSync(this.filePath, 'utf8')
                 const rawSettings = JSON.parse(content)
                 this.settings = decryptSensitiveFields(rawSettings)
-            } catch (e) {
+            } catch (_e) {
                 this.settings = {}
             }
         }
