@@ -1,0 +1,117 @@
+{
+  "__comment__": "Easy Proxy Mock 规则示例。复制为 ~/.ep/mocks.json 使用。删除所有 __ 前缀的注释字段即可直接使用。",
+
+  "nextId": 5,
+
+  "rules": [
+    {
+      "__comment__": "基础 JSON API 响应示例",
+      "id": 1,
+      "name": "模拟 JSON API 响应",
+      "urlPattern": "/api/user/info",
+      "method": "GET",
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Mock": "true"
+      },
+      "bodyType": "inline",
+      "body": "{\"name\":\"test-user\",\"role\":\"developer\",\"mock\":true}",
+      "delay": 0,
+      "enabled": true
+    },
+
+    {
+      "__comment__": "匹配所有 HTTP 方法的规则",
+      "id": 2,
+      "name": "捕获所有 POST 请求",
+      "urlPattern": "/api/submit",
+      "method": "*",
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "bodyType": "inline",
+      "body": "{\"status\":\"ok\",\"message\":\"mock response\"}",
+      "delay": 500,
+      "enabled": true
+    },
+
+    {
+      "__comment__": "正则匹配 URL 模式",
+      "id": 3,
+      "name": "正则匹配 API 路径",
+      "urlPattern": "^https://api\\.example\\.com/v\\d+/users",
+      "method": "GET",
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "bodyType": "inline",
+      "body": "[{\"id\":1,\"name\":\"Alice\"},{\"id\":2,\"name\":\"Bob\"}]",
+      "delay": 0,
+      "enabled": true
+    },
+
+    {
+      "__comment__": "bodyType: file — 从本地文件读取响应体",
+      "id": 4,
+      "name": "从文件读取响应",
+      "urlPattern": "/mock/file-response",
+      "method": "GET",
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "bodyType": "file",
+      "body": "file:///path/to/response.json",
+      "delay": 0,
+      "enabled": false
+    },
+
+    {
+      "__comment__": "bodyType: base64 — 二进制数据（如图片）响应",
+      "id": 5,
+      "name": "模拟图片响应",
+      "urlPattern": "/mock/image.png",
+      "method": "GET",
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": "image/png"
+      },
+      "bodyType": "inline",
+      "body": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "delay": 0,
+      "enabled": false
+    },
+
+    {
+      "__comment__": "带延迟的响应（模拟慢速网络）",
+      "id": 6,
+      "name": "慢速 API 模拟",
+      "urlPattern": "/api/slow-endpoint",
+      "method": "POST",
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "bodyType": "inline",
+      "body": "{\"result\":\"done\",\"elapsed\":2000}",
+      "delay": 2000,
+      "enabled": false
+    }
+  ],
+
+  "__field_reference__": {
+    "id": "规则唯一 ID（自动递增）",
+    "name": "规则名称（便于识别）",
+    "urlPattern": "URL 匹配模式（支持字符串匹配和正则表达式）",
+    "method": "HTTP 方法: GET | POST | PUT | DELETE | PATCH | *（所有方法）",
+    "statusCode": "响应 HTTP 状态码",
+    "headers": "自定义响应头（键值对）",
+    "bodyType": "inline（内联文本/JSON，默认）| file（本地文件）| base64（Base64 编码数据）",
+    "body": "响应体内容。inline: 直接文本或 JSON；file: 支持 file:// 或绝对路径；base64: data:mime;base64,xxx 格式",
+    "delay": "延迟响应时间（毫秒）。用于模拟慢速网络",
+    "enabled": "是否启用该规则"
+  }
+}
