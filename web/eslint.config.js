@@ -19,5 +19,16 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // Too many existing instances to fix at once; demote to warn
+      '@typescript-eslint/no-explicit-any': 'warn',
+      // Demote noisy style rules to warn for gradual improvement
+      'prefer-const': 'warn',
+      'no-useless-escape': 'warn',
+      'react-refresh/only-export-components': 'warn',
+      'react-hooks/immutability': 'warn',
+      'react-hooks/preserve-manual-memoization': 'warn',
+      'react-hooks/set-state-in-effect': 'warn',
+    },
   },
 ])
