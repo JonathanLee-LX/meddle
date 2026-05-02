@@ -16,7 +16,7 @@ ep
 # 启动并自动打开浏览器
 ep --open
 
-# 指定环境启动
+# 指定环境启动 [planned]
 ep start --env beta
 
 # 检查配置文件健康状况
@@ -68,7 +68,7 @@ ep --help
 
 提供 MCP 工具 `start_proxy`：启动代理服务器并返回代理地址。
 
-- `env`：环境名（如 `beta`、`eprc.beta`），对应 `.epconfig/.{env}` 配置
+- `env`：环境名（如 `beta`、`eprc.beta`）[planned] — 对应 `.epconfig/.{env}` 配置，runtime 装载逻辑尚未实现
 - `openBrowser: true`：启动浏览器并设置代理
 
 **Cursor 配置**：在 Cursor 设置中添加 MCP 服务器：

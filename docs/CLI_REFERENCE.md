@@ -17,7 +17,7 @@ This creates the `ep` command.
 | Command | Description |
 |---------|-------------|
 | `ep` | Start proxy server (default) |
-| `ep start [--env <name>]` | Start proxy with environment |
+| `ep start [--env <name>]` | Start proxy with environment [planned] |
 | `ep doctor` | Check configuration health |
 | `ep url` | Get proxy URL |
 | `ep status [--json]` | View proxy status |
@@ -44,15 +44,17 @@ ep --open         # 启动并自动打开浏览器
 
 Start proxy server with environment configuration.
 
+> **Note:** The `--env` flag passes `EP_ENV` to the proxy process, but runtime loading of `.epconfig/.{env}` is not yet wired up. The flag is reserved for future implementation.
+
 ```bash
 ep start                    # 启动代理服务器
-ep start --env beta         # 使用 beta 环境配置
-ep start --env eprc.beta    # 使用 .epconfig/.eprc.beta 配置
+ep start --env beta         # [planned] 使用 beta 环境配置
+ep start --env eprc.beta    # [planned] 使用 .epconfig/.eprc.beta 配置
 ep start --open             # 启动并打开浏览器
 ```
 
 **Options:**
-- `--env <name>` - Environment name (corresponds to `.epconfig/.{name}` configuration)
+- `--env <name>` - [planned] Environment name (will load `.epconfig/.{name}` configuration)
 - `--open` - Launch browser with proxy
 
 ---
@@ -346,7 +348,7 @@ ep route delete default "api.example.com"
 
 | Variable | Description |
 |----------|-------------|
-| `EP_ENV` | Environment name (used by `--env`) |
+| `EP_ENV` | [planned] Environment name (used by `--env`) |
 | `EP_PLUGIN_MODE` | Plugin mode (off/shadow/on) |
 | `EP_PLUGIN_ON_HOSTS` | On mode host whitelist |
 | `EP_OPEN` | Open browser flag (`1` to enable) |
@@ -374,16 +376,18 @@ ep route add default "api.test.com" "localhost:3000"
 ep mock add --name "Test API" --pattern "/api/test" --status 200 --body '{"ok":true}'
 ```
 
-### Environment Configuration
+### Environment Configuration [planned]
+
+> **Note:** Per-environment configuration via `.epconfig/.{env}` is not yet implemented. Currently, use `~/.ep/route-rules/` or `~/.ep/.eprc` for routing rules.
 
 ```bash
-# 创建 beta 环境配置文件
+# [planned] 创建 beta 环境配置文件
 mkdir -p ~/.epconfig
 cat > ~/.epconfig/.eprc.beta << 'EOF'
 beta.api.com localhost:4000
 EOF
 
-# 使用 beta 配置启动
+# [planned] 使用 beta 配置启动
 ep start --env beta
 ```
 
