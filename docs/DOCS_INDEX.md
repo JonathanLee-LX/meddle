@@ -2,6 +2,8 @@
 
 本文档提供了 Easy Proxy 项目所有文档的索引，帮助开发者快速找到需要的信息。
 
+[Documentation Index (English)](./DOCS_INDEX.en.md)
+
 ## 用户文档
 
 ### 使用指南
@@ -10,6 +12,11 @@
   - 安装和使用说明
   - 配置文件格式
   - MCP Server 使用
+
+- **[README.en.md](../README.en.md)** - English project overview
+  - Installation and quick start
+  - Web UI and MCP usage
+  - Development commands
 
 ### 配置文档
 
