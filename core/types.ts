@@ -136,8 +136,8 @@ export interface PipelineResult {
 export type PluginMode = 'off' | 'shadow' | 'on';
 
 export interface PipelineOptions {
-    pluginManager: IPluginManager;
-    dispatcher: IHookDispatcher;
+    pluginManager: any;
+    dispatcher: any;
     logger?: Logger;
     mode?: string;
 }
@@ -147,13 +147,13 @@ export interface Pipeline {
     setMode(mode: PluginMode): void;
     evaluateRequest(request: Request, initialTarget: string): Promise<PipelineDecision>;
     execute(input: PipelineExecuteInput): Promise<PipelineResult>;
-    pluginManager: IPluginManager;
+    pluginManager: any;
 }
 
 export interface PipelineExecuteInput {
     request?: Request;
     initialTarget?: string;
-    executeUpstream(target: string, meta: Record<string, any>): Promise<UpstreamResult>;
+    executeUpstream(target: string, meta: Record<string, any>): Promise<any>;
 }
 
 export interface HookDispatchResult {
@@ -201,29 +201,6 @@ export interface HookDispatcherOptions {
     defaultTimeoutMs?: number;
 }
 
-export interface IPluginManager {
-    register(plugin: Plugin): void;
-    getAll(): Plugin[];
-    getState(pluginId: string): PluginState;
-    setState(pluginId: string, state: PluginState): void;
-    unregister(pluginId: string): void;
-    setup(contextFactory: (manifest: PluginManifest) => PluginContext): Promise<void>;
-    start(): Promise<void>;
-}
-
-export interface IHookDispatcher {
-    dispatch(hookName: string, hookContext: HookContext | ResponseContext | RequestSentContext | ErrorContext, options?: HookDispatchOptions): Promise<HookDispatchResult[]>;
-    getPluginStats(): Record<string, PluginStats>;
-}
-
-export interface UpstreamResult {
-    response?: Partial<Response>;
-    shortCircuited?: boolean;
-    target?: string;
-    meta?: Record<string, any>;
-    [key: string]: any;
-}
-
 export interface HookDispatchOptions {
     timeoutMs?: number;
 }
@@ -265,12 +242,6 @@ export interface ShadowCompareStats {
 export interface ShadowCompareTrackerOptions {
     maxSamples?: number;
     maxTopDiffs?: number;
-}
-
-export interface IShadowCompareTracker {
-    record(entry: ShadowCompareEntry): boolean;
-    getStats(): ShadowCompareStats;
-    reset(): void;
 }
 
 export interface ReadinessResult {
@@ -431,7 +402,7 @@ export interface RefactorStatus {
 }
 
 export interface BootstrapPluginsOptions {
-    pluginManager: IPluginManager;
+    pluginManager: any;
     plugins?: Plugin[];
     contextFactory?(manifest: PluginManifest): PluginContext;
 }
@@ -561,13 +532,9 @@ export interface ProxyRecord {
 
 export interface ProxyRecordDetail {
     requestHeaders: Record<string, string | string[] | undefined>;
-    requestBody?: string;           // In-memory body (for small bodies < memoryThreshold)
-    requestBodyCachePath?: string;  // File path for cached body (for large bodies)
-    requestBodySize?: number;       // Original body size in bytes
+    requestBody?: string;
     responseHeaders: Record<string, string | string[] | undefined>;
-    responseBody?: string;          // In-memory body
-    responseBodyCachePath?: string; // File path for cached body
-    responseBodySize?: number;      // Original body size in bytes
+    responseBody?: string;
     statusCode: number;
     statusMessage?: string;
     method: string;
@@ -585,8 +552,6 @@ export interface ProxyContext {
     MAX_RECORD_SIZE: number;
     MAX_DETAIL_SIZE: number;
     MAX_BODY_SIZE: number;
-    BODY_MEMORY_THRESHOLD: number;  // Threshold for storing body in memory vs file
-    CACHE_DIR_MAX_SIZE: number;     // Max cache directory size in bytes
     SHADOW_WARN_MIN_SAMPLES: number;
     SHADOW_WARN_DIFF_RATE: number;
     PLUGIN_ON_HOSTS: Set<string>;
@@ -594,15 +559,13 @@ export interface ProxyContext {
     ENABLE_BUILTIN_LOGGER_PLUGIN: boolean;
     ENABLE_BUILTIN_MOCK_PLUGIN: boolean;
 
-    pluginManager: IPluginManager;
-    hookDispatcher: IHookDispatcher;
+    pluginManager: any;
+    hookDispatcher: any;
     requestPipeline: Pipeline;
     builtinLoggerPlugin: Plugin;
-    shadowCompareTracker: IShadowCompareTracker;
+    shadowCompareTracker: any;
     onModeGate: OnModeGate;
     pipelineGate: PipelineGate;
-    bodyCacheManager: any;  // Body cache manager instance
-    memoryMonitor: any;     // Memory monitor instance
 
     ruleMap: Record<string, string>;
     excludeMap: Record<string, string[]>;

@@ -8,8 +8,6 @@ import { createOnModeGate, parseHostAllowlist } from './on-mode-gate'
 import { createPipelineGate } from './pipeline-gate'
 import { buildRefactorConfig } from './refactor-config'
 import { createBuiltinLoggerPlugin } from '../plugins/builtin/logger-plugin'
-import { createBodyCache } from './body-cache'
-import { createMemoryMonitor } from './memory-monitor'
 import type { ProxyContext, PluginMode } from './types'
 
 const epDir = path.resolve(os.homedir(), '.ep')
@@ -38,8 +36,6 @@ const INITIAL_PLUGIN_MODE = resolveInitialPluginMode()
 const MAX_RECORD_SIZE = process.env.MAX_RECORD_SIZE ? parseInt(process.env.MAX_RECORD_SIZE) : 10000
 const MAX_DETAIL_SIZE = 200
 const MAX_BODY_SIZE = 5 * 1024 * 1024
-const BODY_MEMORY_THRESHOLD = 100 * 1024  // 100KB - bodies smaller than this stay in memory
-const CACHE_DIR_MAX_SIZE = 500 * 1024 * 1024  // 500MB - max cache directory size
 
 const pluginManager = new PluginManager({ logger: console })
 const hookDispatcher = new HookDispatcher(pluginManager, { logger: console })
@@ -62,25 +58,7 @@ const pipelineGate = createPipelineGate({
     enableBuiltinMockPlugin: REFACTOR_CONFIG.enableBuiltinMock,
 })
 
-// Create body cache manager and memory monitor
-const bodyCacheManager = createBodyCache({
-    maxCacheSize: CACHE_DIR_MAX_SIZE,
-    memoryThreshold: BODY_MEMORY_THRESHOLD,
-    maxDetailSize: MAX_DETAIL_SIZE,
-})
-const memoryMonitor = createMemoryMonitor({
-    warnThresholdMB: 300,
-    criticalThresholdMB: 500,
-})
-
 export function createProxyContext(): ProxyContext {
-    // Start memory monitor
-    memoryMonitor.start()
-
-    // Cleanup orphaned cache files on startup
-    const activeRecordIds = new Set<number>()  // Empty set for initial cleanup
-    bodyCacheManager.cleanupOrphaned(activeRecordIds)
-
     return {
         epDir,
         certDir,
@@ -91,8 +69,6 @@ export function createProxyContext(): ProxyContext {
         MAX_RECORD_SIZE,
         MAX_DETAIL_SIZE,
         MAX_BODY_SIZE,
-        BODY_MEMORY_THRESHOLD,
-        CACHE_DIR_MAX_SIZE,
         SHADOW_WARN_MIN_SAMPLES: REFACTOR_CONFIG.shadowWarnMinSamples,
         SHADOW_WARN_DIFF_RATE: REFACTOR_CONFIG.shadowWarnDiffRate,
         PLUGIN_ON_HOSTS: REFACTOR_CONFIG.pluginOnHosts,
@@ -107,8 +83,6 @@ export function createProxyContext(): ProxyContext {
         shadowCompareTracker,
         onModeGate,
         pipelineGate,
-        bodyCacheManager,
-        memoryMonitor,
 
         ruleMap: {},
         excludeMap: {},

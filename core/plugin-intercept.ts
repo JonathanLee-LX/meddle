@@ -1,6 +1,6 @@
 import * as zlib from 'zlib'
 import _debug from 'debug'
-import type { ProxyContext, InterceptOptions, HookContext, ResponseContext, Response, HookName } from './types'
+import type { ProxyContext, InterceptOptions } from './types'
 import { dispatchWithInspection } from './inspection-dispatch'
 
 const proxyDebug = _debug('proxy')
@@ -83,37 +83,22 @@ export function createPluginIntercept(ctx: ProxyContext) {
     }
 
     function emitLegacyResponseToPlugins(logData: { method: string; source: string; statusCode?: number; duration?: number }): void {
-        const startContext: HookContext = {
+        const startContext = {
             request: { method: logData.method, url: logData.source, headers: {}, body: '' },
-            target: logData.source,
             meta: { _pluginRequestStartAt: Date.now() - (logData.duration || 0), source: 'legacy-bridge' },
-            shortCircuited: false,
-            shortCircuitResponse: null,
-            log: console,
-            setTarget: function (this: HookContext, nextTarget: string) { this.target = nextTarget; },
-            respond: function (this: HookContext, response: Response) { this.shortCircuited = true; this.shortCircuitResponse = response; },
         }
-        const responseCtx: ResponseContext = {
+        const responseContext = {
             request: { method: logData.method, url: logData.source, headers: {}, body: '' },
-            target: logData.source,
-            response: { statusCode: logData.statusCode || 200, headers: {}, body: '' },
+            response: { statusCode: logData.statusCode, headers: {}, body: '' },
             meta: { _pluginRequestStartAt: Date.now() - (logData.duration || 0), source: 'legacy-bridge' },
-            log: console,
         }
         ctx.hookDispatcher.dispatch('onRequestStart', startContext)
-            .then(() => ctx.hookDispatcher.dispatch('onAfterResponse', responseCtx))
+            .then(() => ctx.hookDispatcher.dispatch('onAfterResponse', responseContext))
             .catch(() => { /* ignore */ })
     }
 
-    function emitLegacyErrorToPlugins(phase: string, error: unknown): void {
-        ctx.hookDispatcher.dispatch('onError', {
-            request: { method: '', url: '', headers: {}, body: '' },
-            target: '',
-            phase: phase as HookName,
-            error: error instanceof Error ? error : new Error(String(error)),
-            meta: { source: 'legacy-bridge' },
-            log: console,
-        }).catch(() => { /* ignore */ })
+    function emitLegacyErrorToPlugins(phase: string, error: any): void {
+        ctx.hookDispatcher.dispatch('onError', { phase, error, meta: { source: 'legacy-bridge' } }).catch(() => { /* ignore */ })
     }
 
     function observeShadowDecision(method: string, source: string, baseTarget: string, observedTarget: string): void {

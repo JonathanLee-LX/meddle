@@ -13,9 +13,6 @@ import {
     PluginMode,
     InspectionStage,
     HookName,
-    UpstreamResult,
-    IHookDispatcher,
-    Logger,
 } from './types';
 import { dispatchWithInspection } from './inspection-dispatch';
 
@@ -42,9 +39,19 @@ export function createPipeline(options: PipelineOptions): Pipeline {
                 };
             }
 
-            await dispatchHook(dispatcher, logger, 'onRequestStart', hookContext, request, hookContext.target, hookContext.meta);
+            try {
+                await dispatchWithInspection(dispatcher, logger, 'onRequestStart', hookContext);
+            } catch (error: any) {
+                await dispatchOnError(dispatcher, logger, request, hookContext.target, hookContext.meta, 'onRequestStart', error);
+                throw error;
+            }
 
-            await dispatchHook(dispatcher, logger, 'onBeforeProxy', hookContext, request, hookContext.target, hookContext.meta);
+            try {
+                await dispatchWithInspection(dispatcher, logger, 'onBeforeProxy', hookContext);
+            } catch (error: any) {
+                await dispatchOnError(dispatcher, logger, request, hookContext.target, hookContext.meta, 'onBeforeProxy', error);
+                throw error;
+            }
 
             if (mode === 'shadow') {
                 return {
@@ -81,7 +88,7 @@ export function createPipeline(options: PipelineOptions): Pipeline {
             const initialTarget = input.initialTarget || request.url || '';
             if (mode === 'off') {
                 try {
-                    return input.executeUpstream(initialTarget, {}) as Promise<PipelineResult>;
+                    return input.executeUpstream(initialTarget, {});
                 } catch (error: any) {
                     await dispatchOnError(dispatcher, logger, request, initialTarget, {}, 'upstream', error);
                     throw error;
@@ -107,8 +114,19 @@ export function createPipeline(options: PipelineOptions): Pipeline {
                     decision.response!
                 );
 
-                await dispatchHook(dispatcher, logger, 'onBeforeResponse', responseContext, request, decision.target, decision.meta);
-                await dispatchHook(dispatcher, logger, 'onAfterResponse', responseContext, request, decision.target, decision.meta);
+                try {
+                    await dispatchWithInspection(dispatcher, logger, 'onBeforeResponse', responseContext);
+                } catch (error: any) {
+                    await dispatchOnError(dispatcher, logger, request, decision.target, decision.meta, 'onBeforeResponse', error);
+                    throw error;
+                }
+
+                try {
+                    await dispatchWithInspection(dispatcher, logger, 'onAfterResponse', responseContext);
+                } catch (error: any) {
+                    await dispatchOnError(dispatcher, logger, request, decision.target, decision.meta, 'onAfterResponse', error);
+                    throw error;
+                }
 
                 return {
                     shortCircuited: true,
@@ -118,7 +136,7 @@ export function createPipeline(options: PipelineOptions): Pipeline {
                 };
             }
 
-            let upstream: UpstreamResult;
+            let upstream: any;
 
             // onAfterRequest: 请求处理阶段完成，即将发送到上游
             const requestSentContext = createRequestSentContext(
@@ -126,7 +144,12 @@ export function createPipeline(options: PipelineOptions): Pipeline {
                 decision.target,
                 decision.meta
             );
-            await dispatchHook(dispatcher, logger, 'onAfterRequest', requestSentContext, request, decision.target, decision.meta);
+            try {
+                await dispatchWithInspection(dispatcher, logger, 'onAfterRequest', requestSentContext);
+            } catch (error: any) {
+                await dispatchOnError(dispatcher, logger, request, decision.target, decision.meta, 'onAfterRequest', error);
+                throw error;
+            }
 
             try {
                 upstream = await input.executeUpstream(decision.target, decision.meta);
@@ -137,11 +160,22 @@ export function createPipeline(options: PipelineOptions): Pipeline {
 
             const responseContext = createResponseContext(
                 { request, target: decision.target, meta: decision.meta },
-                upstream.response || (upstream as unknown as Partial<Response>)
+                upstream.response || upstream
             );
 
-            await dispatchHook(dispatcher, logger, 'onBeforeResponse', responseContext, request, decision.target, decision.meta);
-            await dispatchHook(dispatcher, logger, 'onAfterResponse', responseContext, request, decision.target, decision.meta);
+            try {
+                await dispatchWithInspection(dispatcher, logger, 'onBeforeResponse', responseContext);
+            } catch (error: any) {
+                await dispatchOnError(dispatcher, logger, request, decision.target, decision.meta, 'onBeforeResponse', error);
+                throw error;
+            }
+
+            try {
+                await dispatchWithInspection(dispatcher, logger, 'onAfterResponse', responseContext);
+            } catch (error: any) {
+                await dispatchOnError(dispatcher, logger, request, decision.target, decision.meta, 'onAfterResponse', error);
+                throw error;
+            }
 
             return {
                 ...upstream,
@@ -225,8 +259,8 @@ function createErrorContext(
 }
 
 async function dispatchOnError(
-    dispatcher: IHookDispatcher,
-    logger: Logger,
+    dispatcher: any,
+    logger: any,
     request: Request,
     target: string,
     meta: Record<string, any>,
@@ -238,23 +272,6 @@ async function dispatchOnError(
         await dispatchWithInspection(dispatcher, logger, 'onError', errorContext);
     } catch (innerError: any) {
         logger.error(`[pipeline] onError dispatch failed:`, innerError.message);
-    }
-}
-
-async function dispatchHook(
-    dispatcher: IHookDispatcher,
-    logger: Logger,
-    hookName: HookName,
-    context: HookContext | ResponseContext | RequestSentContext | ErrorContext,
-    request: Request,
-    target: string,
-    meta: Record<string, any>
-): Promise<void> {
-    try {
-        await dispatchWithInspection(dispatcher, logger, hookName, context);
-    } catch (error: any) {
-        await dispatchOnError(dispatcher, logger, request, target, meta, hookName, error);
-        throw error;
     }
 }
 
