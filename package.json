@@ -1,6 +1,6 @@
 {
   "name": "easy-dev-proxy",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A development proxy server with plugin system, mock support, HTTPS interception, and web UI",
   "main": "index.js",
   "types": "dist/core/types.d.ts",
