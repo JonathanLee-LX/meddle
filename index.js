@@ -57,7 +57,11 @@ const serverContext = {
     settingsPath: ctx.settingsPath,
     epDir: ctx.epDir,
     settings: null,
-    loadMockRules: () => mockHandler.loadMockRules(),
+    loadMockRules: () => {
+        mockHandler.loadMockRules()
+        serverContext.mockRules = ctx.mockRules
+        serverContext.mockIdSeq = ctx.mockIdSeq
+    },
     saveMockRules: () => mockHandler.saveMockRules(),
     reloadCustomPlugins: () => pluginBoot.reloadCustomPlugins(),
     logRuleMap: () => routeLoader.logRuleMap(),
@@ -90,7 +94,7 @@ const routeLoader = createRouteLoader(ctx, serverContext)
 const expressApp = createApp(serverContext)
 
 // ===== 加载 Mock 和路由规则 =====
-mockHandler.loadMockRules()
+serverContext.loadMockRules()
 routeLoader.initRouteRules()
 
 // ===== Cross-Origin 插件 =====

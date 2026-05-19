@@ -1,16 +1,21 @@
 import { Application, Request, Response } from 'express'
 import { ServerContext } from './index'
 
+function setMockJsonHeaders(res: Response): void {
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Cache-Control', 'no-store')
+}
+
 export function registerMocksRoutes(app: Application, ctx: ServerContext): void {
     // API: /api/mocks - GET (list), POST (create)
     app.route('/api/mocks')
         .get((_req: Request, res: Response) => {
-            res.setHeader('Content-Type', 'application/json')
+            setMockJsonHeaders(res)
             res.write(JSON.stringify(ctx.mockRules))
             res.end()
         })
         .post((req: Request, res: Response) => {
-            res.setHeader('Content-Type', 'application/json')
+            setMockJsonHeaders(res)
             try {
                 const data = req.body
                 const rule = {
@@ -43,7 +48,7 @@ export function registerMocksRoutes(app: Application, ctx: ServerContext): void 
 
         // DELETE /api/mocks/:id
         if (method === 'DELETE') {
-            res.setHeader('Content-Type', 'application/json')
+            setMockJsonHeaders(res)
             const idx = ctx.mockRules.findIndex(r => r.id === id)
             if (idx !== -1) {
                 ctx.mockRules.splice(idx, 1)
@@ -60,7 +65,7 @@ export function registerMocksRoutes(app: Application, ctx: ServerContext): void 
 
         // PUT /api/mocks/:id - 更新规则
         if (method === 'PUT') {
-            res.setHeader('Content-Type', 'application/json')
+            setMockJsonHeaders(res)
             try {
                 const data = req.body
                 const idx = ctx.mockRules.findIndex(r => r.id === id)

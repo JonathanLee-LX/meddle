@@ -186,7 +186,7 @@ export function MockConfig({
   }, [])
 
   useEffect(() => {
-    fetchMocks()
+    void fetchMocks()
   }, [fetchMocks])
 
   // 处理外部传入的初始编辑数据
@@ -301,8 +301,8 @@ export function MockConfig({
   }, [editId, editForm, createMock, updateMock])
 
   const handleToggle = useCallback(
-    async (rule: MockRule) => {
-      await updateMock(rule.id, { enabled: !rule.enabled })
+    async (rule: MockRule, enabled: boolean) => {
+      await updateMock(rule.id, { enabled })
     },
     [updateMock],
   )
@@ -404,7 +404,7 @@ export function MockConfig({
                   <TableCell>
                     <Checkbox
                       checked={rule.enabled}
-                      onCheckedChange={() => handleToggle(rule)}
+                      onCheckedChange={(checked) => handleToggle(rule, checked === true)}
                     />
                   </TableCell>
                   <TableCell className="font-medium text-sm">

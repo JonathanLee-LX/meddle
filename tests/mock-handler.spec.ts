@@ -2,7 +2,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { createMockHandler } from '../core/mock-handler'
+import { createMockHandler, dedupeMockRulesById } from '../core/mock-handler'
 
 function makeCtx(overrides: any = {}) {
     const tmpDir = overrides.epDir || os.tmpdir()
@@ -130,6 +130,20 @@ describe('mock-handler createMockHandler', () => {
         })
     })
 
+    describe('dedupeMockRulesById', () => {
+        it('keeps the last rule per id when duplicates exist', () => {
+            const rules = [
+                { id: 1, name: 'old', urlPattern: 'a', method: '*', enabled: true, statusCode: 200, delay: 0, bodyType: 'inline', headers: {}, body: '' },
+                { id: 2, name: 'b', urlPattern: 'b', method: '*', enabled: true, statusCode: 200, delay: 0, bodyType: 'inline', headers: {}, body: '' },
+                { id: 1, name: 'new', urlPattern: 'a', method: '*', enabled: false, statusCode: 200, delay: 0, bodyType: 'inline', headers: {}, body: '' },
+            ]
+            const deduped = dedupeMockRulesById(rules as any)
+            expect(deduped).toHaveLength(2)
+            expect(deduped.find((r) => r.id === 1)?.name).toBe('new')
+            expect(deduped.find((r) => r.id === 1)?.enabled).toBe(false)
+        })
+    })
+
     describe('loadMockRules / saveMockRules', () => {
         it('loads and saves mock rules via file', () => {
             const mockFile = path.join(tmpDir, 'mocks-test.json')
@@ -151,6 +165,23 @@ describe('mock-handler createMockHandler', () => {
             const saved = JSON.parse(fs.readFileSync(mockFile, 'utf8'))
             expect(saved.rules.length).toBe(2)
             expect(saved.nextId).toBe(3)
+        })
+
+        it('dedupes duplicate ids when loading from file', () => {
+            const mockFile = path.join(tmpDir, 'mocks-dup.json')
+            const rules = [
+                { id: 1, name: 'old', urlPattern: '.*', method: '*', enabled: true, statusCode: 200, delay: 0, bodyType: 'inline', headers: {}, body: '{}' },
+                { id: 1, name: 'new', urlPattern: '.*', method: '*', enabled: false, statusCode: 200, delay: 0, bodyType: 'inline', headers: {}, body: '{}' },
+            ]
+            fs.writeFileSync(mockFile, JSON.stringify({ nextId: 2, rules }), 'utf8')
+
+            const ctx = makeCtx({ epDir: tmpDir, currentMocksPath: mockFile })
+            const handler = createMockHandler(ctx)
+            handler.loadMockRules()
+
+            expect(ctx.mockRules).toHaveLength(1)
+            expect(ctx.mockRules[0].name).toBe('new')
+            expect(ctx.mockRules[0].enabled).toBe(false)
         })
     })
 

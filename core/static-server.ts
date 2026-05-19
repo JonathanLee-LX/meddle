@@ -35,6 +35,8 @@ export function handleLocalRequest(req: any, res: any, opts: HandleLocalRequestO
         serverContext.settings = serverContext.loadSettingsSync()
         expressApp(req, res)
         if (serverContext.ruleMap !== ctx.ruleMap) ctx.ruleMap = serverContext.ruleMap
+        if (serverContext.mockRules !== ctx.mockRules) ctx.mockRules = serverContext.mockRules
+        if (serverContext.mockIdSeq !== ctx.mockIdSeq) ctx.mockIdSeq = serverContext.mockIdSeq
         return
     }
 

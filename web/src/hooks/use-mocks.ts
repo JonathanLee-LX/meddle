@@ -21,6 +21,21 @@ export function upsertMockRule(rules: MockRule[], nextRule: MockRule): MockRule[
 export function useMocks() {
   const [mockRules, setMockRules] = useState<MockRule[]>([])
 
+  const fetchMocks = useCallback(async () => {
+    try {
+      const res = await fetch('/api/mocks', { cache: 'no-store' })
+      const data = await res.json()
+      setMockRules(dedupeMockRules(Array.isArray(data) ? data : []))
+    } catch (err) {
+      console.error('Failed to fetch mocks:', err)
+    }
+  }, [])
+
+  // 应用启动时预加载（Mock tab 挂载时也会 refetch，与 CLI/MCP 等外部变更对齐）
+  useEffect(() => {
+    void fetchMocks()
+  }, [fetchMocks])
+
   // 监听服务端广播的 Mock 规则变更（如通过 MCP/API 修改后）
   useEffect(() => {
     const handler = (ev: Event) => {
@@ -29,16 +44,6 @@ export function useMocks() {
     }
     window.addEventListener(MOCKS_UPDATED_EVENT, handler)
     return () => window.removeEventListener(MOCKS_UPDATED_EVENT, handler)
-  }, [])
-
-  const fetchMocks = useCallback(async () => {
-    try {
-      const res = await fetch('/api/mocks')
-      const data = await res.json()
-      setMockRules(dedupeMockRules(Array.isArray(data) ? data : []))
-    } catch (err) {
-      console.error('Failed to fetch mocks:', err)
-    }
   }, [])
 
   const createMock = useCallback(async (rule: Omit<MockRule, 'id'>) => {
@@ -61,6 +66,13 @@ export function useMocks() {
   }, [])
 
   const updateMock = useCallback(async (id: number, updates: Partial<MockRule>) => {
+    let previous: MockRule | undefined
+    setMockRules((prev) => {
+      previous = prev.find((rule) => rule.id === id)
+      if (!previous) return prev
+      return upsertMockRule(prev, { ...previous, ...updates })
+    })
+
     try {
       const res = await fetch(`/api/mocks/${id}`, {
         method: 'PUT',
@@ -72,9 +84,17 @@ export function useMocks() {
         setMockRules((prev) => upsertMockRule(prev, data.rule as MockRule))
         return true
       }
+      if (previous) {
+        const rollback = previous
+        setMockRules((prev) => upsertMockRule(prev, rollback))
+      }
       return false
     } catch (err) {
       console.error('Failed to update mock:', err)
+      if (previous) {
+        const rollback = previous
+        setMockRules((prev) => upsertMockRule(prev, rollback))
+      }
       return false
     }
   }, [])

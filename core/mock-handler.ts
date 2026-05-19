@@ -7,6 +7,17 @@ import type { ProxyContext, MockHandler, MockRuleEntry } from './types'
 
 const proxyDebug = _debug('proxy')
 
+/** 按 id 去重，后出现的条目覆盖先前的（与前端 use-mocks 行为一致） */
+export function dedupeMockRulesById(rules: MockRuleEntry[]): MockRuleEntry[] {
+    const byId = new Map<number, MockRuleEntry>()
+    for (const rule of rules) {
+        if (rule.id != null) {
+            byId.set(rule.id, rule)
+        }
+    }
+    return Array.from(byId.values()).sort((a, b) => a.id - b.id)
+}
+
 export function createMockHandler(ctx: ProxyContext): MockHandler {
     const DEFAULT_MOCK_FILE = path.join(ctx.epDir, 'mocks.json')
 
@@ -38,7 +49,11 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
             const mockFile = getMockFilePath()
             if (fs.existsSync(mockFile)) {
                 const data = JSON.parse(fs.readFileSync(mockFile, 'utf8'))
-                ctx.mockRules = Array.isArray(data.rules) ? data.rules : []
+                const loaded = Array.isArray(data.rules) ? data.rules : []
+                ctx.mockRules = dedupeMockRulesById(loaded)
+                if (loaded.length !== ctx.mockRules.length) {
+                    proxyDebug(`Mock 规则去重: ${loaded.length} -> ${ctx.mockRules.length}`)
+                }
                 ctx.mockIdSeq = (data.nextId || Math.max(0, ...ctx.mockRules.map(r => r.id || 0))) + 1
                 proxyDebug(`已加载 ${ctx.mockRules.length} 条 Mock 规则 (${mockFile})`)
             }
@@ -50,6 +65,7 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
 
     function saveMockRules(): void {
         try {
+            ctx.mockRules = dedupeMockRulesById(ctx.mockRules)
             const mockFile = getMockFilePath()
             fs.writeFileSync(mockFile, JSON.stringify({ nextId: ctx.mockIdSeq, rules: ctx.mockRules }, null, 2), 'utf8')
             proxyDebug(`Mock 规则已保存到 ${mockFile}`)
