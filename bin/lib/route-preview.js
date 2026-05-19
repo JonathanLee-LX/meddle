@@ -5,9 +5,6 @@
 
 const { parseEprcWithExclusions } = require('./parsers')
 
-/**
- * Determine target kind
- */
 function getTargetKind(target) {
   const trimmed = target.trim()
   if (!trimmed) return 'empty'
@@ -16,9 +13,6 @@ function getTargetKind(target) {
   return 'host'
 }
 
-/**
- * Build notes for the result
- */
 function buildNotes(kind, target, resolvedUrl, inputUrl) {
   const notes = []
 
@@ -49,10 +43,6 @@ function buildNotes(kind, target, resolvedUrl, inputUrl) {
   return notes
 }
 
-/**
- * Test if a pattern matches the input URL
- * Ported from helpers.ts
- */
 function testRulePattern(pattern, input) {
   function looksLikeWildcardPattern(p) {
     if (!p.includes('*')) return false
@@ -86,99 +76,66 @@ function testRulePattern(pattern, input) {
   return new RegExp(pattern).test(input)
 }
 
-/**
- * Find matched pattern from rule map
- */
-function findMatchedPattern(inputUrl, ruleMap, excludeMap) {
-  for (const [pattern, target] of Object.entries(ruleMap)) {
-    let matched = false
-    try {
-      matched = testRulePattern(pattern, inputUrl)
-    } catch (err) {
-      throw new Error(`规则 "${pattern}" 是无效的正则表达式: ${err.message}`)
-    }
-
-    if (matched) {
-      // Check if this pattern is excluded
-      if (excludeMap?.[pattern]?.some(exc => testRulePattern(exc, inputUrl))) {
-        continue // Skip this pattern, try next
-      }
-      return { pattern, target }
-    }
-  }
-
-  return null
-}
-
-/**
- * Resolve target URL
- * Ported from helpers.ts
- */
-function resolveTargetUrl(url, ruleMap, excludeMap) {
+function applyRuleTarget(url, urlSegment) {
   const originUrlObj = new URL(url)
 
-  for (const pattern of Object.keys(ruleMap)) {
-    if (!testRulePattern(pattern, url)) continue
-
-    // Check exclusions
-    if (excludeMap?.[pattern]?.some(exc => testRulePattern(exc, url))) {
-      continue
+  const bracketMatch = urlSegment.match(/\[([^\]]+)\]/)
+  if (bracketMatch) {
+    const marker = bracketMatch[1]
+    const markerIdx = url.indexOf(marker)
+    const before = urlSegment.substring(0, bracketMatch.index)
+    const after = urlSegment.substring(bracketMatch.index + bracketMatch[0].length)
+    if (markerIdx !== -1) {
+      const tail = url.substring(markerIdx + marker.length)
+      urlSegment = (before + tail + after).replace(/([^:])\/\//g, '$1/')
+    } else {
+      urlSegment = before + after
     }
-
-    let urlSegment = ruleMap[pattern]
-
-    // [marker] path rewrite
-    const bracketMatch = urlSegment.match(/\[([^\]]+)\]/)
-    if (bracketMatch) {
-      const marker = bracketMatch[1]
-      const markerIdx = url.indexOf(marker)
-      const before = urlSegment.substring(0, bracketMatch.index)
-      const after = urlSegment.substring(bracketMatch.index + bracketMatch[0].length)
-      if (markerIdx !== -1) {
-        const tail = url.substring(markerIdx + marker.length)
-        urlSegment = (before + tail + after).replace(/([^:])\/\//g, '$1/')
-      } else {
-        urlSegment = before + after
-      }
-    }
-
-    if (!urlSegment.startsWith('http') && !urlSegment.startsWith('ws') && !urlSegment.startsWith('file')) {
-      urlSegment = originUrlObj.protocol + urlSegment
-    }
-
-    if (urlSegment.startsWith('file://')) {
-      return urlSegment
-    }
-
-    const targetURLObj = new URL(urlSegment)
-
-    if (!targetURLObj.port && originUrlObj.port) {
-      targetURLObj.port = originUrlObj.port
-    }
-
-    if (targetURLObj.pathname === '/' && originUrlObj.pathname !== '/') {
-      targetURLObj.pathname = originUrlObj.pathname
-    }
-
-    if (targetURLObj.search === '' && originUrlObj.search) {
-      targetURLObj.search = originUrlObj.search
-    }
-
-    const originIsWs = /^wss?:\/\//.test(url)
-    const targetIsHttp = /^https?:\/\//.test(targetURLObj.toString())
-    if (originIsWs && targetIsHttp) {
-      targetURLObj.protocol = originUrlObj.protocol
-    }
-
-    return targetURLObj.toString()
   }
 
+  if (!urlSegment.startsWith('http') && !urlSegment.startsWith('ws') && !urlSegment.startsWith('file')) {
+    urlSegment = originUrlObj.protocol + urlSegment
+  }
+
+  if (urlSegment.startsWith('file://')) {
+    return urlSegment
+  }
+
+  const targetURLObj = new URL(urlSegment)
+
+  if (!targetURLObj.port && originUrlObj.port) {
+    targetURLObj.port = originUrlObj.port
+  }
+
+  if (targetURLObj.pathname === '/' && originUrlObj.pathname !== '/') {
+    targetURLObj.pathname = originUrlObj.pathname
+  }
+
+  if (targetURLObj.search === '' && originUrlObj.search) {
+    targetURLObj.search = originUrlObj.search
+  }
+
+  const originIsWs = /^wss?:\/\//.test(url)
+  const targetIsHttp = /^https?:\/\//.test(targetURLObj.toString())
+  if (originIsWs && targetIsHttp) {
+    targetURLObj.protocol = originUrlObj.protocol
+  }
+
+  return targetURLObj.toString()
+}
+
+function findMatchedRouteRule(url, rules) {
+  for (const entry of rules) {
+    if (!testRulePattern(entry.pattern, url)) continue
+    if (entry.exclusions.some((exc) => testRulePattern(exc, url))) continue
+    const resolvedUrl = applyRuleTarget(url, entry.target)
+    if (resolvedUrl) {
+      return { entry, resolvedUrl }
+    }
+  }
   return null
 }
 
-/**
- * Preview route target for a given URL
- */
 function previewRouteTargetLocal(inputUrl, rulesText) {
   let parsedUrl
   try {
@@ -187,38 +144,37 @@ function previewRouteTargetLocal(inputUrl, rulesText) {
     throw new Error('请输入合法的 URL')
   }
 
-  const { ruleMap, excludeMap } = parseEprcWithExclusions(rulesText)
-  const matchedRule = findMatchedPattern(parsedUrl.toString(), ruleMap, excludeMap)
+  const { rules } = parseEprcWithExclusions(rulesText)
+  const matched = findMatchedRouteRule(parsedUrl.toString(), rules)
 
-  if (!matchedRule) {
+  if (!matched) {
     return {
       inputUrl: parsedUrl.toString(),
       matched: false,
       resolvedUrl: parsedUrl.toString(),
-      notes: ['未命中规则，保持原 URL']
+      notes: ['未命中规则，保持原 URL'],
     }
   }
 
-  const resolvedUrl = resolveTargetUrl(parsedUrl.toString(), ruleMap, excludeMap) || parsedUrl.toString()
-  const kind = getTargetKind(matchedRule.target)
+  const { entry, resolvedUrl } = matched
+  const kind = getTargetKind(entry.target)
 
   return {
     inputUrl: parsedUrl.toString(),
     matched: true,
     resolvedUrl,
     matchedRule: {
-      pattern: matchedRule.pattern,
-      target: matchedRule.target,
-      kind
+      pattern: entry.pattern,
+      target: entry.target,
+      kind,
     },
-    notes: buildNotes(kind, matchedRule.target, resolvedUrl, parsedUrl.toString())
+    notes: buildNotes(kind, entry.target, resolvedUrl, parsedUrl.toString()),
   }
 }
 
 module.exports = {
   previewRouteTargetLocal,
   testRulePattern,
-  resolveTargetUrl,
+  findMatchedRouteRule,
   getTargetKind,
-  findMatchedPattern
 }

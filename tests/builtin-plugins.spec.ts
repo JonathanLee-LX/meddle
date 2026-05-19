@@ -6,6 +6,9 @@ describe('builtin router plugin', () => {
     it('rewrites target when rule matched', () => {
         const plugin = createBuiltinRouterPlugin({
             getRuleMap: () => ({ '^https://a.com': '127.0.0.1:8080' }),
+            getRouteRules: () => [
+                { pattern: '^https://a.com', target: '127.0.0.1:8080', exclusions: [] },
+            ],
         })
         const ctx = {
             request: { method: 'GET', url: 'https://a.com/path' },
@@ -20,9 +23,48 @@ describe('builtin router plugin', () => {
         assert.strictEqual((ctx.meta as any).routerMatched, true)
     })
 
+    it('respects exclusions', () => {
+        const routeRules = [
+            { pattern: '^https://a.com', target: '127.0.0.1:8080', exclusions: ['/api'] },
+        ]
+        const plugin = createBuiltinRouterPlugin({
+            getRuleMap: () => ({ '^https://a.com': '127.0.0.1:8080' }),
+            getExcludeMap: () => ({ '^https://a.com': ['/api'] }),
+            getRouteRules: () => routeRules,
+        })
+        const ctx = {
+            request: { method: 'GET', url: 'https://a.com/api/v1' },
+            target: 'https://a.com/api/v1',
+            meta: {},
+            setTarget(nextTarget) {
+                this.target = nextTarget
+            },
+        }
+        plugin.onBeforeProxy(ctx)
+        // Should NOT be rewritten due to exclusion
+        assert.strictEqual(ctx.target, 'https://a.com/api/v1')
+        assert.strictEqual((ctx.meta as any).routerMatched, undefined)
+
+        // URL without /api should still match
+        const ctx2 = {
+            request: { method: 'GET', url: 'https://a.com/static/file.js' },
+            target: 'https://a.com/static/file.js',
+            meta: {},
+            setTarget(nextTarget) {
+                this.target = nextTarget
+            },
+        }
+        plugin.onBeforeProxy(ctx2)
+        assert.strictEqual(ctx2.target, 'https://127.0.0.1:8080/static/file.js')
+        assert.strictEqual((ctx2.meta as any).routerMatched, true)
+    })
+
     it('keeps target when no rule matched', () => {
         const plugin = createBuiltinRouterPlugin({
             getRuleMap: () => ({ '^https://x.com': '127.0.0.1:8080' }),
+            getRouteRules: () => [
+                { pattern: '^https://x.com', target: '127.0.0.1:8080', exclusions: [] },
+            ],
         })
         const ctx = {
             request: { method: 'GET', url: 'https://a.com/path' },

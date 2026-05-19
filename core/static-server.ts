@@ -29,12 +29,16 @@ export function handleLocalRequest(req: any, res: any, opts: HandleLocalRequestO
 
     if (req.url && (req.url as string).startsWith('/api')) {
         serverContext.currentMocksPath = ctx.currentMocksPath
+        serverContext.routeRules = ctx.routeRules
         if (!serverContext.ruleMap) serverContext.ruleMap = ctx.ruleMap
+        serverContext.excludeMap = ctx.excludeMap
         serverContext.mockRules = ctx.mockRules
         serverContext.mockIdSeq = ctx.mockIdSeq
         serverContext.settings = serverContext.loadSettingsSync()
         expressApp(req, res)
         if (serverContext.ruleMap !== ctx.ruleMap) ctx.ruleMap = serverContext.ruleMap
+        if (serverContext.excludeMap !== ctx.excludeMap) ctx.excludeMap = serverContext.excludeMap
+        if (serverContext.routeRules !== ctx.routeRules) ctx.routeRules = serverContext.routeRules
         if (serverContext.mockRules !== ctx.mockRules) ctx.mockRules = serverContext.mockRules
         if (serverContext.mockIdSeq !== ctx.mockIdSeq) ctx.mockIdSeq = serverContext.mockIdSeq
         return

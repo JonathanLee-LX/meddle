@@ -8,12 +8,21 @@ const path = require('path')
 const FILE_PATTERN = /^file:\/\//
 const LOCAL_FILE_PATTERN = /^[A-Za-z]:\\|^\/|^\\/
 
-/**
- * Parse EPRC content into ruleMap and excludeMap
- */
-function parseEprcWithExclusions(content) {
+function routeRulesToLegacyMaps(rules) {
   const ruleMap = Object.create(null)
   const excludeMap = Object.create(null)
+  for (const entry of rules) {
+    ruleMap[entry.pattern] = entry.target
+    excludeMap[entry.pattern] = entry.exclusions.slice()
+  }
+  return { ruleMap, excludeMap }
+}
+
+/**
+ * Parse EPRC content into ordered rules + legacy ruleMap/excludeMap
+ */
+function parseEprcWithExclusions(content) {
+  const rules = []
 
   content.split(/\r?\n/).forEach(line => {
     const trimmed = line.trim()
@@ -22,42 +31,47 @@ function parseEprcWithExclusions(content) {
     const parts = trimmed.split(/\s+/).filter(Boolean)
     if (parts.length < 2) return
 
-    // Separate exclusions (tokens starting with !) from regular parts
     const exclusions = []
     const regularParts = parts.filter(p => {
       if (p.startsWith('!')) {
-        exclusions.push(p.slice(1)) // Remove ! prefix
+        exclusions.push(p.slice(1))
         return false
       }
       return true
     })
 
-    if (regularParts.length < 2) return // Need at least one rule and one target
+    if (regularParts.length < 2) return
 
     let target = regularParts[regularParts.length - 1]
-    const rules = regularParts.slice(0, -1)
+    const patterns = regularParts.slice(0, -1)
 
     if (LOCAL_FILE_PATTERN.test(target) && !FILE_PATTERN.test(target)) {
       target = 'file://' + target.replace(/\\/g, '/')
     }
 
-    rules.forEach(rule => {
+    const lineExclusions = exclusions.slice()
+
+    patterns.forEach(rule => {
       const bm = rule.match(/\[([^\]]+)\]/)
       let patternKey
+      let storedTarget = target
       if (bm) {
         patternKey = rule.replace(bm[0], bm[1])
-        ruleMap[patternKey] = target + bm[0]
+        storedTarget = target + bm[0]
       } else {
         patternKey = rule
-        ruleMap[patternKey] = target
       }
 
-      // Always set exclusions (even empty array) to override any previous rule
-      excludeMap[patternKey] = exclusions.slice() // Copy the array
+      rules.push({
+        pattern: patternKey,
+        target: storedTarget,
+        exclusions: lineExclusions,
+      })
     })
   })
 
-  return { ruleMap, excludeMap }
+  const { ruleMap, excludeMap } = routeRulesToLegacyMaps(rules)
+  return { rules, ruleMap, excludeMap }
 }
 
 /**
@@ -74,7 +88,6 @@ function ruleMapToEprcText(ruleMap, excludeMap) {
   const entries = Object.entries(ruleMap)
   if (entries.length === 0) return ''
 
-  // Group by (target, exclusionsKey) to handle rules with different exclusions
   const byTargetAndExclusions = {}
 
   entries.forEach(([rule, target]) => {
@@ -84,7 +97,6 @@ function ruleMapToEprcText(ruleMap, excludeMap) {
     const exclusions = excludeMap?.[rule] || []
     const exclusionsKey = exclusions.join(',')
 
-    // Create a compound key that includes both target and exclusions
     const compoundKey = `${groupKey}|||${exclusionsKey}`
 
     if (!byTargetAndExclusions[compoundKey]) {
@@ -110,5 +122,6 @@ function ruleMapToEprcText(ruleMap, excludeMap) {
 module.exports = {
   parseEprcWithExclusions,
   parseEprc,
-  ruleMapToEprcText
+  ruleMapToEprcText,
+  routeRulesToLegacyMaps,
 }

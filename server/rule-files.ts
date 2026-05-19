@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { Application, Request, Response } from 'express'
 import { ServerContext, RuleMap } from './index'
-import { parseEprcWithExclusions, ExcludeMap } from '../helpers'
+import { parseEprcWithExclusions, routeRulesToLegacyMaps, type ExcludeMap, type RouteRuleEntry } from '../helpers'
 
 const DEFAULT_RULE_NAME = '默认规则'
 
@@ -90,39 +90,34 @@ export function listRuleFiles(ctx: ServerContext): RuleFileInfo[] {
 }
 
 export interface MergedRules {
+    rules: RouteRuleEntry[];
     ruleMap: RuleMap;
     excludeMap: ExcludeMap;
 }
 
 /**
- * Merge rules from all enabled rule files into a single ruleMap and excludeMap.
+ * 按启用文件顺序合并路由规则；匹配时按 rules 数组顺序逐条验证。
  */
 export function mergeActiveRules(ctx: ServerContext): MergedRules {
     const dir = getRulesDir(ctx)
     ensureRulesDir(ctx)
     const activeNames = getActiveFileNames(ctx)
-    const merged: RuleMap = {}
-    const mergedExclusions: ExcludeMap = {}
+    const mergedRules: RouteRuleEntry[] = []
 
     for (const name of activeNames) {
         const filePath = path.join(dir, `${name}.txt`)
         if (!fs.existsSync(filePath)) continue
         try {
             const content = fs.readFileSync(filePath, 'utf8')
-            const { ruleMap, excludeMap } = parseEprcWithExclusions(content)
-            Object.assign(merged, ruleMap)
-            // Merge exclusions
-            for (const [pattern, exclusions] of Object.entries(excludeMap)) {
-                if (!mergedExclusions[pattern]) {
-                    mergedExclusions[pattern] = []
-                }
-                mergedExclusions[pattern].push(...exclusions)
-            }
+            const { rules } = parseEprcWithExclusions(content)
+            mergedRules.push(...rules)
         } catch (err) {
             console.error(`Failed to load rules from ${filePath}:`, err)
         }
     }
-    return { ruleMap: merged, excludeMap: mergedExclusions }
+
+    const { ruleMap, excludeMap } = routeRulesToLegacyMaps(mergedRules)
+    return { rules: mergedRules, ruleMap, excludeMap }
 }
 
 /**

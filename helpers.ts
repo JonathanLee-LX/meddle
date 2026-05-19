@@ -7,6 +7,13 @@ import * as http from 'http';
 export type RuleMap = Record<string, string>;
 export type ExcludeMap = Record<string, string[]>;
 
+/** 单条路由规则（按文件行顺序匹配，首条通过即命中） */
+export interface RouteRuleEntry {
+    pattern: string;
+    target: string;
+    exclusions: string[];
+}
+
 function looksLikeWildcardPattern(pattern: string): boolean {
     if (!pattern.includes('*')) return false;
     // Preserve explicit regex behavior when the pattern already uses regex syntax.
@@ -58,66 +65,110 @@ export function copyHeaders(sourceReq: http.IncomingMessage, targetReq: http.Cli
     return targetReq;
 }
 
-export function resolveTargetUrl(url: string, ruleMap: RuleMap, excludeMap?: ExcludeMap): string | null {
+function applyRuleTarget(url: string, _pattern: string, urlSegment: string): string | null {
     const originUrlObj = new URL(url);
 
-    for (const pattern of Object.keys(ruleMap)) {
-        if (!testRulePattern(pattern, url)) continue;
-
-        // Check exclusions - if matched, skip this rule and try next
-        if (excludeMap?.[pattern]?.some(exc => testRulePattern(exc, url))) {
-            continue;
+    // [marker] path rewrite: find marker in original URL, take everything after it as tail
+    const bracketMatch = urlSegment.match(/\[([^\]]+)\]/);
+    if (bracketMatch) {
+        const marker = bracketMatch[1];
+        const markerIdx = url.indexOf(marker);
+        const before = urlSegment.substring(0, bracketMatch.index!);
+        const after = urlSegment.substring(bracketMatch.index! + bracketMatch[0].length);
+        if (markerIdx !== -1) {
+            const tail = url.substring(markerIdx + marker.length);
+            urlSegment = (before + tail + after).replace(/([^:])\/\//g, '$1/');
+        } else {
+            urlSegment = before + after;
         }
-
-        let urlSegment = ruleMap[pattern];
-
-        // [marker] path rewrite: find marker in original URL, take everything after it as tail
-        const bracketMatch = urlSegment.match(/\[([^\]]+)\]/);
-        if (bracketMatch) {
-            const marker = bracketMatch[1];
-            const markerIdx = url.indexOf(marker);
-            const before = urlSegment.substring(0, bracketMatch.index!);
-            const after = urlSegment.substring(bracketMatch.index! + bracketMatch[0].length);
-            if (markerIdx !== -1) {
-                const tail = url.substring(markerIdx + marker.length);
-                urlSegment = (before + tail + after).replace(/([^:])\/\//g, '$1/');
-            } else {
-                urlSegment = before + after;
-            }
-        }
-
-        if (!urlSegment.startsWith('http') && !urlSegment.startsWith('ws') && !urlSegment.startsWith('file')) {
-            urlSegment = originUrlObj.protocol + urlSegment;
-        }
-
-        if (urlSegment.startsWith('file://')) {
-            return urlSegment;
-        }
-
-        const targetURLObj = new URL(urlSegment);
-
-        if (!targetURLObj.port && originUrlObj.port) {
-            targetURLObj.port = originUrlObj.port;
-        }
-
-        if (targetURLObj.pathname === '/' && originUrlObj.pathname !== '/') {
-            targetURLObj.pathname = originUrlObj.pathname;
-        }
-
-        if (targetURLObj.search === '' && originUrlObj.search) {
-            targetURLObj.search = originUrlObj.search;
-        }
-
-        const originIsWs = /^wss?:\/\//.test(url);
-        const targetIsHttp = /^https?:\/\//.test(targetURLObj.toString());
-        if (originIsWs && targetIsHttp) {
-            targetURLObj.protocol = originUrlObj.protocol;
-        }
-
-        return targetURLObj.toString();
     }
 
+    if (!urlSegment.startsWith('http') && !urlSegment.startsWith('ws') && !urlSegment.startsWith('file')) {
+        urlSegment = originUrlObj.protocol + urlSegment;
+    }
+
+    if (urlSegment.startsWith('file://')) {
+        return urlSegment;
+    }
+
+    const targetURLObj = new URL(urlSegment);
+
+    if (!targetURLObj.port && originUrlObj.port) {
+        targetURLObj.port = originUrlObj.port;
+    }
+
+    if (targetURLObj.pathname === '/' && originUrlObj.pathname !== '/') {
+        targetURLObj.pathname = originUrlObj.pathname;
+    }
+
+    if (targetURLObj.search === '' && originUrlObj.search) {
+        targetURLObj.search = originUrlObj.search;
+    }
+
+    const originIsWs = /^wss?:\/\//.test(url);
+    const targetIsHttp = /^https?:\/\//.test(targetURLObj.toString());
+    if (originIsWs && targetIsHttp) {
+        targetURLObj.protocol = originUrlObj.protocol;
+    }
+
+    return targetURLObj.toString();
+}
+
+function isRouteRuleEntryArray(value: RouteRuleEntry[] | RuleMap): value is RouteRuleEntry[] {
+    return Array.isArray(value);
+}
+
+/** 按规则列表顺序匹配，返回首条 pattern 命中且 exclusion 未命中的规则 */
+export function findMatchedRouteRule(
+    url: string,
+    rules: RouteRuleEntry[],
+): { entry: RouteRuleEntry; resolvedUrl: string } | null {
+    for (const entry of rules) {
+        if (!testRulePattern(entry.pattern, url)) continue;
+        if (entry.exclusions.some((exc) => testRulePattern(exc, url))) continue;
+        const resolvedUrl = applyRuleTarget(url, entry.pattern, entry.target);
+        if (resolvedUrl) {
+            return { entry, resolvedUrl };
+        }
+    }
     return null;
+}
+
+export function resolveTargetUrlFromRules(url: string, rules: RouteRuleEntry[]): string | null {
+    return findMatchedRouteRule(url, rules)?.resolvedUrl ?? null;
+}
+
+function resolveTargetUrlFromLegacyMap(url: string, ruleMap: RuleMap, excludeMap?: ExcludeMap): string | null {
+    for (const pattern of Object.keys(ruleMap)) {
+        if (!testRulePattern(pattern, url)) continue;
+        if (excludeMap?.[pattern]?.some((exc) => testRulePattern(exc, url))) continue;
+        const resolved = applyRuleTarget(url, pattern, ruleMap[pattern]);
+        if (resolved) return resolved;
+    }
+    return null;
+}
+
+/** @param rulesOrMap 有序规则列表（推荐），或旧版 ruleMap + excludeMap */
+export function resolveTargetUrl(
+    url: string,
+    rulesOrMap: RouteRuleEntry[] | RuleMap,
+    excludeMap?: ExcludeMap,
+): string | null {
+    if (isRouteRuleEntryArray(rulesOrMap)) {
+        return resolveTargetUrlFromRules(url, rulesOrMap);
+    }
+    return resolveTargetUrlFromLegacyMap(url, rulesOrMap, excludeMap);
+}
+
+/** 由有序规则生成旧版 map（同 pattern 后者覆盖，仅用于展示/兼容 API） */
+export function routeRulesToLegacyMaps(rules: RouteRuleEntry[]): { ruleMap: RuleMap; excludeMap: ExcludeMap } {
+    const ruleMap: RuleMap = Object.create(null);
+    const excludeMap: ExcludeMap = Object.create(null);
+    for (const entry of rules) {
+        ruleMap[entry.pattern] = entry.target;
+        excludeMap[entry.pattern] = entry.exclusions.slice();
+    }
+    return { ruleMap, excludeMap };
 }
 
 const parsedBasePort = parseInt(process.env.PORT || '', 10);
@@ -136,13 +187,13 @@ const FILE_PATTERN = /^file:\/\//;
 const LOCAL_FILE_PATTERN = /^[A-Za-z]:\\|^\/|^\\/;
 
 export interface ParseEprcResult {
+    rules: RouteRuleEntry[];
     ruleMap: RuleMap;
     excludeMap: ExcludeMap;
 }
 
 export function parseEprcWithExclusions(content: string): ParseEprcResult {
-    const ruleMap: RuleMap = Object.create(null);
-    const excludeMap: ExcludeMap = Object.create(null);
+    const rules: RouteRuleEntry[] = [];
 
     content.split(/\r?\n/).forEach(line => {
         const trimmed = line.trim();
@@ -164,28 +215,34 @@ export function parseEprcWithExclusions(content: string): ParseEprcResult {
         if (regularParts.length < 2) return; // Need at least one rule and one target
 
         let target = regularParts[regularParts.length - 1];
-        const rules = regularParts.slice(0, -1);
+        const patterns = regularParts.slice(0, -1);
         if (LOCAL_FILE_PATTERN.test(target) && !FILE_PATTERN.test(target)) {
             target = 'file://' + (target.replace(/\\/g, '/'));
         }
 
-        rules.forEach(rule => {
+        const lineExclusions = exclusions.slice();
+
+        patterns.forEach(rule => {
             const bm = rule.match(/\[([^\]]+)\]/);
             let patternKey: string;
+            let storedTarget = target;
             if (bm) {
                 patternKey = rule.replace(bm[0], bm[1]);
-                ruleMap[patternKey] = target + bm[0];
+                storedTarget = target + bm[0];
             } else {
                 patternKey = rule;
-                ruleMap[patternKey] = target;
             }
 
-            // Always set exclusions (even empty array) to override any previous rule
-            excludeMap[patternKey] = exclusions.slice(); // Copy the array
+            rules.push({
+                pattern: patternKey,
+                target: storedTarget,
+                exclusions: lineExclusions,
+            });
         });
     });
 
-    return { ruleMap, excludeMap };
+    const { ruleMap, excludeMap } = routeRulesToLegacyMaps(rules);
+    return { rules, ruleMap, excludeMap };
 }
 
 export function parseEprc(content: string): RuleMap {

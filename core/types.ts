@@ -409,6 +409,8 @@ export interface BootstrapPluginsOptions {
 
 export interface RouterPluginOptions {
     getRuleMap(): Record<string, string>;
+    getExcludeMap?(): Record<string, string[]>;
+    getRouteRules?(): Array<{ pattern: string; target: string; exclusions: string[] }>;
 }
 
 export interface LoggerPluginOptions {
@@ -511,6 +513,7 @@ export interface BuiltinPluginsOptions {
     findMockMatch?(url: string, method?: string): MockRule | null;
     getRuleMap?(): Record<string, string>;
     getExcludeMap?(): Record<string, string[]>;
+    getRouteRules?(): Array<{ pattern: string; target: string; exclusions: string[] }>;
     loggerPlugin?: Plugin;
 }
 
@@ -567,6 +570,7 @@ export interface ProxyContext {
     onModeGate: OnModeGate;
     pipelineGate: PipelineGate;
 
+    routeRules: Array<{ pattern: string; target: string; exclusions: string[] }>;
     ruleMap: Record<string, string>;
     excludeMap: Record<string, string[]>;
     currentMocksPath: string | null;

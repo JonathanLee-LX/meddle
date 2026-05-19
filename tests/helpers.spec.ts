@@ -6,6 +6,7 @@ import {
   parseEprcWithExclusions,
   ruleMapToEprcText,
   resolveTargetUrl,
+  findMatchedRouteRule,
   testRulePattern,
 } from '../helpers'
 
@@ -444,6 +445,203 @@ saas-sys-beta.kso.net 120.92.124.158
 
     // URL without excluded path should match
     expect(resolveTargetUrl('https://365.kdocs.cn/docs/page', ruleMap, excludeMap)).toBe('https://localhost:13001/docs/page')
+  })
+
+  it('matches rules in file order; first passing rule wins', () => {
+    const content = `
+^https://plus.wps.cn !/orderadm http://localhost:8082
+^https://plus.wps.cn http://localhost:8082
+    `.trim()
+    const { rules, ruleMap, excludeMap } = parseEprcWithExclusions(content)
+
+    // 旧版 map 同 pattern 后者覆盖 exclusion（仅用于展示）
+    expect(excludeMap['^https://plus.wps.cn']).toEqual([])
+
+    // 有序 rules：第 1 条 exclusion 跳过，第 2 条命中
+    expect(
+      resolveTargetUrl(
+        'https://plus.wps.cn/orderadm/api/v1/buy/conf?_t=1',
+        rules,
+      ),
+    ).toBe('http://localhost:8082/orderadm/api/v1/buy/conf?_t=1')
+    expect(
+      resolveTargetUrl('https://plus.wps.cn/other/api', rules),
+    ).toBe('http://localhost:8082/other/api')
+
+    // 仅第 1 条时 exclusion 生效，无后续规则可命中
+    const { rules: rulesOnlyFirst } = parseEprcWithExclusions(
+      '^https://plus.wps.cn !/orderadm http://localhost:8082',
+    )
+    expect(
+      resolveTargetUrl(
+        'https://plus.wps.cn/orderadm/api/v1/buy/conf?_t=1',
+        rulesOnlyFirst,
+      ),
+    ).toBe(null)
+    expect(
+      resolveTargetUrl('https://plus.wps.cn/other/api', rulesOnlyFirst),
+    ).toBe('http://localhost:8082/other/api')
+
+    // 兼容旧版 map 调用（Object.keys 顺序不保证，此处仅断言 ruleMap 存在）
+    expect(ruleMap['^https://plus.wps.cn']).toBe('http://localhost:8082')
+  })
+})
+
+// ===== 多 pattern：一行多 pattern、同 pattern 多行、多规则优先级 =====
+
+describe('helpers.ordered rules - multi-pattern', () => {
+  describe('parse: one line with multiple patterns', () => {
+    it('creates one rule entry per pattern in source order', () => {
+      const { rules } = parseEprcWithExclusions('a.com b.com c.com http://target.local')
+      expect(rules).toHaveLength(3)
+      expect(rules.map((r) => r.pattern)).toEqual(['a.com', 'b.com', 'c.com'])
+      expect(rules.every((r) => r.target === 'http://target.local')).toBe(true)
+      expect(rules.every((r) => r.exclusions.length === 0)).toBe(true)
+    })
+
+    it('shares exclusions across all patterns on the same line', () => {
+      const { rules } = parseEprcWithExclusions('a.com b.com !/api !/ws http://target.local')
+      expect(rules).toHaveLength(2)
+      expect(rules[0].exclusions).toEqual(['/api', '/ws'])
+      expect(rules[1].exclusions).toEqual(['/api', '/ws'])
+    })
+  })
+
+  describe('match: one line with multiple patterns', () => {
+    const rules = parseEprcWithExclusions('a.com b.com !/api http://shared.local').rules
+
+    it('matches first pattern when URL fits a.com only', () => {
+      expect(resolveTargetUrl('https://a.com/page', rules)).toBe('http://shared.local/page')
+    })
+
+    it('matches second pattern when URL fits b.com only', () => {
+      expect(resolveTargetUrl('https://b.com/page', rules)).toBe('http://shared.local/page')
+    })
+
+    it('applies shared exclusion for either pattern', () => {
+      expect(resolveTargetUrl('https://a.com/api/x', rules)).toBe(null)
+      expect(resolveTargetUrl('https://b.com/api/x', rules)).toBe(null)
+    })
+
+    it('returns first matching rule entry in list order when both could match', () => {
+      // a.com 与 b.com 不会同时命中同一 URL；此处验证 findMatchedRouteRule 返回列表中靠前项
+      const matched = findMatchedRouteRule('https://a.com/static', rules)
+      expect(matched?.entry.pattern).toBe('a.com')
+    })
+  })
+
+  describe('match: same pattern on multiple lines', () => {
+    const rules = parseEprcWithExclusions(`
+^https://host.example !/admin http://localhost:8001
+^https://host.example !/internal http://localhost:8002
+^https://host.example http://localhost:8003
+    `.trim()).rules
+
+    it('skips line 1 when /admin excluded, hits line 2 when line 2 exclusion does not apply', () => {
+      expect(resolveTargetUrl('https://host.example/admin/users', rules)).toBe(
+        'http://localhost:8002/admin/users',
+      )
+    })
+
+    it('uses line 1 when path is /internal but line 1 only excludes /admin', () => {
+      expect(resolveTargetUrl('https://host.example/internal/x', rules)).toBe(
+        'http://localhost:8001/internal/x',
+      )
+    })
+
+    it('uses line 1 for public paths when no exclusion hits', () => {
+      expect(resolveTargetUrl('https://host.example/public', rules)).toBe(
+        'http://localhost:8001/public',
+      )
+    })
+
+    it('stops at first passing line without trying later lines', () => {
+      const matched = findMatchedRouteRule('https://host.example/public', rules)
+      expect(matched?.entry.target).toBe('http://localhost:8001')
+      expect(matched?.resolvedUrl).toBe('http://localhost:8001/public')
+    })
+  })
+
+  describe('match: same pattern two lines (exclusion then catch-all)', () => {
+    const rules = parseEprcWithExclusions(`
+^https://host.example !/admin http://localhost:8001
+^https://host.example http://localhost:8002
+    `.trim()).rules
+
+    it('uses catch-all line when first line exclusion matches', () => {
+      expect(resolveTargetUrl('https://host.example/admin/panel', rules)).toBe(
+        'http://localhost:8002/admin/panel',
+      )
+    })
+
+    it('uses first line when exclusion does not match', () => {
+      expect(resolveTargetUrl('https://host.example/public', rules)).toBe(
+        'http://localhost:8001/public',
+      )
+    })
+  })
+
+  describe('match: different patterns by priority (first match wins)', () => {
+    const rules = parseEprcWithExclusions(`
+^https://api.example.com http://api-proxy.local
+*.example.com http://wildcard-proxy.local
+    `.trim()).rules
+
+    it('prefers specific regex over later wildcard', () => {
+      expect(resolveTargetUrl('https://api.example.com/v1', rules)).toBe(
+        'http://api-proxy.local/v1',
+      )
+    })
+
+    it('falls through to wildcard when specific pattern does not match', () => {
+      expect(resolveTargetUrl('https://cdn.example.com/assets.js', rules)).toBe(
+        'http://wildcard-proxy.local/assets.js',
+      )
+    })
+
+    it('does not use wildcard when specific rule already matched', () => {
+      const matched = findMatchedRouteRule('https://api.example.com/x', rules)
+      expect(matched?.entry.pattern).toBe('^https://api.example.com')
+    })
+  })
+
+  describe('match: exclusion fallthrough to different pattern', () => {
+    const rules = parseEprcWithExclusions(`
+*.wps.cn !cloudcdn.qwps.cn http://cdn-pool.local
+cloudcdn.qwps.cn http://dedicated-cdn.local
+    `.trim()).rules
+
+    it('uses dedicated rule when wildcard line excludes subdomain', () => {
+      expect(resolveTargetUrl('https://cloudcdn.qwps.cn/bundle.js', rules)).toBe(
+        'http://dedicated-cdn.local/bundle.js',
+      )
+    })
+
+    it('uses wildcard line for other subdomains', () => {
+      expect(resolveTargetUrl('https://plus.wps.cn/api', rules)).toBe(
+        'http://cdn-pool.local/api',
+      )
+    })
+  })
+
+  describe('match: three lines same pattern with different targets', () => {
+    it('only last line applies when first two always excluded for test URL', () => {
+      const { rules } = parseEprcWithExclusions(`
+^https://plus.wps.cn !/orderadm http://localhost:8082
+^https://plus.wps.cn http://localhost:8082
+*.wps.cn http://120.92.124.158
+      `.trim())
+
+      // 前两行处理 plus.wps.cn；/orderadm 被第一行跳过、第二行命中 8082
+      expect(
+        resolveTargetUrl('https://plus.wps.cn/orderadm/api', rules),
+      ).toBe('http://localhost:8082/orderadm/api')
+
+      // 其他子域走第三行
+      expect(resolveTargetUrl('https://docs.wps.cn/x', rules)).toBe(
+        'http://120.92.124.158/x',
+      )
+    })
   })
 })
 

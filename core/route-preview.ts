@@ -1,5 +1,5 @@
-import type { RuleMap, ExcludeMap } from '../helpers'
-import { parseEprcWithExclusions, resolveTargetUrl, testRulePattern } from '../helpers'
+import type { RouteRuleEntry } from '../helpers'
+import { parseEprcWithExclusions, findMatchedRouteRule, testRulePattern } from '../helpers'
 
 export type RouteTargetKind = 'empty' | 'file' | 'absolute-url' | 'host'
 
@@ -55,21 +55,20 @@ function buildNotes(kind: RouteTargetKind, target: string, resolvedUrl: string, 
     return notes
 }
 
-function findMatchedPattern(inputUrl: string, ruleMap: RuleMap, excludeMap?: ExcludeMap): { pattern: string; target: string } | null {
-    for (const [pattern, target] of Object.entries(ruleMap)) {
+function findMatchedPattern(inputUrl: string, rules: RouteRuleEntry[]): { pattern: string; target: string } | null {
+    for (const entry of rules) {
         let matched = false
         try {
-            matched = testRulePattern(pattern, inputUrl)
+            matched = testRulePattern(entry.pattern, inputUrl)
         } catch (err) {
-            throw new Error(`规则 "${pattern}" 是无效的正则表达式: ${(err as Error).message}`)
+            throw new Error(`规则 "${entry.pattern}" 是无效的正则表达式: ${(err as Error).message}`)
         }
 
         if (matched) {
-            // Check if this pattern is excluded
-            if (excludeMap?.[pattern]?.some(exc => testRulePattern(exc, inputUrl))) {
-                continue // Skip this pattern, try next
+            if (entry.exclusions.some((exc) => testRulePattern(exc, inputUrl))) {
+                continue
             }
-            return { pattern, target }
+            return { pattern: entry.pattern, target: entry.target }
         }
     }
 
@@ -84,10 +83,11 @@ export function previewRouteTarget(inputUrl: string, rulesText: string): RoutePr
         throw new Error('请输入合法的 URL')
     }
 
-    const { ruleMap, excludeMap } = parseEprcWithExclusions(rulesText)
-    const matchedRule = findMatchedPattern(parsedUrl.toString(), ruleMap, excludeMap)
+    const { rules } = parseEprcWithExclusions(rulesText)
+    const matchedRule = findMatchedPattern(parsedUrl.toString(), rules)
+    const matched = findMatchedRouteRule(parsedUrl.toString(), rules)
 
-    if (!matchedRule) {
+    if (!matchedRule || !matched) {
         return {
             inputUrl: parsedUrl.toString(),
             matched: false,
@@ -96,7 +96,7 @@ export function previewRouteTarget(inputUrl: string, rulesText: string): RoutePr
         }
     }
 
-    const resolvedUrl = resolveTargetUrl(parsedUrl.toString(), ruleMap, excludeMap) || parsedUrl.toString()
+    const resolvedUrl = matched.resolvedUrl
     const kind = getTargetKind(matchedRule.target)
 
     return {

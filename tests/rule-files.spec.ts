@@ -141,7 +141,7 @@ describe('rule-files', () => {
     })
 
     describe('mergeActiveRules', () => {
-        it('should merge rules from active files', () => {
+        it('should merge rules from active files in order (first match wins)', () => {
             const ruleDir = path.join(tempDir, 'route-rules')
             fs.mkdirSync(ruleDir, { recursive: true })
             fs.writeFileSync(path.join(ruleDir, 'dev.txt'), '/api http://dev.local')
@@ -152,8 +152,57 @@ describe('rule-files', () => {
             fs.writeFileSync(ctx.settingsPath, JSON.stringify({ activeRuleFiles: ['dev', 'prod'] }))
 
             const result = mergeActiveRules(ctx)
+            const { resolveTargetUrl } = require('../dist/helpers')
 
+            expect(result.rules).toHaveLength(2)
+            expect(result.rules[0].target).toBe('http://dev.local')
+            expect(result.rules[1].target).toBe('http://prod.local')
+            // 旧版 map：同 pattern 后者覆盖
             expect(result.ruleMap['/api']).toBe('http://prod.local')
+            // 有序匹配：先启用文件中的规则先生效
+            expect(resolveTargetUrl('https://example.com/api/x', result.rules)).toBe(
+                'http://dev.local/api/x',
+            )
+        })
+
+        it('should preserve per-file rule order when merging multiple patterns', () => {
+            const ruleDir = path.join(tempDir, 'route-rules')
+            fs.mkdirSync(ruleDir, { recursive: true })
+            fs.writeFileSync(
+                path.join(ruleDir, 'base.txt'),
+                'a.com b.com http://base.local\n^https://api.test !/health http://api-base.local',
+            )
+            fs.writeFileSync(
+                path.join(ruleDir, 'override.txt'),
+                '^https://api.test http://api-override.local',
+            )
+
+            const settingsDir = path.dirname(ctx.settingsPath)
+            fs.mkdirSync(settingsDir, { recursive: true })
+            fs.writeFileSync(
+                ctx.settingsPath,
+                JSON.stringify({ activeRuleFiles: ['base', 'override'] }),
+            )
+
+            const result = mergeActiveRules(ctx)
+            const { resolveTargetUrl } = require('../dist/helpers')
+
+            expect(result.rules).toHaveLength(4)
+            expect(result.rules[0].pattern).toBe('a.com')
+            expect(result.rules[1].pattern).toBe('b.com')
+            expect(result.rules[2].pattern).toBe('^https://api.test')
+            expect(result.rules[2].exclusions).toEqual(['/health'])
+            expect(result.rules[3].pattern).toBe('^https://api.test')
+            expect(result.rules[3].exclusions).toEqual([])
+
+            expect(resolveTargetUrl('https://a.com/x', result.rules)).toBe('http://base.local/x')
+            expect(resolveTargetUrl('https://b.com/y', result.rules)).toBe('http://base.local/y')
+            expect(resolveTargetUrl('https://api.test/health', result.rules)).toBe(
+                'http://api-override.local/health',
+            )
+            expect(resolveTargetUrl('https://api.test/v1', result.rules)).toBe(
+                'http://api-base.local/v1',
+            )
         })
 
         it('should skip non-existent files', () => {

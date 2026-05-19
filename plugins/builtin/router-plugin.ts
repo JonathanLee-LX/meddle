@@ -1,12 +1,8 @@
 import { Plugin, RouterPluginOptions, HookContext } from '../../core/types';
+import { findMatchedRouteRule } from '../../helpers';
 
-export interface RouterPluginOptionsWithExclusions extends RouterPluginOptions {
-    getExcludeMap?: () => Record<string, string[]>;
-}
-
-export function createBuiltinRouterPlugin(options: RouterPluginOptionsWithExclusions): Plugin {
-    const getRuleMap = options.getRuleMap;
-    const getExcludeMap = options.getExcludeMap;
+export function createBuiltinRouterPlugin(options: RouterPluginOptions): Plugin {
+    const getRouteRules = options.getRouteRules;
 
     return {
         manifest: {
@@ -24,25 +20,15 @@ export function createBuiltinRouterPlugin(options: RouterPluginOptionsWithExclus
             const sourceUrl = ctx.request && ctx.request.url;
             if (!sourceUrl) return;
 
-            const ruleMap = getRuleMap();
-            const excludeMap = getExcludeMap?.();
-            // Import resolveTargetUrl dynamically to avoid circular dependency
-            const { resolveTargetUrl, testRulePattern } = require('../../helpers');
-            const mapped = resolveTargetUrl(sourceUrl, ruleMap, excludeMap);
-            if (mapped) {
-                ctx.setTarget(mapped);
+            const routeRules = getRouteRules?.();
+            if (!routeRules?.length) return;
+
+            const matched = findMatchedRouteRule(sourceUrl, routeRules);
+            if (matched) {
+                ctx.setTarget(matched.resolvedUrl);
                 ctx.meta.routerMatched = true;
-                // 记录匹配的路由规则 (考虑排除条件)
-                const matchedPattern = Object.keys(ruleMap).find(pattern => {
-                    if (!testRulePattern(pattern, sourceUrl)) return false;
-                    // 检查是否被排除条件跳过
-                    if (excludeMap?.[pattern]?.some(exc => testRulePattern(exc, sourceUrl))) return false;
-                    return true;
-                });
-                if (matchedPattern) {
-                    ctx.meta.matchedRule = matchedPattern;
-                    ctx.meta.matchedTarget = mapped;
-                }
+                ctx.meta.matchedRule = matched.entry.pattern;
+                ctx.meta.matchedTarget = matched.resolvedUrl;
             }
         },
     };

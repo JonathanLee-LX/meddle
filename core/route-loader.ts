@@ -29,9 +29,11 @@ export function createRouteLoader(ctx: ProxyContext, serverContext: ServerContex
     }
 
     function reloadAllRuleFiles(): void {
-        const { ruleMap, excludeMap } = mergeActiveRules(serverContext as any)
+        const { rules, ruleMap, excludeMap } = mergeActiveRules(serverContext as any)
+        ctx.routeRules = rules
         ctx.ruleMap = ruleMap
         ctx.excludeMap = excludeMap
+        serverContext.routeRules = ctx.routeRules
         serverContext.ruleMap = ctx.ruleMap
         serverContext.excludeMap = ctx.excludeMap
         logRuleMap()
@@ -43,9 +45,11 @@ export function createRouteLoader(ctx: ProxyContext, serverContext: ServerContex
 
     function initRouteRules(): void {
         const activeNames: string[] = ensureRouteRules(serverContext as any)
-        const { ruleMap, excludeMap } = mergeActiveRules(serverContext as any)
+        const { rules, ruleMap, excludeMap } = mergeActiveRules(serverContext as any)
+        ctx.routeRules = rules
         ctx.ruleMap = ruleMap
         ctx.excludeMap = excludeMap
+        serverContext.routeRules = ctx.routeRules
         serverContext.ruleMap = ctx.ruleMap
         serverContext.excludeMap = ctx.excludeMap
         logRuleMap()

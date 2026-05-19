@@ -12,6 +12,8 @@ export function createBuiltinPlugins(options: BuiltinPluginsOptions): Plugin[] {
     if (options.enableRouter) {
         plugins.push(options.createRouterPlugin({
             getRuleMap: options.getRuleMap!,
+            getExcludeMap: options.getExcludeMap,
+            getRouteRules: options.getRouteRules,
         }));
     }
     

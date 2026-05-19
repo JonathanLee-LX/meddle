@@ -16,6 +16,7 @@ export type ExcludeMap = Record<string, string[]>;
 // Server context interface
 export interface ServerContext {
     currentMocksPath: string | null
+    routeRules?: Array<{ pattern: string; target: string; exclusions: string[] }>
     ruleMap: RuleMap
     excludeMap: ExcludeMap
     proxyRecordArr: Array<{
