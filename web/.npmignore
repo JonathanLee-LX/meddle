@@ -1,0 +1,17 @@
+# Keep the Vite production build in npm packages.
+# web/.gitignore excludes dist for source control, but npm needs it.
+node_modules
+dist-ssr
+*.local
+
+.env
+.env.local
+.env.*.local
+
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*

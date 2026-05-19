@@ -348,7 +348,7 @@ export function AIConfigBadge() {
   if (!config.enabled) {
     return (
       <Badge variant="outline" className="text-xs">
-        AI修复: 未启用
+        AI: 未启用
       </Badge>
     )
   }
@@ -356,14 +356,14 @@ export function AIConfigBadge() {
   if (!isValid) {
     return (
       <Badge variant="outline" className="text-xs text-orange-600 border-orange-300">
-        AI修复: 未配置
+        AI: 未配置
       </Badge>
     )
   }
 
   return (
     <Badge variant="outline" className="text-xs text-green-600 border-green-300">
-      AI修复: {config.provider === 'openai' ? 'OpenAI' : 'Anthropic'}
+      AI: {config.provider === 'openai' ? 'OpenAI' : 'Anthropic'}
     </Badge>
   )
 }

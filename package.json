@@ -8,6 +8,7 @@
     "build": "tsc",
     "build:watch": "tsc --watch",
     "prebuild": "rm -rf dist",
+    "prepack": "npm run build:web && npm run build",
     "start": "npm run build && node index.js",
     "start:plugin:off": "EP_PLUGIN_MODE=off npm start",
     "start:plugin:shadow": "EP_PLUGIN_MODE=shadow npm start",
@@ -58,7 +59,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/JonathanLee-LX/easy-proxy"
+    "url": "git+https://github.com/JonathanLee-LX/easy-proxy.git"
   },
   "homepage": "https://github.com/JonathanLee-LX/easy-proxy#readme",
   "bugs": {
