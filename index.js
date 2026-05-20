@@ -205,10 +205,11 @@ const proxyServer = http.createServer((req, res) => {
 })
 
 // ===== WebSocket 服务（日志推送）=====
-const localWSServer = new WebSocketServer({ server: proxyServer })
+// 必须使用 noServer，避免与下方 proxyServer.on('upgrade') 重复 handleUpgrade
+const localWSServer = new WebSocketServer({ noServer: true })
 ctx.localWSServer = localWSServer
 
-localWSServer.addListener('connection', (client, req) => {})
+localWSServer.on('connection', (client, req) => {})
 
 // ===== 启动 =====
 ;(async () => {
@@ -370,6 +371,9 @@ proxyServer.on('connect', async (req, socket, header) => {
                 // WebSocket 代理（MITM HTTPS 服务器）- 使用 noServer 模式，统一在此处理并强制上游→客户端为文本
                 const wss = new WebSocketServer({ noServer: true })
                 server.on('upgrade', (req, socket, head) => {
+                    socket.on('error', (err) => {
+                        if (err.code !== 'ECONNRESET') proxyDebug('[ws] mitm upgrade socket error:', err.message)
+                    })
                     if (socket._wsUpgradeHandled) return
                     socket._wsUpgradeHandled = true
                     wss.handleUpgrade(req, socket, head, (ws) => {
@@ -495,12 +499,21 @@ proxyServer.on('connect', async (req, socket, header) => {
     }
 })
 
-proxyServer.on('upgrade', (req, socket, header) => {
+proxyServer.on('upgrade', (req, socket, head) => {
+    socket.on('error', (err) => {
+        if (err.code !== 'ECONNRESET') proxyDebug('[ws] upgrade socket error:', err.message)
+    })
+
     if (req.url === '/ws' || req.url.startsWith('/ws?')) {
-        localWSServer.handleUpgrade(req, socket, header)
-    } else {
-        socket.destroy()
+        if (socket._epWsUpgradeHandled) return
+        socket._epWsUpgradeHandled = true
+        localWSServer.handleUpgrade(req, socket, head, (ws) => {
+            localWSServer.emit('connection', ws, req)
+        })
+        return
     }
+
+    socket.destroy()
 })
 
 process.on('uncaughtException', function (err) {
