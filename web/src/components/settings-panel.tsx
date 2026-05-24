@@ -37,6 +37,7 @@ import {
   type AIModel
 } from '@/lib/ai-config-store'
 import { useTheme } from '@/components/theme-provider'
+import { getCachedSettings, loadSettings, updateSettings } from '@/lib/settings-store'
 
 interface SettingsPanelProps {
   open?: boolean
@@ -67,8 +68,31 @@ interface ConfigDiagnostics {
   errors: string[]
 }
 
+const zoomScaleOptions = [
+  { value: '75', label: '75%', scale: 0.75 },
+  { value: '90', label: '90%', scale: 0.9 },
+  { value: '100', label: '100%', scale: 1 },
+  { value: '110', label: '110%', scale: 1.1 },
+  { value: '125', label: '125%', scale: 1.25 },
+  { value: '150', label: '150%', scale: 1.5 },
+]
+
+const normalizeZoomScale = (value?: string) => {
+  if (!value) return '100'
+
+  const legacyFontSizeMap: Record<string, string> = {
+    small: '90',
+    medium: '100',
+    large: '110',
+  }
+
+  if (value in legacyFontSizeMap) return legacyFontSizeMap[value]
+
+  return zoomScaleOptions.some((option) => option.value === value) ? value : '100'
+}
+
 export function SettingsPanel({ open = false, onOpenChange, embedded = false }: SettingsPanelProps) {
-  const { theme, setTheme } = useTheme()
+  const { theme, setTheme, setZoom } = useTheme()
 
   // AI 配置状态
   const [aiConfig, setAiConfig] = useState<AIConfig>(() => getAIConfig())
@@ -89,61 +113,36 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
   const [diagnosing, setDiagnosing] = useState(false)
 
   // 缩放比例偏好
-  const [zoomScale, setZoomScale] = useState<string>('100')
-
-  const zoomScaleOptions = [
-    { value: '75', label: '75%', scale: 0.75 },
-    { value: '90', label: '90%', scale: 0.9 },
-    { value: '100', label: '100%', scale: 1 },
-    { value: '110', label: '110%', scale: 1.1 },
-    { value: '125', label: '125%', scale: 1.25 },
-    { value: '150', label: '150%', scale: 1.5 },
-  ]
+  const [zoomScale, setZoomScale] = useState<string>(() => normalizeZoomScale(getCachedSettings().fontSize))
+  const [zoomReady, setZoomReady] = useState(false)
 
   // 初始化缩放比例
   useEffect(() => {
-    import('@/lib/settings-store').then(({ loadSettings }) => {
-      loadSettings().then(settings => {
-        const saved = settings.fontSize || '100'
-        setZoomScale(saved)
-        applyZoom(saved)
-      }).catch(() => {
-        setZoomScale('100')
-        applyZoom('100')
-      })
+    loadSettings().then(settings => {
+      const saved = normalizeZoomScale(settings.fontSize)
+      setZoomScale(saved)
+      setZoom(parseInt(saved, 10) / 100)
+      setZoomReady(true)
+    }).catch(() => {
+      setZoomReady(true)
     })
-  }, [])
-
-  // 应用缩放比例
-  const applyZoom = (scale: string) => {
-    if (typeof window !== 'undefined') {
-      const scaleValue = parseInt(scale) / 100
-      // 应用到 #root 元素（React 挂载点），这样 Sheet 等 Portal 组件也能被缩放
-      const rootEl = document.getElementById('root')
-      if (rootEl) {
-        rootEl.style.zoom = String(scaleValue)
-      }
-    }
-  }
+  }, [setZoom])
 
   useEffect(() => {
-    applyZoom(zoomScale)
+    if (!zoomReady) return
 
-    // 保存到服务器
-    import('@/lib/settings-store').then(({ updateSettings }) => {
-      updateSettings({ fontSize: zoomScale }).catch(console.error)
-    })
-  }, [zoomScale])
+    const normalizedScale = normalizeZoomScale(zoomScale)
+    setZoom(parseInt(normalizedScale, 10) / 100)
+    updateSettings({ fontSize: normalizedScale }).catch(console.error)
+  }, [setZoom, zoomReady, zoomScale])
 
   useEffect(() => {
     if (open || embedded) {
-      import('@/lib/settings-store').then(({ loadSettings }) => {
-        loadSettings().then(settings => {
-          setAiConfig(settings.aiConfig)
-          setMocksFilePath(settings.mocksFilePath || '')
-        }).catch(() => {
-          setAiConfig(getAIConfig())
-        })
+      loadSettings().then(settings => {
+        setAiConfig(settings.aiConfig)
+        setMocksFilePath(settings.mocksFilePath || '')
+      }).catch(() => {
+        setAiConfig(getAIConfig())
       })
       setAiTestResult(null)
       setAiTestMessage('')
@@ -168,7 +167,6 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
     setSaving(true)
     try {
       // 保存到文件系统
-      const { updateSettings } = await import('@/lib/settings-store')
       await updateSettings({ aiConfig })
       
       // 同时保存到 localStorage 作为备份
@@ -470,7 +468,6 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                       variant="outline"
                       size="sm"
                       onClick={async () => {
-                        const { updateSettings } = await import('@/lib/settings-store')
                         await updateSettings({ mocksFilePath })
                         setAiTestResult('success')
                         setAiTestMessage('Mock 文件路径已更新，刷新页面后生效')

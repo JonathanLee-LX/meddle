@@ -19,6 +19,22 @@ type ThemeProviderState = {
 
 const ThemeProviderContext = React.createContext<ThemeProviderState | undefined>(undefined)
 
+function settingsFontSizeToZoom(fontSize?: string): number {
+  if (!fontSize) return 1
+
+  const legacyFontSizes: Record<string, number> = {
+    small: 0.9,
+    medium: 1,
+    large: 1.1,
+  }
+
+  if (fontSize in legacyFontSizes) return legacyFontSizes[fontSize]
+
+  const numericValue = Number(fontSize)
+  if (!Number.isFinite(numericValue) || numericValue <= 0) return 1
+  return numericValue > 10 ? numericValue / 100 : numericValue
+}
+
 // 获取系统主题
 function getSystemTheme(): "light" | "dark" {
   if (typeof window === "undefined") return "light"
@@ -43,6 +59,7 @@ export function ThemeProvider({
   React.useEffect(() => {
     loadSettings().then(settings => {
       setThemeState(settings.theme || defaultTheme)
+      setZoom(settingsFontSizeToZoom(settings.fontSize))
       setLoaded(true)
     }).catch(() => {
       setLoaded(true)
@@ -93,7 +110,7 @@ export function ThemeProvider({
 
   // 用于外部调用的缩放函数
   const setZoom = React.useCallback((zoom: number) => {
-    // 使用 transform 替代 zoom，避免影响 Radix UI 下拉定位
+    // 缩放 rem-based UI，避免 CSS zoom/transform 影响 Radix Select 弹层定位。
     const root = window.document.documentElement
     root.style.setProperty('--app-scale', String(zoom))
   }, [])

@@ -6,6 +6,7 @@
 
 :root {
   --font-size-base: 14px;
+  --app-scale: 1;
 }
 
 @theme {
@@ -38,6 +39,9 @@
   * {
     @apply border-border;
     @apply border-border outline-ring/50;
+  }
+  html {
+    font-size: calc(var(--font-size-base) * var(--app-scale));
   }
   body {
     @apply bg-background text-foreground;
