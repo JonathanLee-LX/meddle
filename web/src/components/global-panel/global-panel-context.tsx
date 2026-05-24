@@ -1,9 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
 import type { GlobalPanelApi, GlobalPanelProviderProps, GlobalPanelRoute } from './types'
 import { GlobalPanelShell } from './global-panel-shell'
 import { useGlobalShortcut } from './use-global-shortcut'
 
-const GlobalPanelContext = createContext<GlobalPanelApi | null>(null)
+export const GlobalPanelContext = createContext<GlobalPanelApi | null>(null)
 
 export function GlobalPanelProvider({ children, commands, renderPanel }: GlobalPanelProviderProps) {
   const [open, setOpen] = useState(false)
@@ -74,12 +74,4 @@ export function GlobalPanelProvider({ children, commands, renderPanel }: GlobalP
       />
     </GlobalPanelContext.Provider>
   )
-}
-
-export function useGlobalPanel() {
-  const value = useContext(GlobalPanelContext)
-  if (!value) {
-    throw new Error('useGlobalPanel must be used inside GlobalPanelProvider')
-  }
-  return value
 }

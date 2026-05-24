@@ -90,6 +90,7 @@ export function RoutePreview({ rules, activeFileName }: RoutePreviewProps) {
 
       <div className="flex gap-2">
         <Input
+          id="route-preview-url"
           value={inputUrl}
           onChange={(event) => setInputUrl(event.target.value)}
           onKeyDown={handleKeyDown}

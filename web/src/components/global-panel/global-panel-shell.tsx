@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import type { CommandAction, GlobalPanelRoute } from './types'
 import { useCommandSearch } from './use-command-search'
-import { useGlobalPanel } from './global-panel-context'
+import { useGlobalPanel } from './use-global-panel'
 
 interface GlobalPanelShellProps {
   commands: CommandAction[]

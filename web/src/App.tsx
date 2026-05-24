@@ -4,18 +4,26 @@ import {
   Bot,
   Brush,
   ClipboardList,
+  Code2,
+  FilePlus2,
   FileText,
   Filter,
   Globe,
   ListFilter,
   Pause,
+  Pencil,
   Play,
   Plug,
+  Power,
   RotateCw,
+  Save,
   Search,
   Settings,
   Sparkles,
+  Square,
+  TestTube2,
   Trash2,
+  Upload,
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { RuleConfig } from '@/components/rule-config'
@@ -217,6 +225,94 @@ function App() {
         run: () => panel.openPanel({ id: 'rules.ai', title: 'AI 规则助手', description: '用自然语言生成规则，或安全合并当前配置', size: 'md' }),
       },
       {
+        id: 'rules.preview.focus',
+        title: '预览 URL 转发结果',
+        description: '聚焦路由规则页的 URL 预览输入框',
+        section: '路由规则',
+        icon: Search,
+        run: () => {
+          navigate('/config')
+          window.setTimeout(() => document.getElementById('route-preview-url')?.focus(), 80)
+        },
+      },
+      {
+        id: 'rules.add',
+        title: '添加路由规则',
+        section: '路由规则',
+        icon: FilePlus2,
+        disabled: !store.activeFileName,
+        disabledReason: '请先选择或创建一个规则文件',
+        run: () => {
+          navigate('/config')
+          store.setRules((prev) => [{ enabled: true, rule: '', target: '', exclusions: [] }, ...prev])
+        },
+      },
+      {
+        id: 'rules.save',
+        title: '保存当前规则文件',
+        description: store.activeFileName ? `保存 ${store.activeFileName}` : undefined,
+        section: '路由规则',
+        icon: Save,
+        disabled: !store.activeFileName,
+        disabledReason: '请先选择一个规则文件',
+        run: async () => {
+          if (!store.activeFileName) return
+          await store.saveFileContent(store.activeFileName, store.rules)
+          await store.fetchRuleFiles()
+        },
+      },
+      {
+        id: 'rules.create-file',
+        title: '创建规则文件',
+        section: '路由规则',
+        icon: FilePlus2,
+        run: async () => {
+          const name = window.prompt('请输入规则文件名称')
+          if (!name?.trim()) return
+          const result = await store.createRuleFile(name.trim())
+          if (result.success) {
+            navigate('/config')
+            await store.fetchFileContent(name.trim())
+          } else if (result.error) {
+            window.alert(result.error)
+          }
+        },
+      },
+      ...store.ruleFiles.map((file) => ({
+        id: `rules.file.open.${file.name}`,
+        title: `打开规则文件：${file.name}`,
+        description: `${file.ruleCount} 条规则 · ${file.enabled ? '已启用' : '未启用'}`,
+        section: '规则文件',
+        icon: FileText,
+        keywords: ['规则文件', file.name],
+        run: async () => {
+          navigate('/config')
+          await store.fetchFileContent(file.name)
+        },
+      })),
+      ...store.ruleFiles.map((file) => ({
+        id: `rules.file.toggle.${file.name}`,
+        title: `${file.enabled ? '禁用' : '启用'}规则文件：${file.name}`,
+        section: '规则文件',
+        icon: Power,
+        keywords: ['规则文件', file.name, '启用', '禁用'],
+        run: async () => {
+          await store.toggleRuleFile(file.name, !file.enabled)
+        },
+      })),
+      ...store.ruleFiles.map((file) => ({
+        id: `rules.file.delete.${file.name}`,
+        title: `删除规则文件：${file.name}`,
+        section: '规则文件',
+        icon: Trash2,
+        danger: true,
+        confirm: `确定要删除规则文件「${file.name}」吗？`,
+        keywords: ['规则文件', file.name, '删除'],
+        run: async () => {
+          await store.deleteRuleFile(file.name)
+        },
+      })),
+      {
         id: 'mock.create',
         title: '新建 Mock 规则',
         section: 'Mock',
@@ -224,6 +320,75 @@ function App() {
         keywords: ['mock', '新增规则'],
         closeOnRun: false,
         run: () => panel.openPanel({ id: 'mock.create', title: '新建 Mock 规则', size: 'lg' }),
+      },
+      ...store.mockRules.map((rule) => ({
+        id: `mock.edit.${rule.id}`,
+        title: `编辑 Mock：${rule.name || rule.urlPattern}`,
+        description: `${rule.method || '*'} ${rule.urlPattern}`,
+        section: 'Mock',
+        icon: Pencil,
+        keywords: ['mock', rule.name, rule.urlPattern],
+        closeOnRun: false,
+        run: () => panel.openPanel({
+          id: 'mock.edit',
+          title: `编辑 Mock：${rule.name || rule.urlPattern}`,
+          size: 'lg',
+          params: { id: rule.id },
+        }),
+      })),
+      ...store.mockRules.map((rule) => ({
+        id: `mock.toggle.${rule.id}`,
+        title: `${rule.enabled ? '禁用' : '启用'} Mock：${rule.name || rule.urlPattern}`,
+        description: `${rule.method || '*'} ${rule.urlPattern}`,
+        section: 'Mock',
+        icon: Power,
+        keywords: ['mock', rule.name, rule.urlPattern, '启用', '禁用'],
+        run: async () => {
+          await store.updateMock(rule.id, { enabled: !rule.enabled })
+          await store.fetchMocks()
+        },
+      })),
+      ...store.mockRules.map((rule) => ({
+        id: `mock.delete.${rule.id}`,
+        title: `删除 Mock：${rule.name || rule.urlPattern}`,
+        description: `${rule.method || '*'} ${rule.urlPattern}`,
+        section: 'Mock',
+        icon: Trash2,
+        danger: true,
+        confirm: `确定要删除 Mock「${rule.name || rule.urlPattern}」吗？`,
+        keywords: ['mock', rule.name, rule.urlPattern, '删除'],
+        run: async () => {
+          await store.deleteMock(rule.id)
+          await store.fetchMocks()
+        },
+      })),
+      {
+        id: 'mock.refresh',
+        title: '刷新 Mock 列表',
+        section: 'Mock',
+        icon: RotateCw,
+        run: store.fetchMocks,
+      },
+      {
+        id: 'plugins.mode.off',
+        title: '关闭插件模式',
+        section: '插件',
+        icon: Power,
+        run: () => store.switchPluginMode('off'),
+      },
+      {
+        id: 'plugins.mode.on',
+        title: '开启插件模式',
+        section: '插件',
+        icon: Plug,
+        run: () => store.switchPluginMode('on'),
+      },
+      {
+        id: 'plugins.mode.shadow',
+        title: '切换到插件影子模式',
+        section: '插件',
+        icon: Sparkles,
+        run: () => store.switchPluginMode('shadow'),
       },
       {
         id: 'plugins.generate',
@@ -243,6 +408,97 @@ function App() {
           await store.fetchPlugins()
         },
       },
+      ...store.plugins.map((plugin) => ({
+        id: `plugins.runtime.${plugin.state === 'running' ? 'stop' : 'start'}.${plugin.id}`,
+        title: `${plugin.state === 'running' ? '停止' : '启动'}插件：${plugin.name}`,
+        description: `${plugin.version} · ${plugin.hooks.join(', ') || '无 hooks'}`,
+        section: '插件',
+        icon: plugin.state === 'running' ? Square : Play,
+        keywords: ['插件', plugin.name, plugin.id, ...plugin.hooks],
+        run: async () => {
+          if (plugin.state === 'running') {
+            await store.stopPlugin(plugin.id)
+          } else {
+            await store.startPlugin(plugin.id)
+          }
+          await store.fetchPlugins()
+        },
+      })),
+      ...store.plugins
+        .filter((plugin) => plugin.id.startsWith('local.'))
+        .map((plugin) => {
+          const filename = `${plugin.id.replace(/^local\./, '')}.js`
+          return {
+            id: `plugins.edit.${plugin.id}`,
+            title: `编辑插件代码：${plugin.name}`,
+            description: filename,
+            section: '插件',
+            icon: Code2,
+            keywords: ['插件', '代码', plugin.name, plugin.id, filename],
+            closeOnRun: false,
+            run: () => panel.openPanel({
+              id: 'plugin.code',
+              title: `编辑插件代码：${filename}`,
+              size: 'xl',
+              params: { filename },
+            }),
+          }
+        }),
+      ...store.plugins
+        .filter((plugin) => plugin.id.startsWith('local.'))
+        .map((plugin) => ({
+          id: `plugins.test.${plugin.id}`,
+          title: `测试插件：${plugin.name}`,
+          description: plugin.hooks.join(', ') || '无 hooks',
+          section: '插件',
+          icon: TestTube2,
+          keywords: ['插件', '测试', plugin.name, plugin.id, ...plugin.hooks],
+          closeOnRun: false,
+          run: () => panel.openPanel({
+            id: 'plugin.test',
+            title: `测试插件：${plugin.name}`,
+            size: 'xl',
+            params: { pluginId: plugin.id, pluginName: plugin.name, hooks: plugin.hooks },
+          }),
+        })),
+      ...store.plugins.map((plugin) => ({
+        id: `plugins.toggle.${plugin.id}`,
+        title: `${plugin.state === 'disabled' ? '启用' : '禁用'}插件：${plugin.name}`,
+        description: plugin.id,
+        section: '插件',
+        icon: Power,
+        keywords: ['插件', plugin.name, plugin.id, '启用', '禁用'],
+        run: async () => {
+          await store.togglePlugin(plugin.id, plugin.state === 'disabled')
+          await store.fetchPlugins()
+        },
+      })),
+      {
+        id: 'plugins.third-party.load',
+        title: '加载第三方插件',
+        section: '插件',
+        icon: Upload,
+        run: async () => {
+          const path = window.prompt('请输入第三方插件路径')
+          if (!path?.trim()) return
+          await store.loadThirdPartyPlugin(path.trim())
+          await store.fetchThirdPartyPlugins()
+        },
+      },
+      ...store.thirdPartyPlugins.map((plugin) => ({
+        id: `plugins.third-party.unload.${plugin.id}`,
+        title: `卸载第三方插件：${plugin.name}`,
+        description: plugin.id,
+        section: '插件',
+        icon: Trash2,
+        danger: true,
+        confirm: `确定要卸载第三方插件「${plugin.name}」吗？`,
+        keywords: ['第三方插件', plugin.name, plugin.id, '卸载'],
+        run: async () => {
+          await store.unloadThirdPartyPlugin(plugin.id)
+          await store.fetchThirdPartyPlugins()
+        },
+      })),
       {
         id: 'settings.theme',
         title: '主题与缩放设置',
