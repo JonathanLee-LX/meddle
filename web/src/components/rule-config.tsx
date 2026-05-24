@@ -1,7 +1,6 @@
 import { useEffect, useCallback, useMemo, useRef, useState, memo, useTransition, useDeferredValue } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
@@ -12,17 +11,9 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Plus, Save, Trash2, Filter, X, GripVertical, ArrowUpToLine, FolderOpen, ToggleLeft, ToggleRight, Sparkles, Wand2 } from 'lucide-react'
+import { Plus, Save, Trash2, Filter, X, GripVertical, ArrowUpToLine, FolderOpen, ToggleLeft, ToggleRight } from 'lucide-react'
 import type { RuleItem, RuleFile } from '@/types'
 import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
 import {
   DndContext,
   closestCenter,
@@ -44,8 +35,6 @@ import { buildRuleGraph } from '@/utils/rule-graph'
 import { RouteCanvas } from '@/components/route-canvas'
 import { RoutePreview } from '@/components/route-preview'
 import { FEATURE_FLAGS } from '@/lib/feature-flags'
-import { mergeRulesWithAI, generateRulesWithAI } from '@/lib/ai-rule-merge'
-import { rulesToEprc, parseEprcRules } from '@/utils/eprc-parser'
 
 interface RuleConfigProps {
   rules: RuleItem[]
@@ -240,18 +229,12 @@ export function RuleConfig(props: RuleConfigProps) {
   const {
     rules, setRules,
     ruleFiles, activeFileName,
-    fetchRuleFiles, fetchFileContent, fetchRuleFileRawContent, saveFileContent,
+    fetchRuleFiles, fetchFileContent, saveFileContent,
     createRuleFile, toggleRuleFile, deleteRuleFile,
   } = props
 
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
-  const [aiMerging, setAiMerging] = useState(false)
-  const [aiGenerating, setAiGenerating] = useState(false)
-  const [aiMergeMessage, setAiMergeMessage] = useState<string | null>(null)
-  const [aiMergeError, setAiMergeError] = useState<string | null>(null)
-  const [aiRulePrompt, setAiRulePrompt] = useState('')
-  const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
   const [viewMode, setViewMode] = useState<'table' | 'graph'>('table')
   const [highlightIndex, setHighlightIndex] = useState<number | null>(null)
   const highlightRowRef = useRef<HTMLTableRowElement | null>(null)
@@ -354,80 +337,6 @@ export function RuleConfig(props: RuleConfigProps) {
     setTimeout(() => setSaveStatus('idle'), 2000)
     if (ok) fetchRuleFiles()
   }, [activeFileName, rules, saveFileContent, fetchRuleFiles])
-
-  const handleAIMerge = useCallback(async () => {
-    if (!activeFileName || rules.length === 0) return
-
-    setAiMerging(true)
-    setAiMergeMessage(null)
-    setAiMergeError(null)
-
-    try {
-      const enabledContextFiles = await Promise.all(
-        ruleFiles
-          .filter((file) => file.enabled && file.name !== activeFileName)
-          .map(async (file) => ({
-            name: file.name,
-            content: await fetchRuleFileRawContent(file.name),
-          }))
-      )
-
-      const mergedText = await mergeRulesWithAI(
-        rulesToEprc(rules),
-        enabledContextFiles,
-        aiRulePrompt
-      )
-      const mergedRules = parseEprcRules(mergedText)
-
-      if (rules.length > 0 && mergedRules.length === 0) {
-        throw new Error('AI 返回的规则为空，请调整提示词或检查模型输出')
-      }
-
-      setRules(mergedRules)
-      setAiMergeMessage(`AI 已完成规则合并：${rules.length} 条 -> ${mergedRules.length} 条。当前仅替换编辑区，未自动保存。`)
-    } catch (err) {
-      setAiMergeError(err instanceof Error ? err.message : 'AI 合并失败')
-    } finally {
-      setAiMerging(false)
-    }
-  }, [activeFileName, aiRulePrompt, fetchRuleFileRawContent, ruleFiles, rules, setRules])
-
-  const handleAIGenerate = useCallback(async () => {
-    if (!activeFileName) return
-
-    setAiGenerating(true)
-    setAiMergeMessage(null)
-    setAiMergeError(null)
-
-    try {
-      const enabledContextFiles = await Promise.all(
-        ruleFiles
-          .filter((file) => file.enabled && file.name !== activeFileName)
-          .map(async (file) => ({
-            name: file.name,
-            content: await fetchRuleFileRawContent(file.name),
-          }))
-      )
-
-      const generatedText = await generateRulesWithAI(
-        aiRulePrompt,
-        rulesToEprc(rules),
-        enabledContextFiles
-      )
-      const generatedRules = parseEprcRules(generatedText)
-
-      if (generatedRules.length === 0) {
-        throw new Error('AI 没有生成可用规则，请调整提示词后重试')
-      }
-
-      setRules((prev) => [...generatedRules, ...prev])
-      setAiMergeMessage(`AI 已生成 ${generatedRules.length} 条规则，并追加到当前编辑区顶部。当前未自动保存。`)
-    } catch (err) {
-      setAiMergeError(err instanceof Error ? err.message : 'AI 生成规则失败')
-    } finally {
-      setAiGenerating(false)
-    }
-  }, [activeFileName, aiRulePrompt, fetchRuleFileRawContent, ruleFiles, rules, setRules])
 
   // 删除规则文件
   const handleDelete = useCallback(async (name: string) => {
@@ -647,93 +556,6 @@ export function RuleConfig(props: RuleConfigProps) {
           )}
         </div>
       )}
-
-      <Button
-        type="button"
-        onClick={() => setAiAssistantOpen(true)}
-        className="fixed bottom-6 right-6 z-30 h-11 rounded-full border border-primary/30 bg-primary px-4 text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90"
-      >
-        <Sparkles className="h-4 w-4" />
-        AI 规则助手
-      </Button>
-
-      <Sheet open={aiAssistantOpen} onOpenChange={setAiAssistantOpen}>
-        <SheetContent className="p-0 flex flex-col" resizable defaultWidth={520} storageKey="ai-rule-assistant">
-          <SheetHeader className="border-b px-5 py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/12 text-primary ring-1 ring-primary/20">
-                <Sparkles className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <SheetTitle>AI 规则助手</SheetTitle>
-                <SheetDescription>
-                  用自然语言生成规则，或安全合并当前配置。
-                </SheetDescription>
-              </div>
-            </div>
-          </SheetHeader>
-
-          <div className="flex-1 overflow-auto px-5 py-4 space-y-4">
-            <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-              <span className="rounded-full border bg-muted/40 px-2 py-1">支持通配符合并</span>
-              <span className="rounded-full border bg-muted/40 px-2 py-1">可带额外优化提示词</span>
-              <span className="rounded-full border bg-muted/40 px-2 py-1">结果写回当前编辑区</span>
-            </div>
-
-            <Badge variant="outline" className="border-primary/20 bg-background/70 text-xs font-normal">
-              {activeFileName ? `当前文件：${activeFileName}` : '未选择规则文件'}
-            </Badge>
-
-            {aiMergeMessage && (
-              <Alert className="border-green-200 bg-green-50/80 dark:border-green-900 dark:bg-green-950/20">
-                <AlertDescription>{aiMergeMessage}</AlertDescription>
-              </Alert>
-            )}
-
-            {aiMergeError && (
-              <Alert variant="destructive">
-                <AlertDescription>{aiMergeError}</AlertDescription>
-              </Alert>
-            )}
-
-            <div className="space-y-2">
-              <div className="text-sm font-medium">AI 规则提示词</div>
-              <Textarea
-                value={aiRulePrompt}
-                onChange={(e) => setAiRulePrompt(e.target.value)}
-                placeholder="例如：将 wps.cn 域名都转发到 120.92.124.158 IP；或：优先使用通配符合并同一业务域名，不要把 openapi 相关域名并到 *.wps.cn。"
-                className="min-h-[160px] bg-background"
-              />
-            </div>
-
-            <p className="text-xs text-muted-foreground">
-              这段提示词同时用于“AI 生成规则”和“AI 合并规则”。生成规则时必填；合并规则时可留空。
-            </p>
-          </div>
-
-          <div className="border-t p-4">
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button
-                size="sm"
-                onClick={handleAIGenerate}
-                disabled={!activeFileName || !aiRulePrompt.trim() || aiGenerating || aiMerging}
-              >
-                <Wand2 className="h-4 w-4" />
-                {aiGenerating ? 'AI 生成中...' : 'AI 生成规则'}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleAIMerge}
-                disabled={!activeFileName || rules.length === 0 || aiMerging || aiGenerating}
-              >
-                <Sparkles className="h-4 w-4" />
-                {aiMerging ? 'AI 合并中...' : 'AI 合并规则'}
-              </Button>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
 
       {viewMode === 'table' || !FEATURE_FLAGS.ruleGraphView ? (
         <div className="rounded-md border">

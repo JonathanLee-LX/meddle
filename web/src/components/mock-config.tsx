@@ -65,7 +65,7 @@ export function MockConfig({
   onInitialEditConsumed,
 }: MockConfigProps) {
   const [editOpen, setEditOpen] = useState(false)
-  const [editId, setEditId] = useState<number | null>(null) // null = create, number = edit
+  const [editId] = useState<number | null>(null) // null = create, number = edit
   const [editForm, setEditForm] = useState<Omit<MockRule, 'id'>>(EMPTY_RULE)
   const [saving, setSaving] = useState(false)
   const [headersExpanded, setHeadersExpanded] = useState(false)
@@ -192,10 +192,14 @@ export function MockConfig({
   // 处理外部传入的初始编辑数据
   useEffect(() => {
     if (initialEditData) {
-      setEditId(null)
-      setEditForm({ ...EMPTY_RULE, ...initialEditData })
-      setEditOpen(true)
-      setHeadersExpanded(Object.keys(initialEditData.headers || {}).length > 0)
+      window.dispatchEvent(new CustomEvent('global-panel:open-panel', {
+        detail: {
+          id: 'mock.create',
+          title: '新建 Mock 规则',
+          size: 'lg',
+          params: { initialData: initialEditData },
+        },
+      }))
       onInitialEditConsumed?.()
     }
   }, [initialEditData, onInitialEditConsumed])
@@ -227,37 +231,21 @@ export function MockConfig({
   }, [])
 
   const openCreate = useCallback(() => {
-    setEditId(null)
-    setEditForm(EMPTY_RULE)
-    setHeadersExpanded(false)
-    setValidationError(null)
-    setEditOpen(true)
+    window.dispatchEvent(new CustomEvent('global-panel:open-panel', {
+      detail: { id: 'mock.create', title: '新建 Mock 规则', size: 'lg' },
+    }))
   }, [])
 
   const openEdit = useCallback((rule: MockRule) => {
-    setEditId(rule.id)
-    setEditForm({
-      name: rule.name,
-      urlPattern: rule.urlPattern,
-      method: rule.method,
-      statusCode: rule.statusCode,
-      delay: rule.delay || 0,
-      bodyType: rule.bodyType || 'inline',
-      headers: rule.headers || {},
-      body: rule.body,
-      enabled: rule.enabled,
-    })
-    setHeadersExpanded(!!rule.headers && Object.keys(rule.headers).length > 0)
-    
-    // 验证已有的body内容
-    if (rule.bodyType === 'inline' && rule.body) {
-      validateBody(rule.body)
-    } else {
-      setValidationError(null)
-    }
-    
-    setEditOpen(true)
-  }, [validateBody])
+    window.dispatchEvent(new CustomEvent('global-panel:open-panel', {
+      detail: {
+        id: 'mock.edit',
+        title: `编辑 Mock：${rule.name || rule.urlPattern}`,
+        size: 'lg',
+        params: { id: rule.id },
+      },
+    }))
+  }, [])
 
   // 拖拽调整编辑器高度
   const handleEditorResize = useCallback((e: React.MouseEvent) => {

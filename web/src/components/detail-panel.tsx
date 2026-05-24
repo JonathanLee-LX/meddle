@@ -17,8 +17,9 @@ import type { RecordDetail, ProxyRecord, InspectionStage } from '@/types'
 import { BodyDiffView } from './body-diff-view'
 
 interface DetailPanelProps {
-  open: boolean
-  onClose: () => void
+  open?: boolean
+  onClose?: () => void
+  embedded?: boolean
   detail: RecordDetail | null
   loading: boolean
   error?: string | null
@@ -664,7 +665,7 @@ function InspectionView({ inspection }: { inspection: NonNullable<RecordDetail['
   )
 }
 
-export function DetailPanel({ open, onClose, detail, loading, error, selectedRecord, onCreateMock, onReplay }: DetailPanelProps) {
+export function DetailPanel({ open = false, onClose, embedded = false, detail, loading, error, selectedRecord, onCreateMock, onReplay }: DetailPanelProps) {
   const [replaying, setReplaying] = useState(false)
 
   const handleCreateMock = () => {
@@ -694,9 +695,8 @@ export function DetailPanel({ open, onClose, detail, loading, error, selectedRec
     }
   }
 
-  return (
-    <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <SheetContent className="p-0 flex flex-col" resizable defaultWidth={640} storageKey="detail-panel">
+  const body = (
+    <>
         <SheetHeader className="px-4 pt-4 pb-2">
           <SheetTitle className="flex items-center gap-2 text-base">
             请求详情
@@ -822,6 +822,17 @@ export function DetailPanel({ open, onClose, detail, loading, error, selectedRec
             )}
           </div>
         )}
+    </>
+  )
+
+  if (embedded) {
+    return <div className="flex h-full min-h-0 flex-col">{body}</div>
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose?.()}>
+      <SheetContent className="p-0 flex flex-col" resizable defaultWidth={640} storageKey="detail-panel">
+        {body}
       </SheetContent>
     </Sheet>
   )

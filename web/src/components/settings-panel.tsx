@@ -39,11 +39,12 @@ import {
 import { useTheme } from '@/components/theme-provider'
 
 interface SettingsPanelProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  embedded?: boolean
 }
 
-export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
+export function SettingsPanel({ open = false, onOpenChange, embedded = false }: SettingsPanelProps) {
   const { theme, setTheme } = useTheme()
 
   // AI 配置状态
@@ -112,7 +113,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   }, [zoomScale])
 
   useEffect(() => {
-    if (open) {
+    if (open || embedded) {
       import('@/lib/settings-store').then(({ loadSettings }) => {
         loadSettings().then(settings => {
           setAiConfig(settings.aiConfig)
@@ -127,7 +128,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
         if (Array.isArray(data)) setRuleFiles(data)
       }).catch(() => {})
     }
-  }, [open])
+  }, [open, embedded])
 
   // AI 相关处理函数
   const handleProviderChange = (provider: 'openai' | 'anthropic') => {
@@ -302,9 +303,9 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
     }
   }, [])
 
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="p-0 flex flex-col" resizable defaultWidth={600} storageKey="settings-panel">
+  const body = (
+    <>
+        {!embedded && (
         <SheetHeader className="px-6 pt-6 pb-4">
           <SheetTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
@@ -314,6 +315,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
             管理系统偏好、配置和 AI 功能
           </SheetDescription>
         </SheetHeader>
+        )}
 
         <Tabs defaultValue="preferences" className="flex-1 flex flex-col min-h-0">
           <TabsList className="mx-6 w-fit">
@@ -952,6 +954,17 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
             </div>
           </TabsContent>
         </Tabs>
+    </>
+  )
+
+  if (embedded) {
+    return <div className="flex h-full min-h-0 flex-col">{body}</div>
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="p-0 flex flex-col" resizable defaultWidth={600} storageKey="settings-panel">
+        {body}
       </SheetContent>
     </Sheet>
   )

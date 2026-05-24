@@ -16,15 +16,17 @@ import { getAIConfig, getActiveModel, isAIConfigValid } from '@/lib/ai-config-st
 import { Code2, Save, Loader2, Zap, RotateCcw, PencilLine, GripVertical } from 'lucide-react'
 
 interface PluginCodeEditorProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  embedded?: boolean
   filename: string
   onSaved?: () => void
 }
 
 export function PluginCodeEditor({
-  open,
+  open = false,
   onOpenChange,
+  embedded = false,
   filename,
   onSaved,
 }: PluginCodeEditorProps) {
@@ -96,6 +98,7 @@ export function PluginCodeEditor({
         throw new Error(data.error || '保存失败')
       }
       setOriginalCode(code)
+      window.dispatchEvent(new CustomEvent('plugins-custom-updated'))
       onSaved?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败')
@@ -125,6 +128,7 @@ export function PluginCodeEditor({
         throw new Error('热加载失败')
       }
       onSaved?.()
+      window.dispatchEvent(new CustomEvent('plugins-custom-updated'))
     } catch (err) {
       setError(err instanceof Error ? err.message : '操作失败')
     } finally {
@@ -239,13 +243,8 @@ export function PluginCodeEditor({
     }
   }
 
-  return (
-    <Sheet open={open} onOpenChange={(v) => {
-      if (!v && isDirty && !confirm('有未保存的修改，确定要关闭吗？')) return
-      if (!v) setAiReviseOpen(false)
-      onOpenChange(v)
-    }}>
-      <SheetContent className="p-0 flex flex-col" resizable defaultWidth={900} storageKey="plugin-code-editor">
+  const body = (
+    <>
         <SheetHeader className="px-6 pt-6 pb-3">
           <SheetTitle className="flex items-center gap-2">
             <Code2 className="h-5 w-5" />
@@ -324,7 +323,7 @@ export function PluginCodeEditor({
               size="sm"
               onClick={() => {
                 if (isDirty && !confirm('有未保存的修改，确定要关闭吗？')) return
-                onOpenChange(false)
+                onOpenChange?.(false)
               }}
               disabled={saving || revising}
             >
@@ -415,6 +414,21 @@ export function PluginCodeEditor({
             </div>
           </SheetContent>
         </Sheet>
+    </>
+  )
+
+  if (embedded) {
+    return <div className="flex h-full min-h-0 flex-col">{body}</div>
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={(v) => {
+      if (!v && isDirty && !confirm('有未保存的修改，确定要关闭吗？')) return
+      if (!v) setAiReviseOpen(false)
+      onOpenChange?.(v)
+    }}>
+      <SheetContent className="p-0 flex flex-col" resizable defaultWidth={900} storageKey="plugin-code-editor">
+        {body}
       </SheetContent>
     </Sheet>
   )

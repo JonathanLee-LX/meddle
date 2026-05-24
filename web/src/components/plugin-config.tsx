@@ -20,9 +20,6 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Play, Square, Loader2, Shield, ShieldAlert, Sparkles, RefreshCw, Zap, TestTube2, Code2 } from 'lucide-react'
 import type { Plugin } from '@/types'
-import { PluginGenerator } from './plugin-generator'
-import { PluginTestDialog } from './plugin-test-dialog'
-import { PluginCodeEditor } from './plugin-code-editor'
 
 interface PluginConfigProps {
   // 插件列表相关
@@ -58,21 +55,23 @@ export function PluginConfig({
   const [loading, setLoading] = useState(false)
   const [thirdPartyPath, setThirdPartyPath] = useState('')
   const [loadingThirdParty, setLoadingThirdParty] = useState(false)
-  const [generatorOpen, setGeneratorOpen] = useState(false)
   const [customPlugins, setCustomPlugins] = useState<any[]>([])
-  const [testDialogOpen, setTestDialogOpen] = useState(false)
-  const [testPluginId, setTestPluginId] = useState('')
-  const [testPluginName, setTestPluginName] = useState('')
-  const [testPluginHooks, setTestPluginHooks] = useState<string[]>([])
   const [hotReloading, setHotReloading] = useState(false)
-  const [codeEditorOpen, setCodeEditorOpen] = useState(false)
-  const [codeEditorFilename, setCodeEditorFilename] = useState('')
 
   useEffect(() => {
     fetchPlugins()
     fetchThirdPartyPlugins()
     fetchCustomPlugins()
   }, [fetchPlugins, fetchThirdPartyPlugins])
+
+  useEffect(() => {
+    const handleCustomPluginsUpdated = () => {
+      void fetchCustomPlugins()
+    }
+
+    window.addEventListener('plugins-custom-updated', handleCustomPluginsUpdated)
+    return () => window.removeEventListener('plugins-custom-updated', handleCustomPluginsUpdated)
+  }, [])
 
   const fetchCustomPlugins = async () => {
     try {
@@ -131,15 +130,25 @@ export function PluginConfig({
   }
 
   const handleTestPlugin = (pluginId: string, pluginName: string, hooks: string[]) => {
-    setTestPluginId(pluginId)
-    setTestPluginName(pluginName)
-    setTestPluginHooks(hooks)
-    setTestDialogOpen(true)
+    window.dispatchEvent(new CustomEvent('global-panel:open-panel', {
+      detail: {
+        id: 'plugin.test',
+        title: `测试插件：${pluginName}`,
+        size: 'xl',
+        params: { pluginId, pluginName, hooks },
+      },
+    }))
   }
 
   const handleEditCode = (filename: string) => {
-    setCodeEditorFilename(filename)
-    setCodeEditorOpen(true)
+    window.dispatchEvent(new CustomEvent('global-panel:open-panel', {
+      detail: {
+        id: 'plugin.code',
+        title: `编辑插件代码：${filename}`,
+        size: 'xl',
+        params: { filename },
+      },
+    }))
   }
 
   const handleStartPlugin = async (id: string) => {
@@ -308,7 +317,9 @@ export function PluginConfig({
             </Button>
             <Button
               size="sm"
-              onClick={() => setGeneratorOpen(true)}
+              onClick={() => window.dispatchEvent(new CustomEvent('global-panel:open-panel', {
+                detail: { id: 'plugin.generate', title: 'AI 插件生成器', size: 'xl' },
+              }))}
             >
               <Sparkles className="h-4 w-4 mr-1" />
               AI 生成插件
@@ -483,36 +494,6 @@ export function PluginConfig({
         </div>
       </div>
 
-      {/* Plugin Generator Dialog */}
-      <PluginGenerator
-        open={generatorOpen}
-        onOpenChange={setGeneratorOpen}
-        onPluginSaved={fetchCustomPlugins}
-      />
-
-      {/* Plugin Test Dialog */}
-      <PluginTestDialog
-        open={testDialogOpen}
-        onOpenChange={setTestDialogOpen}
-        pluginId={testPluginId}
-        pluginName={testPluginName}
-        hooks={testPluginHooks}
-        onPluginFixed={async () => {
-          await fetchCustomPlugins()
-          await fetchPlugins()
-        }}
-      />
-
-      {/* Plugin Code Editor */}
-      <PluginCodeEditor
-        open={codeEditorOpen}
-        onOpenChange={setCodeEditorOpen}
-        filename={codeEditorFilename}
-        onSaved={async () => {
-          await fetchCustomPlugins()
-          await fetchPlugins()
-        }}
-      />
     </div>
   )
 }

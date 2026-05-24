@@ -26,12 +26,13 @@ import {
 import { getAIConfig, isAIConfigValid } from '@/lib/ai-config-store'
 
 interface PluginGeneratorProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  embedded?: boolean
   onPluginSaved?: () => void
 }
 
-export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGeneratorProps) {
+export function PluginGenerator({ open = false, onOpenChange, embedded = false, onPluginSaved }: PluginGeneratorProps) {
   const [pluginName, setPluginName] = useState('')
   const [pluginDescription, setPluginDescription] = useState('')
   const [hooks, setHooks] = useState('')
@@ -211,11 +212,13 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
       setStatusType('success')
       setStatusMessage(`插件已保存！现在可以热加载并测试。`)
       setSaved(true)
+      window.dispatchEvent(new CustomEvent('plugins-custom-updated'))
       
       // 通知父组件插件已保存
       if (onPluginSaved) {
         onPluginSaved()
       }
+      window.dispatchEvent(new CustomEvent('plugins-custom-updated'))
     } catch (error) {
       setStatusType('error')
       setStatusMessage(error instanceof Error ? error.message : '保存失败')
@@ -255,7 +258,7 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
 
       // 3秒后关闭
       setTimeout(() => {
-        onOpenChange(false)
+        onOpenChange?.(false)
         resetForm()
       }, 3000)
     } catch (error) {
@@ -283,14 +286,8 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
     setReloading(false)
   }
 
-  return (
-    <Sheet open={open} onOpenChange={(newOpen) => {
-      onOpenChange(newOpen)
-      if (!newOpen) {
-        resetForm()
-      }
-    }}>
-      <SheetContent className="p-0 flex flex-col" resizable defaultWidth={900} storageKey="plugin-generator">
+  const body = (
+    <>
         <SheetHeader className="px-6 pt-6 pb-4">
           <SheetTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" />
@@ -504,7 +501,7 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
             variant="outline"
             size="sm"
             onClick={() => {
-              onOpenChange(false)
+              onOpenChange?.(false)
               resetForm()
             }}
             disabled={generating || saving || reloading}
@@ -586,6 +583,22 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
             )}
           </div>
         </div>
+    </>
+  )
+
+  if (embedded) {
+    return <div className="flex h-full min-h-0 flex-col">{body}</div>
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={(newOpen) => {
+      onOpenChange?.(newOpen)
+      if (!newOpen) {
+        resetForm()
+      }
+    }}>
+      <SheetContent className="p-0 flex flex-col" resizable defaultWidth={900} storageKey="plugin-generator">
+        {body}
       </SheetContent>
     </Sheet>
   )

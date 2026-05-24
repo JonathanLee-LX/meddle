@@ -1,17 +1,18 @@
 import { Button } from '@/components/ui/button'
 import { AIConfigBadge } from '@/components/ai-settings'
 import { useTheme } from '@/components/theme-provider'
-import { Globe, Moon, Sun, Settings, Monitor } from 'lucide-react'
+import { Command, Globe, Moon, Sun, Settings, Monitor } from 'lucide-react'
 
 interface AppHeaderProps {
   onSettingsClick: () => void
+  onCommandClick: () => void
 }
 
 /**
  * Application header component
  * Displays app title, theme toggle, and settings button
  */
-export function AppHeader({ onSettingsClick }: AppHeaderProps) {
+export function AppHeader({ onSettingsClick, onCommandClick }: AppHeaderProps) {
   const { theme, toggleTheme } = useTheme()
 
   return (
@@ -22,6 +23,17 @@ export function AppHeader({ onSettingsClick }: AppHeaderProps) {
         <span className="text-xs text-muted-foreground">开发代理工具</span>
         <div className="flex-1" />
         <AIConfigBadge />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onCommandClick}
+          className="hidden h-8 gap-2 px-2 text-xs sm:inline-flex"
+          title="打开全局操作面板"
+        >
+          <Command className="h-3.5 w-3.5" />
+          操作
+          <span className="rounded border bg-muted px-1 text-[10px] text-muted-foreground">⌘K</span>
+        </Button>
         <Button
           variant="ghost"
           size="icon"

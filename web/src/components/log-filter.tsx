@@ -49,6 +49,7 @@ export function LogFilter({
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
+            id="proxy-log-filter"
             placeholder="过滤请求... (支持 method:GET domain:xxx -排除词)"
             value={filterText}
             onChange={(e) => setFilterText(e.target.value)}
