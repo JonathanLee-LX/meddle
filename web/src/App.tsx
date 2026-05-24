@@ -138,7 +138,7 @@ function App() {
       { id: 'nav.logs', title: '打开日志', section: '导航', icon: Globe, keywords: ['logs', '请求'], run: () => navigate('/logs') },
       { id: 'nav.rules', title: '打开路由规则', section: '导航', icon: FileText, keywords: ['rules', 'config'], run: () => navigate('/config') },
       { id: 'nav.mock', title: '打开 Mock', section: '导航', icon: ClipboardList, keywords: ['mock'], run: () => navigate('/mock') },
-      { id: 'nav.plugins', title: '打开扩展插件', section: '导航', icon: Plug, keywords: ['plugins'], run: () => navigate('/plugins') },
+      { id: 'nav.plugins', title: '打开扩展插件', section: '导航', icon: Plug, keywords: ['plugin', 'plugins'], run: () => navigate('/plugins') },
       {
         id: 'panel.settings',
         title: '打开系统设置',
@@ -374,6 +374,7 @@ function App() {
         title: '关闭插件模式',
         section: '插件',
         icon: Power,
+        keywords: ['plugin', 'plugins', 'mode', 'off', '插件模式'],
         run: () => store.switchPluginMode('off'),
       },
       {
@@ -381,6 +382,7 @@ function App() {
         title: '开启插件模式',
         section: '插件',
         icon: Plug,
+        keywords: ['plugin', 'plugins', 'mode', 'on', '插件模式'],
         run: () => store.switchPluginMode('on'),
       },
       {
@@ -388,6 +390,7 @@ function App() {
         title: '切换到插件影子模式',
         section: '插件',
         icon: Sparkles,
+        keywords: ['plugin', 'plugins', 'mode', 'shadow', '插件模式', '影子模式'],
         run: () => store.switchPluginMode('shadow'),
       },
       {
@@ -395,6 +398,7 @@ function App() {
         title: 'AI 生成插件',
         section: '插件',
         icon: Bot,
+        keywords: ['plugin', 'plugins', 'generate', 'AI', '插件生成'],
         closeOnRun: false,
         run: () => panel.openPanel({ id: 'plugin.generate', title: 'AI 插件生成器', size: 'xl' }),
       },
@@ -403,6 +407,7 @@ function App() {
         title: '热加载插件',
         section: '插件',
         icon: RotateCw,
+        keywords: ['plugin', 'plugins', 'reload', 'hot reload', '热加载'],
         run: async () => {
           await fetch('/api/plugins/reload', { method: 'POST' })
           await store.fetchPlugins()
@@ -478,6 +483,7 @@ function App() {
         title: '加载第三方插件',
         section: '插件',
         icon: Upload,
+        keywords: ['plugin', 'plugins', 'third party', 'load', '第三方插件'],
         run: async () => {
           const path = window.prompt('请输入第三方插件路径')
           if (!path?.trim()) return
@@ -504,6 +510,7 @@ function App() {
         title: '主题与缩放设置',
         section: '设置',
         icon: Brush,
+        keywords: ['settings', 'theme', 'zoom', '主题', '缩放'],
         closeOnRun: false,
         run: () => panel.openPanel({ id: 'settings', title: '系统设置', description: '打开偏好设置', size: 'lg' }),
       },
