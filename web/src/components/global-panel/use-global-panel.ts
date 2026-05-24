@@ -1,5 +1,5 @@
 import { useContext } from 'react'
-import { GlobalPanelContext } from './global-panel-context'
+import { GlobalPanelContext } from './global-panel-context-value'
 
 export function useGlobalPanel() {
   const value = useContext(GlobalPanelContext)

@@ -44,6 +44,29 @@ interface SettingsPanelProps {
   embedded?: boolean
 }
 
+interface ConfigDiagnosticDetails {
+  enabledFiles?: number
+  enabled?: number
+  rules?: number
+  size?: number
+  total?: number
+  totalFiles?: number
+  totalRules?: number
+}
+
+interface ConfigDiagnosticCheck {
+  name: string
+  path: string
+  details?: ConfigDiagnosticDetails
+}
+
+interface ConfigDiagnostics {
+  status: 'ok' | 'warning' | 'error'
+  checks: ConfigDiagnosticCheck[]
+  warnings: string[]
+  errors: string[]
+}
+
 export function SettingsPanel({ open = false, onOpenChange, embedded = false }: SettingsPanelProps) {
   const { theme, setTheme } = useTheme()
 
@@ -62,7 +85,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
   const [ruleFiles, setRuleFiles] = useState<Array<{name: string; enabled: boolean; ruleCount: number}>>([])
   
   // 配置诊断状态
-  const [diagnostics, setDiagnostics] = useState<any>(null)
+  const [diagnostics, setDiagnostics] = useState<ConfigDiagnostics | null>(null)
   const [diagnosing, setDiagnosing] = useState(false)
 
   // 缩放比例偏好
@@ -185,7 +208,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
         'Content-Type': 'application/json',
       }
 
-      let body: any
+      let body: Record<string, unknown>
 
       if (aiConfig.provider === 'anthropic') {
         headers['x-api-key'] = aiConfig.apiKey
@@ -539,7 +562,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
 
                   {/* 检查项列表 */}
                   <div className="space-y-2">
-                    {diagnostics.checks.map((check: any, index: number) => (
+                    {diagnostics.checks.map((check, index) => (
                       <div key={index} className="p-2 rounded border bg-card">
                         <div className="flex items-start gap-2">
                           <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />

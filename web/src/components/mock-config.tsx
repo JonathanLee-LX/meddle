@@ -26,6 +26,7 @@ import { validateContent } from '@/lib/syntax-highlight'
 import { fixCode } from '@/lib/code-fixer'
 import { getAIConfig, isAIConfigValid } from '@/lib/ai-config-store'
 import type { MockRule } from '@/types'
+import { supportsOpenFilePicker } from '@/types/file-system-access'
 
 // 判断是否为 Base64 图片
 function isBase64Image(content: string): boolean {
@@ -140,9 +141,9 @@ export function MockConfig({
   // 使用系统文件选择器选择文件
   const handleSelectFile = useCallback(async () => {
     // 优先尝试使用 File System Access API
-    if ('showOpenFilePicker' in window) {
+    if (supportsOpenFilePicker(window)) {
       try {
-        const [fileHandle] = await (window as any).showOpenFilePicker({
+        const [fileHandle] = await window.showOpenFilePicker({
           types: [
             {
               description: '响应文件',

@@ -32,6 +32,14 @@ interface PluginGeneratorProps {
   onPluginSaved?: () => void
 }
 
+interface GeneratedPluginManifest {
+  id: string
+  name: string
+  version: string
+  hooks: string[]
+  permissions: string[]
+}
+
 export function PluginGenerator({ open = false, onOpenChange, embedded = false, onPluginSaved }: PluginGeneratorProps) {
   const [pluginName, setPluginName] = useState('')
   const [pluginDescription, setPluginDescription] = useState('')
@@ -41,7 +49,7 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
   const [saving, setSaving] = useState(false)
   const [generatedCode, setGeneratedCode] = useState('')
   const [generatedFilename, setGeneratedFilename] = useState('')
-  const [generatedManifest, setGeneratedManifest] = useState<any>(null)
+  const [generatedManifest, setGeneratedManifest] = useState<GeneratedPluginManifest | null>(null)
   const [statusType, setStatusType] = useState<'success' | 'error' | null>(null)
   const [statusMessage, setStatusMessage] = useState('')
   const [copied, setCopied] = useState(false)

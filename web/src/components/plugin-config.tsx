@@ -38,6 +38,11 @@ interface PluginConfigProps {
   unloadThirdPartyPlugin: (id: string) => Promise<void>
 }
 
+interface CustomPluginFile {
+  filename: string
+  modified: string | number | Date
+}
+
 export function PluginConfig({
   plugins,
   pluginMode,
@@ -55,7 +60,7 @@ export function PluginConfig({
   const [loading, setLoading] = useState(false)
   const [thirdPartyPath, setThirdPartyPath] = useState('')
   const [loadingThirdParty, setLoadingThirdParty] = useState(false)
-  const [customPlugins, setCustomPlugins] = useState<any[]>([])
+  const [customPlugins, setCustomPlugins] = useState<CustomPluginFile[]>([])
   const [hotReloading, setHotReloading] = useState(false)
 
   useEffect(() => {

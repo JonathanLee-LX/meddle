@@ -33,6 +33,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { buildRuleGraph } from '@/utils/rule-graph'
 import { RouteCanvas } from '@/components/route-canvas'
+import { supportsOpenFilePicker } from '@/types/file-system-access'
 import { RoutePreview } from '@/components/route-preview'
 import { FEATURE_FLAGS } from '@/lib/feature-flags'
 
@@ -291,9 +292,9 @@ export function RuleConfig(props: RuleConfigProps) {
 
   // 从文件导入 → 创建新规则文件
   const handleImportFile = useCallback(async () => {
-    if ('showOpenFilePicker' in window) {
+    if (supportsOpenFilePicker(window)) {
       try {
-        const [fileHandle] = await (window as any).showOpenFilePicker({
+        const [fileHandle] = await window.showOpenFilePicker({
           types: [{ description: '规则文件', accept: { 'text/plain': ['.txt', '.rules'] } }],
           multiple: false,
         })

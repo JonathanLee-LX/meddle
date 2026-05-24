@@ -216,6 +216,62 @@ interface TestErrorItem {
   stack?: string
 }
 
+interface PluginHookResult {
+  status?: 'success' | 'error' | string
+  error?: string
+  stack?: string
+  duration?: number
+  targetChanged?: string
+}
+
+interface PluginTestRequestSnapshot {
+  headers?: Record<string, unknown>
+  body?: string
+}
+
+interface PluginTestResponseSnapshot {
+  statusCode?: number
+  bodyLength: number
+  bodyPreview?: string
+  bodyForDiff?: string
+  bodyChanged?: boolean
+  headers?: Record<string, unknown>
+}
+
+interface PluginTestRealRequest {
+  fetchDuration?: number
+  fetchError?: string
+  method: string
+  targetResolved?: boolean
+  testMode?: 'integrated' | 'standalone' | string
+  url: string
+  usedMock?: boolean
+}
+
+interface PluginTestLog {
+  level: string
+  message: string
+}
+
+interface PluginTestResults {
+  error?: string
+  hookResults?: Record<string, PluginHookResult>
+  logs?: PluginTestLog[]
+  modifiedRequest?: PluginTestRequestSnapshot
+  modifiedResponse?: PluginTestResponseSnapshot
+  originalRequest?: PluginTestRequestSnapshot
+  originalResponse?: PluginTestResponseSnapshot
+  realRequest?: PluginTestRealRequest
+  requestBodyChanged?: boolean
+  requestHeadersChanged?: boolean
+  responseHeadersChanged?: boolean
+  shortCircuited?: boolean
+  shortCircuitResponse?: {
+    body?: string
+    statusCode?: number
+  }
+}
+
 function getFixStageLabel(stage: 'idle' | 'generating' | 'saving' | 'reloading' | 'retesting'): string {
   switch (stage) {
     case 'generating':
@@ -245,7 +301,7 @@ export function PluginTestDialog({
   const [testUrl, setTestUrl] = useState('https://365.wps.cn/home')
   const [testMethod, setTestMethod] = useState('GET')
   const [testMode, setTestMode] = useState<'standalone' | 'integrated'>('standalone')
-  const [testResults, setTestResults] = useState<any>(null)
+  const [testResults, setTestResults] = useState<PluginTestResults | null>(null)
   const [headerDiffMode, setHeaderDiffMode] = useState<DiffViewMode>('split')
   const [bodyDiffMode, setBodyDiffMode] = useState<DiffViewMode>('inline')
   const [fixResult, setFixResult] = useState<{ status: 'success' | 'error'; message: string } | null>(null)
@@ -313,7 +369,7 @@ export function PluginTestDialog({
     if (testResults?.error) {
       errors.push({ hookName: 'test', message: testResults.error })
     }
-    Object.entries(testResults?.hookResults || {}).forEach(([hookName, result]: [string, any]) => {
+    Object.entries(testResults?.hookResults || {}).forEach(([hookName, result]) => {
       if (result?.status === 'error') {
         errors.push({
           hookName,
@@ -874,7 +930,7 @@ export function PluginTestDialog({
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {Object.entries(testResults.hookResults || {}).map(([hookName, result]: [string, any]) => (
+                        {Object.entries(testResults.hookResults || {}).map(([hookName, result]) => (
                           <div
                             key={hookName}
                             className={`border rounded-md p-3 ${
@@ -1109,7 +1165,7 @@ export function PluginTestDialog({
                       <h3 className="text-sm font-medium">插件日志</h3>
                       <div className="bg-muted rounded-md p-3 max-h-[200px] overflow-auto">
                         <div className="space-y-1">
-                          {testResults.logs.map((log: any, idx: number) => (
+                          {testResults.logs.map((log, idx) => (
                             <div key={idx} className="text-xs font-mono">
                               <span
                                 className={`inline-block w-12 ${
