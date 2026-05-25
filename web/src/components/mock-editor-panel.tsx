@@ -1,12 +1,14 @@
-import { useMemo, useState } from 'react'
-import { Loader2, Save } from 'lucide-react'
+import { useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { GripVertical, Loader2, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
+import { validateContent } from '@/lib/syntax-highlight'
 import type { MockRule } from '@/types'
+import { MonacoEditor } from './monaco-editor'
 
 interface MockEditorPanelProps {
   rule?: MockRule
@@ -56,15 +58,58 @@ export function MockEditorPanel({
   const [headersText, setHeadersText] = useState(() => JSON.stringify(initialForm.headers || {}, null, 2))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [validationError, setValidationError] = useState<string | null>(null)
+  const [editorHeight, setEditorHeight] = useState(300)
+
+  const validateBody = useCallback((body: string) => {
+    if (!body.trim()) {
+      setValidationError(null)
+      return
+    }
+
+    const result = validateContent(body)
+    setValidationError(result.valid ? null : result.error || '内容格式错误')
+  }, [])
 
   const updateField = <K extends keyof Omit<MockRule, 'id'>>(field: K, value: Omit<MockRule, 'id'>[K]) => {
     setForm((prev) => ({ ...prev, [field]: value }))
+
+    if (field === 'body' && typeof value === 'string') {
+      validateBody(value)
+    }
   }
+
+  const handleEditorResize = useCallback((event: ReactMouseEvent) => {
+    event.preventDefault()
+    const startY = event.clientY
+    const startHeight = editorHeight
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaY = moveEvent.clientY - startY
+      setEditorHeight(Math.max(150, startHeight + deltaY))
+    }
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }, [editorHeight])
 
   const handleSave = async () => {
     if (!form.urlPattern.trim()) {
       setError('请填写 URL 匹配')
       return
+    }
+
+    if (form.bodyType === 'inline' && form.body.trim()) {
+      const result = validateContent(form.body)
+      if (!result.valid) {
+        setValidationError(result.error || '内容格式错误')
+        return
+      }
     }
 
     setSaving(true)
@@ -169,12 +214,26 @@ export function MockEditorPanel({
 
         <div className="space-y-2">
           <Label>响应内容</Label>
-          <Textarea
-            value={form.body}
-            onChange={(event) => updateField('body', event.target.value)}
-            className="min-h-[220px] font-mono text-xs"
-            placeholder="支持 JSON、HTML、JS、CSS 等响应内容"
-          />
+          <div className="relative group" style={{ height: `${editorHeight}px` }}>
+            <MonacoEditor
+              value={form.body}
+              onChange={(value) => updateField('body', value)}
+              placeholder="支持 JSON、HTML、JS、CSS 等响应内容"
+              height="flex"
+            />
+            <div
+              className="absolute bottom-0 left-0 right-0 h-4 cursor-ns-resize flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-border/50 to-transparent"
+              onMouseDown={handleEditorResize}
+            >
+              <GripVertical className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </div>
+          {validationError && (
+            <div className="flex items-start gap-2 p-2 rounded-md bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900">
+              <span className="text-xs text-red-600 dark:text-red-400 font-medium">语法错误：</span>
+              <span className="text-xs text-red-600 dark:text-red-400 flex-1">{validationError}</span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
