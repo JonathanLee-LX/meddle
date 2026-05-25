@@ -326,11 +326,11 @@ export function GlobalPanelShell({ commands, renderPanel }: GlobalPanelShellProp
       }}
     >
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-[80] bg-black/30 backdrop-blur-md data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <DialogPrimitive.Overlay className="global-panel-overlay fixed inset-0 z-[80] bg-black/30 backdrop-blur-md" />
         <DialogPrimitive.Content
           style={panelStyle}
           className={cn(
-            'fixed left-1/2 top-4 z-[81] flex -translate-x-1/2 flex-col overflow-hidden rounded-lg border bg-background shadow-2xl outline-none data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+            'global-panel-content fixed left-1/2 top-4 z-[81] flex flex-col overflow-hidden rounded-lg border bg-background shadow-2xl outline-none',
             route && !resizing && 'transition-[width,height] duration-200 ease-out',
             !route && sizeClassNames[size],
           )}
