@@ -13,14 +13,28 @@ function createTestContext() {
     const settingsPath = path.join(tempDir, 'settings.json')
     fs.writeFileSync(settingsPath, JSON.stringify({ activeRuleFiles: ['默认规则'] }), 'utf8')
     const reloadAllRuleFiles = vi.fn()
+    const saveMockRules = vi.fn()
+    const broadcastToAllClients = vi.fn()
 
     const ctx = {
         epDir: tempDir,
         settingsPath,
         reloadAllRuleFiles,
+        mockRules: [],
+        mockIdSeq: 1,
+        saveMockRules,
+        broadcastToAllClients,
     } as unknown as ServerContext
 
-    return { ctx, ruleDir, ruleFilePath: path.join(ruleDir, '默认规则.txt'), settingsPath, reloadAllRuleFiles }
+    return {
+        ctx,
+        ruleDir,
+        ruleFilePath: path.join(ruleDir, '默认规则.txt'),
+        settingsPath,
+        reloadAllRuleFiles,
+        saveMockRules,
+        broadcastToAllClients,
+    }
 }
 
 describe('agent route tools', () => {
@@ -137,5 +151,55 @@ describe('agent route tools', () => {
         expect(deleteResult).toMatchObject({ status: 'success', pattern: '*.example.cn' })
         expect(parsed.ruleMap['*.example.cn']).toBeUndefined()
         expect(reloadAllRuleFiles).toHaveBeenCalledTimes(2)
+    })
+
+    it('adds, updates, lists, and deletes mock rules after confirmation', async () => {
+        const { ctx, saveMockRules, broadcastToAllClients } = createTestContext()
+        const tools = createAgentTools()
+        const addTool = tools.get('mock_rule_add')
+        const listTool = tools.get('mock_rule_list')
+        const updateTool = tools.get('mock_rule_update')
+        const deleteTool = tools.get('mock_rule_delete')
+
+        const addInput = {
+            name: 'AI Mock',
+            urlPattern: 'example\\.cn/api',
+            method: 'GET',
+            statusCode: 201,
+            headers: { 'content-type': 'application/json' },
+            body: '{"ok":true}',
+        }
+        const addConfirmation = await addTool?.prepareConfirmation?.(addInput, { serverContext: ctx })
+        expect(addConfirmation?.summary).toContain('新增 Mock 规则')
+        expect(addConfirmation?.diff).toContain('+ name=AI Mock method=GET pattern=example\\.cn/api status=201 enabled=true')
+
+        const addResult = await addTool?.execute(addInput, { serverContext: ctx })
+        expect(addResult).toMatchObject({ status: 'success', rule: { id: 1, name: 'AI Mock' } })
+        expect(ctx.mockRules).toHaveLength(1)
+        expect(saveMockRules).toHaveBeenCalledTimes(1)
+        expect(broadcastToAllClients).toHaveBeenCalledTimes(1)
+
+        const listResult = listTool?.execute({}, { serverContext: ctx }) as { rules: Array<{ id: number }> }
+        expect(listResult.rules.map((rule) => rule.id)).toEqual([1])
+
+        const updateInput = { id: 1, enabled: false, statusCode: 404 }
+        const updateConfirmation = await updateTool?.prepareConfirmation?.(updateInput, { serverContext: ctx })
+        expect(updateConfirmation?.diff).toContain('- id=1 name=AI Mock method=GET pattern=example\\.cn/api status=201 enabled=true')
+        expect(updateConfirmation?.diff).toContain('+ id=1 name=AI Mock method=GET pattern=example\\.cn/api status=404 enabled=false')
+
+        const updateResult = await updateTool?.execute(updateInput, { serverContext: ctx })
+        expect(updateResult).toMatchObject({ status: 'success', rule: { id: 1, enabled: false, statusCode: 404 } })
+        expect(saveMockRules).toHaveBeenCalledTimes(2)
+        expect(broadcastToAllClients).toHaveBeenCalledTimes(2)
+
+        const deleteConfirmation = await deleteTool?.prepareConfirmation?.({ id: 1 }, { serverContext: ctx })
+        expect(deleteConfirmation?.summary).toContain('删除 Mock 规则')
+        expect(deleteConfirmation?.diff).toContain('- id=1 name=AI Mock method=GET pattern=example\\.cn/api status=404 enabled=false')
+
+        const deleteResult = await deleteTool?.execute({ id: 1 }, { serverContext: ctx })
+        expect(deleteResult).toMatchObject({ status: 'success', id: 1 })
+        expect(ctx.mockRules).toHaveLength(0)
+        expect(saveMockRules).toHaveBeenCalledTimes(3)
+        expect(broadcastToAllClients).toHaveBeenCalledTimes(3)
     })
 })

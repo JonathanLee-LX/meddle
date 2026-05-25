@@ -8,6 +8,7 @@ import {
     setActiveRuleFileNames,
     writeRuleFileContent,
 } from '../rule-files'
+import { createMockRule, deleteMockRule, updateMockRule, type MockRule, type MockRuleInput } from '../mocks'
 import type { AgentTool, AgentToolContext, AgentToolDefinition } from './types'
 
 type ToolRegistry = Map<string, AgentTool>
@@ -34,6 +35,38 @@ function asStringArray(value: unknown): string[] {
     if (value === undefined) return []
     if (!Array.isArray(value)) throw new Error('exclusions 必须是字符串数组')
     return value.map((item) => asString(item, 'exclusion'))
+}
+
+function asOptionalNumber(value: unknown, field: string): number | undefined {
+    if (value === undefined) return undefined
+    const parsed = typeof value === 'number' ? value : Number(value)
+    if (!Number.isFinite(parsed)) {
+        throw new Error(`${field} 必须是数字`)
+    }
+    return parsed
+}
+
+function asOptionalBoolean(value: unknown): boolean | undefined {
+    if (value === undefined) return undefined
+    if (typeof value === 'boolean') return value
+    if (value === 'true') return true
+    if (value === 'false') return false
+    throw new Error('enabled 必须是布尔值')
+}
+
+function asHeaders(value: unknown): Record<string, string> | undefined {
+    if (value === undefined) return undefined
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error('headers 必须是对象')
+    }
+    const headers: Record<string, string> = {}
+    for (const [key, headerValue] of Object.entries(value as Record<string, unknown>)) {
+        if (typeof headerValue !== 'string') {
+            throw new Error(`header ${key} 必须是字符串`)
+        }
+        headers[key] = headerValue
+    }
+    return headers
 }
 
 function normalizeRoutePattern(pattern: string): { internalPattern: string; markerSuffix: string } {
@@ -191,6 +224,71 @@ function normalizeRouteRuleActiveSetInput(input: Record<string, unknown>) {
         return { ruleFiles: input.ruleFiles.map((item) => asString(item, 'ruleFile')) }
     }
     return { ruleFiles: [asString(input.ruleFile, 'ruleFile')] }
+}
+
+function normalizeMockRuleId(input: Record<string, unknown>): number {
+    const id = asOptionalNumber(input.id, 'id')
+    if (id === undefined) {
+        throw new Error('缺少 id')
+    }
+    return id
+}
+
+function normalizeMockRuleInput(input: Record<string, unknown>, requirePattern: boolean): MockRuleInput {
+    const bodyTypeValue = input.bodyType
+    const bodyType = bodyTypeValue === undefined ? undefined : asString(bodyTypeValue, 'bodyType')
+    if (bodyType !== undefined && bodyType !== 'inline' && bodyType !== 'file') {
+        throw new Error('bodyType 仅支持 inline 或 file')
+    }
+
+    const data: MockRuleInput = {}
+    if (input.name !== undefined) data.name = asString(input.name, 'name')
+    if (input.urlPattern !== undefined) data.urlPattern = asString(input.urlPattern, 'urlPattern')
+    if (input.method !== undefined) data.method = asString(input.method, 'method').toUpperCase()
+    if (input.statusCode !== undefined) data.statusCode = asOptionalNumber(input.statusCode, 'statusCode')
+    if (input.delay !== undefined) data.delay = asOptionalNumber(input.delay, 'delay')
+    if (bodyType !== undefined) data.bodyType = bodyType
+    if (input.headers !== undefined) data.headers = asHeaders(input.headers)
+    if (input.body !== undefined) data.body = typeof input.body === 'string' ? input.body : JSON.stringify(input.body)
+    if (input.enabled !== undefined) data.enabled = asOptionalBoolean(input.enabled)
+
+    if (requirePattern && !data.urlPattern) {
+        throw new Error('缺少 urlPattern')
+    }
+    return data
+}
+
+function getMockRule(ctx: AgentToolContext, id: number): MockRule {
+    const rule = ctx.serverContext.mockRules.find((item) => item.id === id)
+    if (!rule) {
+        throw new Error(`未找到 Mock 规则: ${id}`)
+    }
+    return rule
+}
+
+function formatMockRule(rule: MockRule): string {
+    return [
+        `id=${rule.id}`,
+        `name=${rule.name || '(未命名)'}`,
+        `method=${rule.method || '*'}`,
+        `pattern=${rule.urlPattern}`,
+        `status=${rule.statusCode}`,
+        `enabled=${rule.enabled}`,
+    ].join(' ')
+}
+
+function buildMockRuleDiff(previous: MockRule | null, next: MockRuleInput & { id?: number }): string {
+    return [
+        previous ? `- ${formatMockRule(previous)}` : null,
+        `+ ${[
+            next.id !== undefined ? `id=${next.id}` : null,
+            `name=${next.name || '(未命名)'}`,
+            `method=${next.method || '*'}`,
+            `pattern=${next.urlPattern || ''}`,
+            `status=${next.statusCode || 200}`,
+            `enabled=${next.enabled !== false}`,
+        ].filter(Boolean).join(' ')}`,
+    ].filter(Boolean).join('\n')
 }
 
 function readCombinedActiveRules(ctx: AgentToolContext): string {
@@ -572,6 +670,160 @@ function createRouteRuleActiveSetTool(): AgentTool {
     }
 }
 
+function createMockRuleListTool(): AgentTool {
+    return {
+        name: 'mock_rule_list',
+        description: '列出所有 Mock 规则，或按 id 查看单条 Mock 规则。',
+        risk: 'read',
+        requiresConfirmation: false,
+        parameters: {
+            type: 'object',
+            properties: {
+                id: {
+                    type: 'number',
+                    description: '可选 Mock 规则 ID。',
+                },
+            },
+            additionalProperties: false,
+        },
+        execute(input, ctx) {
+            const id = asOptionalNumber(input.id, 'id')
+            if (id !== undefined) {
+                return { rule: getMockRule(ctx, id) }
+            }
+            return { rules: ctx.serverContext.mockRules }
+        },
+    }
+}
+
+function createMockRuleAddTool(): AgentTool {
+    return {
+        name: 'mock_rule_add',
+        description: '新增 Mock 规则。该工具会修改本地 Mock 配置，执行前必须确认。',
+        risk: 'write',
+        requiresConfirmation: true,
+        parameters: {
+            type: 'object',
+            properties: {
+                name: { type: 'string', description: '规则名称。' },
+                urlPattern: { type: 'string', description: 'URL 匹配正则或字符串。' },
+                method: { type: 'string', description: 'HTTP 方法，如 GET、POST、*。默认 *。' },
+                statusCode: { type: 'number', description: '响应状态码，默认 200。' },
+                delay: { type: 'number', description: '延迟毫秒数，默认 0。' },
+                bodyType: { type: 'string', description: 'body 类型：inline 或 file。默认 inline。' },
+                headers: { type: 'object', additionalProperties: { type: 'string' }, description: '响应头。' },
+                body: { type: 'string', description: '响应体内容。' },
+                enabled: { type: 'boolean', description: '是否启用，默认 true。' },
+            },
+            required: ['urlPattern'],
+            additionalProperties: false,
+        },
+        prepareConfirmation(input) {
+            const normalized = normalizeMockRuleInput(input, true)
+            return {
+                summary: `新增 Mock 规则：${normalized.name || normalized.urlPattern}`,
+                diff: buildMockRuleDiff(null, normalized),
+                preview: normalized,
+                input: normalized as Record<string, unknown>,
+            }
+        },
+        execute(input, ctx) {
+            const normalized = normalizeMockRuleInput(input, true)
+            const rule = createMockRule(ctx.serverContext, normalized)
+            return {
+                status: 'success',
+                message: `已新增 Mock 规则：${rule.name || rule.urlPattern}`,
+                rule,
+            }
+        },
+    }
+}
+
+function createMockRuleUpdateTool(): AgentTool {
+    return {
+        name: 'mock_rule_update',
+        description: '更新指定 Mock 规则。该工具会修改本地 Mock 配置，执行前必须确认。',
+        risk: 'write',
+        requiresConfirmation: true,
+        parameters: {
+            type: 'object',
+            properties: {
+                id: { type: 'number', description: '要更新的 Mock 规则 ID。' },
+                name: { type: 'string', description: '规则名称。' },
+                urlPattern: { type: 'string', description: 'URL 匹配正则或字符串。' },
+                method: { type: 'string', description: 'HTTP 方法，如 GET、POST、*。' },
+                statusCode: { type: 'number', description: '响应状态码。' },
+                delay: { type: 'number', description: '延迟毫秒数。' },
+                bodyType: { type: 'string', description: 'body 类型：inline 或 file。' },
+                headers: { type: 'object', additionalProperties: { type: 'string' }, description: '响应头。' },
+                body: { type: 'string', description: '响应体内容。' },
+                enabled: { type: 'boolean', description: '是否启用。' },
+            },
+            required: ['id'],
+            additionalProperties: false,
+        },
+        prepareConfirmation(input, ctx) {
+            const id = normalizeMockRuleId(input)
+            const previous = getMockRule(ctx, id)
+            const patch = normalizeMockRuleInput(input, false)
+            const next = { ...previous, ...patch, id }
+            return {
+                summary: `更新 Mock 规则：${previous.name || previous.urlPattern}`,
+                diff: buildMockRuleDiff(previous, next),
+                preview: next,
+                input: { id, ...patch },
+            }
+        },
+        execute(input, ctx) {
+            const id = normalizeMockRuleId(input)
+            const patch = normalizeMockRuleInput(input, false)
+            const rule = updateMockRule(ctx.serverContext, id, patch)
+            return {
+                status: 'success',
+                message: `已更新 Mock 规则：${rule.name || rule.urlPattern}`,
+                rule,
+            }
+        },
+    }
+}
+
+function createMockRuleDeleteTool(): AgentTool {
+    return {
+        name: 'mock_rule_delete',
+        description: '删除指定 Mock 规则。该工具会修改本地 Mock 配置，执行前必须确认。',
+        risk: 'destructive',
+        requiresConfirmation: true,
+        parameters: {
+            type: 'object',
+            properties: {
+                id: { type: 'number', description: '要删除的 Mock 规则 ID。' },
+            },
+            required: ['id'],
+            additionalProperties: false,
+        },
+        prepareConfirmation(input, ctx) {
+            const id = normalizeMockRuleId(input)
+            const previous = getMockRule(ctx, id)
+            return {
+                summary: `删除 Mock 规则：${previous.name || previous.urlPattern}`,
+                diff: `- ${formatMockRule(previous)}`,
+                preview: previous,
+                input: { id },
+            }
+        },
+        execute(input, ctx) {
+            const id = normalizeMockRuleId(input)
+            const previous = getMockRule(ctx, id)
+            deleteMockRule(ctx.serverContext, id)
+            return {
+                status: 'success',
+                message: `已删除 Mock 规则：${previous.name || previous.urlPattern}`,
+                id,
+            }
+        },
+    }
+}
+
 export function createAgentTools(): ToolRegistry {
     const tools = [
         createRouteRuleActiveGetTool(),
@@ -582,6 +834,10 @@ export function createAgentTools(): ToolRegistry {
         createRouteRuleAddTool(),
         createRouteRuleUpdateTool(),
         createRouteRuleDeleteTool(),
+        createMockRuleListTool(),
+        createMockRuleAddTool(),
+        createMockRuleUpdateTool(),
+        createMockRuleDeleteTool(),
     ]
     return new Map(tools.map((tool) => [tool.name, tool]))
 }
