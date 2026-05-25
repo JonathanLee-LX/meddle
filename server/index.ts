@@ -8,6 +8,7 @@ import { registerMocksRoutes } from './mocks'
 import { registerPipelineRoutes } from './pipeline'
 import { registerRefactorRoutes } from './refactor'
 import { registerRuleFilesRoutes } from './rule-files'
+import { registerAgentRoutes } from './agent/routes'
 
 // RuleMap and ExcludeMap types from helpers
 export type RuleMap = Record<string, string>;
@@ -147,6 +148,7 @@ export function createApp(serverContext: ServerContext): Application {
     registerPipelineRoutes(app, serverContext)
     registerRefactorRoutes(app, serverContext)
     registerRuleFilesRoutes(app, serverContext)
+    registerAgentRoutes(app, serverContext)
 
     // Export helper references for backward compatibility
     ;(app as unknown as { serverContext: ServerContext }).serverContext = serverContext

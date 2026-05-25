@@ -17,6 +17,14 @@ function ensureRulesDir(ctx: ServerContext): void {
     }
 }
 
+function normalizeRuleFileName(name: string): string {
+    const safeName = name.trim().replace(/[/\\:*?"<>|]/g, '_')
+    if (!safeName) {
+        throw new Error('缺少规则文件名称')
+    }
+    return safeName
+}
+
 function ruleFilePath(ctx: ServerContext, name: string): string {
     return path.join(getRulesDir(ctx), `${name}.txt`)
 }
@@ -53,6 +61,31 @@ export interface RuleFileInfo {
     enabled: boolean
     ruleCount: number
     excludeCount: number
+}
+
+export function getActiveRuleFileNames(ctx: ServerContext): string[] {
+    return getActiveFileNames(ctx)
+}
+
+export function readRuleFileContent(ctx: ServerContext, name: string): string {
+    ensureRulesDir(ctx)
+    const safeName = normalizeRuleFileName(name)
+    const filePath = ruleFilePath(ctx, safeName)
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`规则文件 "${safeName}" 不存在`)
+    }
+    return fs.readFileSync(filePath, 'utf8')
+}
+
+export function writeRuleFileContent(ctx: ServerContext, name: string, content: string): void {
+    ensureRulesDir(ctx)
+    const safeName = normalizeRuleFileName(name)
+    const filePath = ruleFilePath(ctx, safeName)
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`规则文件 "${safeName}" 不存在`)
+    }
+    fs.writeFileSync(filePath, content, 'utf8')
+    ctx.reloadAllRuleFiles()
 }
 
 /**

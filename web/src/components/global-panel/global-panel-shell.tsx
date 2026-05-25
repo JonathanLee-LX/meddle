@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Dialog as DialogPrimitive } from 'radix-ui'
-import { ArrowLeft, Command, Loader2, Maximize2, Minimize2, Search, X } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Bot, CheckCircle2, Command, Loader2, Maximize2, Minimize2, Search, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { confirmAgentAction, sendAgentMessage, type AgentChatResponse } from '@/lib/agent-api'
 import { cn } from '@/lib/utils'
 import type { CommandAction, GlobalPanelRoute } from './types'
 import { useCommandSearch } from './use-command-search'
@@ -82,8 +83,13 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
   const [runningId, setRunningId] = useState<string | null>(null)
+  const [agentResponse, setAgentResponse] = useState<AgentChatResponse | null>(null)
+  const [agentError, setAgentError] = useState<string | null>(null)
+  const [agentLoading, setAgentLoading] = useState(false)
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const filteredCommands = useCommandSearch(commands, query)
+  const trimmedQuery = query.trim()
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => inputRef.current?.focus())
@@ -119,6 +125,42 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
     }
   }
 
+  const runAgent = async (message: string) => {
+    if (!message || agentLoading) return
+    setAgentLoading(true)
+    setAgentError(null)
+    setAgentResponse(null)
+    try {
+      const response = await sendAgentMessage(message)
+      setAgentResponse(response)
+    } catch (error) {
+      setAgentError((error as Error).message)
+    } finally {
+      setAgentLoading(false)
+    }
+  }
+
+  const confirmAgent = async (confirmationId: string, approved: boolean) => {
+    setConfirmingId(confirmationId)
+    setAgentError(null)
+    try {
+      const response = await confirmAgentAction(confirmationId, approved)
+      const result = response.result && typeof response.result === 'object'
+        ? response.result as { message?: string }
+        : null
+      setAgentResponse((current) => ({
+        runId: current?.runId || confirmationId,
+        message: result?.message || response.message,
+        pendingConfirmations: [],
+        toolResults: response.result ? [response.result] : [],
+      }))
+    } catch (error) {
+      setAgentError((error as Error).message)
+    } finally {
+      setConfirmingId(null)
+    }
+  }
+
   return (
     <div className="flex min-h-[420px] flex-col">
       <div className="flex items-center gap-3 px-4 py-3">
@@ -130,18 +172,22 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
           onKeyDown={(event) => {
             if (event.key === 'ArrowDown') {
               event.preventDefault()
-              setActiveIndex((index) => Math.min(index + 1, filteredCommands.length - 1))
+              setActiveIndex((index) => Math.min(index + 1, Math.max(filteredCommands.length - 1, 0)))
             } else if (event.key === 'ArrowUp') {
               event.preventDefault()
               setActiveIndex((index) => Math.max(index - 1, 0))
             } else if (event.key === 'Enter') {
               event.preventDefault()
-              void execute(activeCommand)
+              if (activeCommand) {
+                void execute(activeCommand)
+              } else if (trimmedQuery) {
+                void runAgent(trimmedQuery)
+              }
             } else if (event.key === 'Escape' && !query) {
               panel.close()
             }
           }}
-          placeholder="搜索操作、页面、设置、规则、Mock 或插件..."
+          placeholder="搜索命令，或直接描述你想让 AI 完成的操作..."
           className="h-9 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
         />
         <Badge variant="outline" className="hidden shrink-0 text-[11px] font-normal sm:inline-flex">
@@ -150,6 +196,77 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
       </div>
       <Separator />
       <ScrollArea className="min-h-0 flex-1">
+        {trimmedQuery && (
+          <div className="p-3 pb-0">
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 rounded-md border bg-muted/30 px-3 py-2 text-left text-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={agentLoading}
+              onClick={() => void runAgent(trimmedQuery)}
+            >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-background">
+                {agentLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="font-medium">让 AI 处理</div>
+                <div className="truncate text-xs text-muted-foreground">{trimmedQuery}</div>
+              </div>
+            </button>
+          </div>
+        )}
+        {(agentError || agentResponse || agentLoading) && (
+          <div className="p-3 pb-0">
+            <div className={cn(
+              'rounded-md border px-3 py-2 text-sm',
+              agentError ? 'border-destructive/40 bg-destructive/5' : 'bg-muted/20'
+            )}>
+              <div className="flex items-start gap-2">
+                {agentError ? (
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                ) : agentLoading ? (
+                  <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+                ) : (
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className={cn('leading-5', agentError && 'text-destructive')}>
+                    {agentError || (agentLoading ? 'AI 正在处理...' : agentResponse?.message)}
+                  </div>
+                  {agentResponse?.pendingConfirmations.map((confirmation) => (
+                    <div key={confirmation.id} className="mt-3 rounded-md border bg-background p-3">
+                      <div className="font-medium">{confirmation.summary}</div>
+                      {confirmation.diff && (
+                        <pre className="mt-2 max-h-40 overflow-auto rounded border bg-muted/40 p-2 text-xs leading-5 text-muted-foreground">
+                          {confirmation.diff}
+                        </pre>
+                      )}
+                      <div className="mt-3 flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={confirmingId === confirmation.id}
+                          onClick={() => void confirmAgent(confirmation.id, false)}
+                        >
+                          取消
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={confirmingId === confirmation.id}
+                          onClick={() => void confirmAgent(confirmation.id, true)}
+                        >
+                          {confirmingId === confirmation.id ? (
+                            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                          ) : null}
+                          确认执行
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         {filteredCommands.length === 0 ? (
           <div className="flex h-64 flex-col items-center justify-center gap-2 px-6 text-center text-muted-foreground">
             <Command className="h-8 w-8 opacity-50" />
