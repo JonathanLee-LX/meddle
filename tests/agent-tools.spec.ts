@@ -15,6 +15,28 @@ function createTestContext() {
     const reloadAllRuleFiles = vi.fn()
     const saveMockRules = vi.fn()
     const broadcastToAllClients = vi.fn()
+    const requestPipeline = {
+        mode: 'off',
+        setMode: vi.fn((mode: string) => {
+            requestPipeline.mode = mode
+        }),
+    }
+    const onModeGate = {
+        reset: vi.fn(),
+        getStats: () => ({ mode: requestPipeline.mode, allowed: 0, denied: 0, total: 0 }),
+        shouldAllow: () => true,
+        setMode: vi.fn(),
+    }
+    const plugin = {
+        manifest: {
+            id: 'local.demo',
+            name: 'Demo Plugin',
+            version: '1.0.0',
+            hooks: ['onBeforeProxy'],
+            permissions: ['network'],
+            priority: 10,
+        },
+    }
 
     const ctx = {
         epDir: tempDir,
@@ -24,6 +46,57 @@ function createTestContext() {
         mockIdSeq: 1,
         saveMockRules,
         broadcastToAllClients,
+        proxyRecordArr: [
+            {
+                id: 1,
+                method: 'GET',
+                source: 'https://example.cn/api/users',
+                target: 'https://upstream.example.cn/api/users',
+                time: '15:00:00',
+                statusCode: 200,
+                duration: 42,
+            },
+            {
+                id: 2,
+                method: 'POST',
+                source: 'https://example.cn/api/orders',
+                target: 'https://upstream.example.cn/api/orders',
+                time: '15:00:01',
+                statusCode: 500,
+                duration: 88,
+            },
+        ],
+        proxyRecordDetailMap: new Map([[2, {
+            requestHeaders: { 'content-type': 'application/json' },
+            requestBody: '{"id":1}',
+            responseHeaders: { 'content-type': 'application/json' },
+            responseBody: '{"error":"fail"}',
+            statusCode: 500,
+            method: 'POST',
+            url: 'https://example.cn/api/orders',
+        }]]),
+        requestPipeline,
+        shadowCompareTracker: {
+            reset: vi.fn(),
+            getStats: () => ({ total: 3, diff: 0, diffRate: '0.00' }),
+            record: vi.fn(() => false),
+        },
+        onModeGate,
+        pluginManager: {
+            getAll: () => [plugin],
+            getState: () => 'running',
+            setState: vi.fn(),
+        },
+        hookDispatcher: {
+            getPluginStats: () => ({ 'local.demo': { calls: 3, errors: 0 } }),
+        },
+        builtinLoggerPlugin: {},
+        performConfigDiagnostics: () => ({
+            status: 'ok',
+            checks: [],
+            errors: [],
+            warnings: [],
+        }),
     } as unknown as ServerContext
 
     return {
@@ -201,5 +274,59 @@ describe('agent route tools', () => {
         expect(ctx.mockRules).toHaveLength(0)
         expect(saveMockRules).toHaveBeenCalledTimes(3)
         expect(broadcastToAllClients).toHaveBeenCalledTimes(3)
+    })
+
+    it('reads logs, plugin status, pipeline status, and config diagnostics', () => {
+        const { ctx } = createTestContext()
+        const tools = createAgentTools()
+
+        const logList = tools.get('log_list')?.execute({ method: 'POST', limit: 5 }, { serverContext: ctx }) as {
+            records: Array<{ id: number }>
+        }
+        expect(logList.records.map((record) => record.id)).toEqual([2])
+
+        const logDetail = tools.get('log_detail_get')?.execute({ id: 2 }, { serverContext: ctx }) as {
+            detail: { statusCode: number } | null
+        }
+        expect(logDetail.detail?.statusCode).toBe(500)
+
+        const pluginList = tools.get('plugin_list')?.execute({}, { serverContext: ctx }) as {
+            total: number
+            plugins: Array<{ id: string; state: string; stats: unknown }>
+        }
+        expect(pluginList.total).toBe(1)
+        expect(pluginList.plugins[0]).toMatchObject({ id: 'local.demo', state: 'running' })
+
+        const pluginHealth = tools.get('plugin_health_get')?.execute({}, { serverContext: ctx }) as {
+            pluginStates: Record<string, string>
+        }
+        expect(pluginHealth.pluginStates['local.demo']).toBe('running')
+
+        const pipelineStatus = tools.get('pipeline_status_get')?.execute({}, { serverContext: ctx }) as {
+            mode: string
+            shadowStats: { total: number }
+        }
+        expect(pipelineStatus.mode).toBe('off')
+        expect(pipelineStatus.shadowStats.total).toBe(3)
+
+        const doctor = tools.get('config_doctor')?.execute({}, { serverContext: ctx }) as { status: string }
+        expect(doctor.status).toBe('ok')
+    })
+
+    it('sets pipeline mode after confirmation', async () => {
+        const { ctx, settingsPath } = createTestContext()
+        const tool = createAgentTools().get('pipeline_mode_set')
+
+        const confirmation = await tool?.prepareConfirmation?.({ mode: 'shadow' }, { serverContext: ctx })
+        expect(confirmation?.summary).toContain('off -> shadow')
+        expect(confirmation?.diff).toContain('+ pluginMode=shadow')
+
+        const result = await tool?.execute({ mode: 'shadow' }, { serverContext: ctx })
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8')) as { pluginMode: string }
+
+        expect(result).toMatchObject({ status: 'success', oldMode: 'off', mode: 'shadow' })
+        expect(ctx.requestPipeline.mode).toBe('shadow')
+        expect(settings.pluginMode).toBe('shadow')
+        expect(ctx.onModeGate.setMode).toHaveBeenCalledWith('shadow')
     })
 })

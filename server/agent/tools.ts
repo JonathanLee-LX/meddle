@@ -9,6 +9,7 @@ import {
     writeRuleFileContent,
 } from '../rule-files'
 import { createMockRule, deleteMockRule, updateMockRule, type MockRule, type MockRuleInput } from '../mocks'
+import { normalizePipelineMode, setPipelineMode, type PipelineMode } from '../pipeline'
 import type { AgentTool, AgentToolContext, AgentToolDefinition } from './types'
 
 type ToolRegistry = Map<string, AgentTool>
@@ -289,6 +290,54 @@ function buildMockRuleDiff(previous: MockRule | null, next: MockRuleInput & { id
             `enabled=${next.enabled !== false}`,
         ].filter(Boolean).join(' ')}`,
     ].filter(Boolean).join('\n')
+}
+
+function normalizeLogListInput(input: Record<string, unknown>) {
+    const limit = asOptionalNumber(input.limit, 'limit') ?? 20
+    const method = typeof input.method === 'string' && input.method.trim() ? input.method.trim().toUpperCase() : null
+    const keyword = typeof input.keyword === 'string' && input.keyword.trim() ? input.keyword.trim() : null
+    const statusCode = asOptionalNumber(input.statusCode, 'statusCode')
+    return {
+        limit: Math.min(100, Math.max(1, Math.floor(limit))),
+        method,
+        keyword,
+        statusCode,
+    }
+}
+
+function normalizePipelineModeInput(input: Record<string, unknown>): { mode: PipelineMode } {
+    const mode = normalizePipelineMode(input.mode)
+    if (!mode) {
+        throw new Error('mode 必须是 off、shadow 或 on')
+    }
+    return { mode }
+}
+
+function buildPluginList(ctx: AgentToolContext) {
+    const pluginStats = ctx.serverContext.hookDispatcher.getPluginStats ? ctx.serverContext.hookDispatcher.getPluginStats() : {}
+    const plugins = ctx.serverContext.pluginManager.getAll().map((plugin) => ({
+        id: plugin.manifest.id,
+        name: plugin.manifest.name,
+        version: plugin.manifest.version,
+        hooks: plugin.manifest.hooks,
+        permissions: plugin.manifest.permissions,
+        priority: plugin.manifest.priority,
+        state: ctx.serverContext.pluginManager.getState(plugin.manifest.id),
+        stats: pluginStats[plugin.manifest.id] || null,
+    }))
+    return {
+        mode: ctx.serverContext.requestPipeline.mode,
+        total: plugins.length,
+        plugins,
+    }
+}
+
+function buildPipelineStatus(ctx: AgentToolContext) {
+    return {
+        mode: ctx.serverContext.requestPipeline.mode,
+        shadowStats: ctx.serverContext.shadowCompareTracker.getStats(),
+        onModeGate: ctx.serverContext.onModeGate.getStats(),
+    }
 }
 
 function readCombinedActiveRules(ctx: AgentToolContext): string {
@@ -824,6 +873,194 @@ function createMockRuleDeleteTool(): AgentTool {
     }
 }
 
+function createLogListTool(): AgentTool {
+    return {
+        name: 'log_list',
+        description: '查看最近的代理请求日志，可按 method、statusCode 或关键词过滤。',
+        risk: 'read',
+        requiresConfirmation: false,
+        parameters: {
+            type: 'object',
+            properties: {
+                limit: { type: 'number', description: '返回数量，默认 20，最大 100。' },
+                method: { type: 'string', description: '可选 HTTP 方法过滤。' },
+                statusCode: { type: 'number', description: '可选状态码过滤。' },
+                keyword: { type: 'string', description: '可选关键词，匹配源地址或目标地址。' },
+            },
+            additionalProperties: false,
+        },
+        execute(input, ctx) {
+            const normalized = normalizeLogListInput(input)
+            const records = [...ctx.serverContext.proxyRecordArr].reverse()
+                .filter((record) => !normalized.method || record.method.toUpperCase() === normalized.method)
+                .filter((record) => normalized.statusCode === undefined || record.statusCode === normalized.statusCode)
+                .filter((record) => {
+                    if (!normalized.keyword) return true
+                    return record.source.includes(normalized.keyword) || record.target.includes(normalized.keyword)
+                })
+                .slice(0, normalized.limit)
+            return {
+                total: ctx.serverContext.proxyRecordArr.length,
+                returned: records.length,
+                records,
+            }
+        },
+    }
+}
+
+function createLogDetailTool(): AgentTool {
+    return {
+        name: 'log_detail_get',
+        description: '按日志 ID 查看请求详情，包括请求头、响应头、body 摘要和状态码。',
+        risk: 'read',
+        requiresConfirmation: false,
+        parameters: {
+            type: 'object',
+            properties: {
+                id: { type: 'number', description: '日志记录 ID。' },
+            },
+            required: ['id'],
+            additionalProperties: false,
+        },
+        execute(input, ctx) {
+            const id = normalizeMockRuleId(input)
+            const detail = ctx.serverContext.proxyRecordDetailMap.get(id)
+            const record = ctx.serverContext.proxyRecordArr.find((item) => item.id === id)
+            if (!detail && !record) {
+                throw new Error(`未找到日志记录: ${id}`)
+            }
+            return {
+                record,
+                detail: detail || null,
+            }
+        },
+    }
+}
+
+function createPluginListTool(): AgentTool {
+    return {
+        name: 'plugin_list',
+        description: '查看当前插件列表、状态、hooks、权限和执行统计。',
+        risk: 'read',
+        requiresConfirmation: false,
+        parameters: {
+            type: 'object',
+            properties: {},
+            additionalProperties: false,
+        },
+        execute(_input, ctx) {
+            return buildPluginList(ctx)
+        },
+    }
+}
+
+function createPluginHealthTool(): AgentTool {
+    return {
+        name: 'plugin_health_get',
+        description: '查看插件健康概览，包括插件状态和 hook 统计。',
+        risk: 'read',
+        requiresConfirmation: false,
+        parameters: {
+            type: 'object',
+            properties: {},
+            additionalProperties: false,
+        },
+        execute(_input, ctx) {
+            const pluginStats = ctx.serverContext.hookDispatcher.getPluginStats ? ctx.serverContext.hookDispatcher.getPluginStats() : {}
+            const pluginStates: Record<string, string> = {}
+            const plugins = ctx.serverContext.pluginManager.getAll().map((plugin) => {
+                pluginStates[plugin.manifest.id] = ctx.serverContext.pluginManager.getState(plugin.manifest.id)
+                return {
+                    id: plugin.manifest.id,
+                    name: plugin.manifest.name,
+                    version: plugin.manifest.version,
+                    hooks: plugin.manifest.hooks,
+                    permissions: plugin.manifest.permissions,
+                    priority: plugin.manifest.priority,
+                }
+            })
+            return {
+                mode: ctx.serverContext.requestPipeline.mode,
+                total: plugins.length,
+                plugins,
+                pluginStates,
+                pluginStats,
+            }
+        },
+    }
+}
+
+function createPipelineStatusTool(): AgentTool {
+    return {
+        name: 'pipeline_status_get',
+        description: '查看 request pipeline 当前模式、shadow 统计和 on-mode gate 统计。',
+        risk: 'read',
+        requiresConfirmation: false,
+        parameters: {
+            type: 'object',
+            properties: {},
+            additionalProperties: false,
+        },
+        execute(_input, ctx) {
+            return buildPipelineStatus(ctx)
+        },
+    }
+}
+
+function createPipelineModeSetTool(): AgentTool {
+    return {
+        name: 'pipeline_mode_set',
+        description: '切换插件 request pipeline 模式，可选 off、shadow、on。该工具会修改运行态和 settings.json，执行前必须确认。',
+        risk: 'write',
+        requiresConfirmation: true,
+        parameters: {
+            type: 'object',
+            properties: {
+                mode: { type: 'string', description: '目标模式：off、shadow 或 on。' },
+            },
+            required: ['mode'],
+            additionalProperties: false,
+        },
+        prepareConfirmation(input, ctx) {
+            const normalized = normalizePipelineModeInput(input)
+            const current = ctx.serverContext.requestPipeline.mode
+            return {
+                summary: `切换插件模式：${current} -> ${normalized.mode}`,
+                diff: [
+                    `- pluginMode=${current}`,
+                    `+ pluginMode=${normalized.mode}`,
+                ].join('\n'),
+                preview: {
+                    currentMode: current,
+                    nextMode: normalized.mode,
+                },
+                input: normalized,
+            }
+        },
+        execute(input, ctx) {
+            const normalized = normalizePipelineModeInput(input)
+            return setPipelineMode(ctx.serverContext, normalized.mode)
+        },
+    }
+}
+
+function createConfigDoctorTool(): AgentTool {
+    return {
+        name: 'config_doctor',
+        description: '运行配置文件健康检查，查看规则、Mock、插件等配置状态。',
+        risk: 'read',
+        requiresConfirmation: false,
+        parameters: {
+            type: 'object',
+            properties: {},
+            additionalProperties: false,
+        },
+        execute(_input, ctx) {
+            return ctx.serverContext.performConfigDiagnostics()
+        },
+    }
+}
+
 export function createAgentTools(): ToolRegistry {
     const tools = [
         createRouteRuleActiveGetTool(),
@@ -838,6 +1075,13 @@ export function createAgentTools(): ToolRegistry {
         createMockRuleAddTool(),
         createMockRuleUpdateTool(),
         createMockRuleDeleteTool(),
+        createLogListTool(),
+        createLogDetailTool(),
+        createPluginListTool(),
+        createPluginHealthTool(),
+        createPipelineStatusTool(),
+        createPipelineModeSetTool(),
+        createConfigDoctorTool(),
     ]
     return new Map(tools.map((tool) => [tool.name, tool]))
 }
