@@ -226,6 +226,7 @@ export function GlobalPanelShell({ commands, renderPanel }: GlobalPanelShellProp
     height: number
   } | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
+  const [resizing, setResizing] = useState(false)
   const previousPanelSizeRef = useRef<{ width: number; height: number } | null>(null)
 
   useEffect(() => {
@@ -233,12 +234,14 @@ export function GlobalPanelShell({ commands, renderPanel }: GlobalPanelShellProp
       if (!routeId) {
         setPanelSize(null)
         setFullscreen(false)
+        setResizing(false)
         return
       }
 
       const initialSize = readStoredPanelSize(routeId) || getDefaultPanelSize(routeSize || 'lg')
       setPanelSize(initialSize)
       setFullscreen(routeSize === 'fullscreen')
+      setResizing(false)
     })
 
     return () => window.cancelAnimationFrame(frame)
@@ -263,6 +266,7 @@ export function GlobalPanelShell({ commands, renderPanel }: GlobalPanelShellProp
   const startResize = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (!route || !panelSize || fullscreen) return
     event.preventDefault()
+    setResizing(true)
     const pointerId = event.pointerId
     const startX = event.clientX
     const startY = event.clientY
@@ -278,12 +282,14 @@ export function GlobalPanelShell({ commands, renderPanel }: GlobalPanelShellProp
       setPanelSize(nextSize)
     }
 
-    const handlePointerUp = () => {
+    const handlePointerEnd = () => {
       if (target.hasPointerCapture(pointerId)) {
         target.releasePointerCapture(pointerId)
       }
       window.removeEventListener('pointermove', handlePointerMove)
-      window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('pointerup', handlePointerEnd)
+      window.removeEventListener('pointercancel', handlePointerEnd)
+      setResizing(false)
       setPanelSize((current) => {
         if (current) persistPanelSize(current)
         return current
@@ -291,7 +297,8 @@ export function GlobalPanelShell({ commands, renderPanel }: GlobalPanelShellProp
     }
 
     window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', handlePointerUp)
+    window.addEventListener('pointerup', handlePointerEnd)
+    window.addEventListener('pointercancel', handlePointerEnd)
   }
 
   const toggleFullscreen = () => {
@@ -324,6 +331,7 @@ export function GlobalPanelShell({ commands, renderPanel }: GlobalPanelShellProp
           style={panelStyle}
           className={cn(
             'fixed left-1/2 top-4 z-[81] flex -translate-x-1/2 flex-col overflow-hidden rounded-lg border bg-background shadow-2xl outline-none data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+            route && !resizing && 'transition-[width,height] duration-200 ease-out',
             !route && sizeClassNames[size],
           )}
         >
