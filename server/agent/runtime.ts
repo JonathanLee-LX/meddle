@@ -66,7 +66,7 @@ export async function runAgent(
             }
         }
 
-        messages.push({
+        const assistantMessage: AgentChatMessage = {
             role: 'assistant',
             content: response.content || null,
             tool_calls: response.toolCalls.map((call) => ({
@@ -77,7 +77,11 @@ export async function runAgent(
                     arguments: call.arguments,
                 },
             })),
-        })
+        }
+        if (response.reasoningContent) {
+            assistantMessage.reasoning_content = response.reasoningContent
+        }
+        messages.push(assistantMessage)
 
         for (const call of response.toolCalls) {
             const tool = toolRegistry.get(call.name)

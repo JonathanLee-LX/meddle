@@ -10,6 +10,7 @@ export interface AgentChatMessage {
     role: 'system' | 'user' | 'assistant' | 'tool'
     content: string | null
     tool_call_id?: string
+    reasoning_content?: string
     tool_calls?: Array<{
         id: string
         type: 'function'
@@ -22,6 +23,7 @@ export interface AgentChatMessage {
 
 export interface AgentModelResponse {
     content: string
+    reasoningContent?: string
     toolCalls: AgentModelToolCall[]
 }
 
@@ -84,9 +86,13 @@ export async function requestAgentModel(
     const firstChoice = asObject(choices[0])
     const message = asObject(firstChoice.message)
     const content = typeof message.content === 'string' ? message.content : ''
+    const reasoningContent = typeof message.reasoning_content === 'string'
+        ? message.reasoning_content
+        : undefined
 
     return {
         content,
+        reasoningContent,
         toolCalls: parseToolCalls(message.tool_calls),
     }
 }
