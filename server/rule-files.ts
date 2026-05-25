@@ -88,6 +88,47 @@ export function writeRuleFileContent(ctx: ServerContext, name: string, content: 
     ctx.reloadAllRuleFiles()
 }
 
+export function createRuleFile(ctx: ServerContext, name: string, content = '', enabled = true): RuleFileInfo {
+    ensureRulesDir(ctx)
+    const safeName = normalizeRuleFileName(name)
+    const filePath = ruleFilePath(ctx, safeName)
+    if (fs.existsSync(filePath)) {
+        throw new Error(`规则文件 "${safeName}" 已存在`)
+    }
+
+    fs.writeFileSync(filePath, content, 'utf8')
+
+    if (enabled) {
+        const activeNames = getActiveFileNames(ctx)
+        if (!activeNames.includes(safeName)) {
+            activeNames.push(safeName)
+            setActiveFileNames(ctx, activeNames)
+        }
+    }
+
+    ctx.reloadAllRuleFiles()
+    const { ruleMap, excludeMap } = parseEprcWithExclusions(content)
+    return {
+        name: safeName,
+        enabled,
+        ruleCount: Object.keys(ruleMap).length,
+        excludeCount: Object.values(excludeMap).reduce((total, exclusions) => total + exclusions.length, 0),
+    }
+}
+
+export function setActiveRuleFileNames(ctx: ServerContext, names: string[]): string[] {
+    ensureRulesDir(ctx)
+    const safeNames = names.map((name) => normalizeRuleFileName(name))
+    const missingNames = safeNames.filter((name) => !fs.existsSync(ruleFilePath(ctx, name)))
+    if (missingNames.length > 0) {
+        throw new Error(`规则文件不存在: ${missingNames.join(', ')}`)
+    }
+
+    setActiveFileNames(ctx, safeNames)
+    ctx.reloadAllRuleFiles()
+    return safeNames
+}
+
 /**
  * Scan the route-rules directory and return file info list.
  */
