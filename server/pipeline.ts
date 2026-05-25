@@ -27,6 +27,16 @@ export function normalizePipelineMode(mode: unknown): PipelineMode | null {
     return mode === 'off' || mode === 'shadow' || mode === 'on' ? mode : null
 }
 
+export function resetShadowStats(ctx: ServerContext): { status: string; stats: unknown; onModeGate: unknown } {
+    ctx.shadowCompareTracker.reset()
+    ctx.onModeGate.reset()
+    return {
+        status: 'success',
+        stats: ctx.shadowCompareTracker.getStats(),
+        onModeGate: ctx.onModeGate.getStats(),
+    }
+}
+
 export function registerPipelineRoutes(app: Application, ctx: ServerContext): void {
     // API: /api/pipeline/mode - Get/set plugin pipeline mode
     app.route('/api/pipeline/mode')
@@ -62,24 +72,12 @@ export function registerPipelineRoutes(app: Application, ctx: ServerContext): vo
         })
         .post((_req: Request, res: Response) => {
             res.setHeader('Content-Type', 'application/json')
-            ctx.shadowCompareTracker.reset()
-            ctx.onModeGate.reset()
-            res.write(JSON.stringify({
-                status: 'success',
-                stats: ctx.shadowCompareTracker.getStats(),
-                onModeGate: ctx.onModeGate.getStats(),
-            }))
+            res.write(JSON.stringify(resetShadowStats(ctx)))
             res.end()
         })
         .delete((_req: Request, res: Response) => {
             res.setHeader('Content-Type', 'application/json')
-            ctx.shadowCompareTracker.reset()
-            ctx.onModeGate.reset()
-            res.write(JSON.stringify({
-                status: 'success',
-                stats: ctx.shadowCompareTracker.getStats(),
-                onModeGate: ctx.onModeGate.getStats(),
-            }))
+            res.write(JSON.stringify(resetShadowStats(ctx)))
             res.end()
         })
 

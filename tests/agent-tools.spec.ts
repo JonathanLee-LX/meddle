@@ -13,6 +13,7 @@ function createTestContext() {
     const settingsPath = path.join(tempDir, 'settings.json')
     fs.writeFileSync(settingsPath, JSON.stringify({ activeRuleFiles: ['默认规则'] }), 'utf8')
     const reloadAllRuleFiles = vi.fn()
+    const loadMockRules = vi.fn()
     const saveMockRules = vi.fn()
     const broadcastToAllClients = vi.fn()
     const requestPipeline = {
@@ -37,11 +38,16 @@ function createTestContext() {
             priority: 10,
         },
     }
+    const pluginStates = new Map([['local.demo', 'running']])
+    const reloadCustomPlugins = vi.fn().mockResolvedValue([plugin])
 
     const ctx = {
         epDir: tempDir,
         settingsPath,
+        currentMocksPath: path.join(tempDir, 'custom-mocks.json'),
         reloadAllRuleFiles,
+        loadMockRules,
+        getMockFilePath: () => path.join(tempDir, 'mocks.json'),
         mockRules: [],
         mockIdSeq: 1,
         saveMockRules,
@@ -84,8 +90,10 @@ function createTestContext() {
         onModeGate,
         pluginManager: {
             getAll: () => [plugin],
-            getState: () => 'running',
-            setState: vi.fn(),
+            getState: (id: string) => pluginStates.get(id) || 'unknown',
+            setState: vi.fn((id: string, state: string) => {
+                pluginStates.set(id, state)
+            }),
         },
         hookDispatcher: {
             getPluginStats: () => ({ 'local.demo': { calls: 3, errors: 0 } }),
@@ -97,6 +105,7 @@ function createTestContext() {
             errors: [],
             warnings: [],
         }),
+        reloadCustomPlugins,
     } as unknown as ServerContext
 
     return {
@@ -105,8 +114,10 @@ function createTestContext() {
         ruleFilePath: path.join(ruleDir, '默认规则.txt'),
         settingsPath,
         reloadAllRuleFiles,
+        loadMockRules,
         saveMockRules,
         broadcastToAllClients,
+        reloadCustomPlugins,
     }
 }
 
@@ -311,6 +322,70 @@ describe('agent route tools', () => {
 
         const doctor = tools.get('config_doctor')?.execute({}, { serverContext: ctx }) as { status: string }
         expect(doctor.status).toBe('ok')
+    })
+
+    it('toggles plugin state after confirmation', async () => {
+        const { ctx, settingsPath } = createTestContext()
+        const tool = createAgentTools().get('plugin_toggle')
+
+        const confirmation = await tool?.prepareConfirmation?.(
+            { pluginId: 'local.demo', enabled: false },
+            { serverContext: ctx },
+        )
+        expect(confirmation?.summary).toContain('禁用插件')
+        expect(confirmation?.diff).toContain('- local.demo: state=running')
+        expect(confirmation?.diff).toContain('+ local.demo: state=disabled')
+
+        const result = await tool?.execute({ pluginId: 'local.demo', enabled: false }, { serverContext: ctx })
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8')) as { disabledPlugins: string[] }
+
+        expect(result).toMatchObject({ status: 'success', pluginId: 'local.demo', state: 'disabled' })
+        expect(ctx.pluginManager.getState('local.demo')).toBe('disabled')
+        expect(ctx.pluginManager.setState).toHaveBeenCalledWith('local.demo', 'disabled')
+        expect(settings.disabledPlugins).toContain('local.demo')
+    })
+
+    it('reloads custom plugins after confirmation', async () => {
+        const { ctx, reloadCustomPlugins } = createTestContext()
+        const tool = createAgentTools().get('plugin_reload')
+
+        const confirmation = await tool?.prepareConfirmation?.({}, { serverContext: ctx })
+        expect(confirmation?.summary).toContain('热加载自定义插件')
+
+        const result = await tool?.execute({}, { serverContext: ctx }) as { status: string; count: number }
+
+        expect(result).toMatchObject({ status: 'success', count: 1 })
+        expect(reloadCustomPlugins).toHaveBeenCalledTimes(1)
+    })
+
+    it('refreshes config through the same runtime path as the API', async () => {
+        const { ctx, loadMockRules, reloadAllRuleFiles } = createTestContext()
+        const tool = createAgentTools().get('config_refresh')
+
+        const confirmation = await tool?.prepareConfirmation?.({}, { serverContext: ctx })
+        expect(confirmation?.summary).toContain('刷新配置')
+
+        const result = await tool?.execute({}, { serverContext: ctx }) as { status: string; mocksPath: string }
+
+        expect(result).toMatchObject({ status: 'success', mocksPath: path.join(path.dirname(ctx.settingsPath), 'mocks.json') })
+        expect(ctx.currentMocksPath).toBeNull()
+        expect(reloadAllRuleFiles).toHaveBeenCalledTimes(1)
+        expect(loadMockRules).toHaveBeenCalledTimes(1)
+    })
+
+    it('resets shadow stats after confirmation', async () => {
+        const { ctx } = createTestContext()
+        const tool = createAgentTools().get('pipeline_shadow_stats_reset')
+
+        const confirmation = await tool?.prepareConfirmation?.({}, { serverContext: ctx })
+        expect(confirmation?.summary).toContain('重置 shadow 统计')
+        expect(confirmation?.diff).toContain('+ shadowStats=reset')
+
+        const result = await tool?.execute({}, { serverContext: ctx }) as { status: string }
+
+        expect(result).toMatchObject({ status: 'success' })
+        expect(ctx.shadowCompareTracker.reset).toHaveBeenCalledTimes(1)
+        expect(ctx.onModeGate.reset).toHaveBeenCalledTimes(1)
     })
 
     it('sets pipeline mode after confirmation', async () => {

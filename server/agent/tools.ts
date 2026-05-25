@@ -8,8 +8,10 @@ import {
     setActiveRuleFileNames,
     writeRuleFileContent,
 } from '../rule-files'
+import { refreshConfig } from '../config'
 import { createMockRule, deleteMockRule, updateMockRule, type MockRule, type MockRuleInput } from '../mocks'
-import { normalizePipelineMode, setPipelineMode, type PipelineMode } from '../pipeline'
+import { reloadPlugins, setPluginEnabled } from '../plugins'
+import { normalizePipelineMode, resetShadowStats, setPipelineMode, type PipelineMode } from '../pipeline'
 import type { AgentTool, AgentToolContext, AgentToolDefinition } from './types'
 
 type ToolRegistry = Map<string, AgentTool>
@@ -311,6 +313,23 @@ function normalizePipelineModeInput(input: Record<string, unknown>): { mode: Pip
         throw new Error('mode 必须是 off、shadow 或 on')
     }
     return { mode }
+}
+
+function normalizePluginToggleInput(input: Record<string, unknown>): { pluginId: string; enabled: boolean } {
+    const pluginId = asString(input.pluginId ?? input.id, 'pluginId')
+    const enabled = asOptionalBoolean(input.enabled)
+    if (enabled === undefined) {
+        throw new Error('缺少 enabled')
+    }
+    return { pluginId, enabled }
+}
+
+function getPluginState(ctx: AgentToolContext, pluginId: string): string {
+    const plugin = ctx.serverContext.pluginManager.getAll().find((item) => item.manifest.id === pluginId)
+    if (!plugin) {
+        throw new Error(`未找到插件: ${pluginId}`)
+    }
+    return ctx.serverContext.pluginManager.getState(pluginId)
 }
 
 function buildPluginList(ctx: AgentToolContext) {
@@ -990,6 +1009,75 @@ function createPluginHealthTool(): AgentTool {
     }
 }
 
+function createPluginToggleTool(): AgentTool {
+    return {
+        name: 'plugin_toggle',
+        description: '启用或禁用指定插件。该工具会修改运行态和 settings.json，执行前必须确认。',
+        risk: 'write',
+        requiresConfirmation: true,
+        parameters: {
+            type: 'object',
+            properties: {
+                pluginId: { type: 'string', description: '插件 ID。也兼容 id 字段。' },
+                id: { type: 'string', description: '插件 ID，兼容简写。' },
+                enabled: { type: 'boolean', description: 'true 表示启用，false 表示禁用。' },
+            },
+            required: ['enabled'],
+            additionalProperties: false,
+        },
+        prepareConfirmation(input, ctx) {
+            const normalized = normalizePluginToggleInput(input)
+            const currentState = getPluginState(ctx, normalized.pluginId)
+            const nextState = normalized.enabled ? 'running' : 'disabled'
+            return {
+                summary: `${normalized.enabled ? '启用' : '禁用'}插件：${normalized.pluginId}`,
+                diff: [
+                    `- ${normalized.pluginId}: state=${currentState}`,
+                    `+ ${normalized.pluginId}: state=${nextState}`,
+                ].join('\n'),
+                preview: {
+                    pluginId: normalized.pluginId,
+                    currentState,
+                    nextState,
+                },
+                input: normalized,
+            }
+        },
+        execute(input, ctx) {
+            const normalized = normalizePluginToggleInput(input)
+            return setPluginEnabled(ctx.serverContext, normalized.pluginId, normalized.enabled)
+        },
+    }
+}
+
+function createPluginReloadTool(): AgentTool {
+    return {
+        name: 'plugin_reload',
+        description: '热加载自定义插件。该工具会重新扫描并注册本地插件，执行前必须确认。',
+        risk: 'write',
+        requiresConfirmation: true,
+        parameters: {
+            type: 'object',
+            properties: {},
+            additionalProperties: false,
+        },
+        prepareConfirmation() {
+            return {
+                summary: '热加载自定义插件',
+                diff: [
+                    '- 当前自定义插件注册状态',
+                    '+ 重新扫描并加载自定义插件',
+                ].join('\n'),
+                preview: {},
+                input: {},
+            }
+        },
+        execute(_input, ctx) {
+            return reloadPlugins(ctx.serverContext)
+        },
+    }
+}
+
 function createPipelineStatusTool(): AgentTool {
     return {
         name: 'pipeline_status_get',
@@ -1003,6 +1091,36 @@ function createPipelineStatusTool(): AgentTool {
         },
         execute(_input, ctx) {
             return buildPipelineStatus(ctx)
+        },
+    }
+}
+
+function createPipelineShadowStatsResetTool(): AgentTool {
+    return {
+        name: 'pipeline_shadow_stats_reset',
+        description: '重置 request pipeline 的 shadow 比对统计和 on-mode gate 统计。执行前必须确认。',
+        risk: 'destructive',
+        requiresConfirmation: true,
+        parameters: {
+            type: 'object',
+            properties: {},
+            additionalProperties: false,
+        },
+        prepareConfirmation(_input, ctx) {
+            return {
+                summary: '重置 shadow 统计',
+                diff: [
+                    `- shadowStats=${JSON.stringify(ctx.serverContext.shadowCompareTracker.getStats())}`,
+                    `- onModeGate=${JSON.stringify(ctx.serverContext.onModeGate.getStats())}`,
+                    '+ shadowStats=reset',
+                    '+ onModeGate=reset',
+                ].join('\n'),
+                preview: buildPipelineStatus(ctx),
+                input: {},
+            }
+        },
+        execute(_input, ctx) {
+            return resetShadowStats(ctx.serverContext)
         },
     }
 }
@@ -1044,6 +1162,36 @@ function createPipelineModeSetTool(): AgentTool {
     }
 }
 
+function createConfigRefreshTool(): AgentTool {
+    return {
+        name: 'config_refresh',
+        description: '刷新本地配置，重新加载路由规则和 Mock 规则。执行前必须确认。',
+        risk: 'write',
+        requiresConfirmation: true,
+        parameters: {
+            type: 'object',
+            properties: {},
+            additionalProperties: false,
+        },
+        prepareConfirmation(_input, ctx) {
+            return {
+                summary: '刷新配置',
+                diff: [
+                    '- 当前内存中的规则和 Mock 配置',
+                    '+ 从本地配置文件重新加载规则和 Mock 配置',
+                ].join('\n'),
+                preview: {
+                    mocksPath: ctx.serverContext.getMockFilePath(),
+                },
+                input: {},
+            }
+        },
+        execute(_input, ctx) {
+            return refreshConfig(ctx.serverContext)
+        },
+    }
+}
+
 function createConfigDoctorTool(): AgentTool {
     return {
         name: 'config_doctor',
@@ -1079,8 +1227,12 @@ export function createAgentTools(): ToolRegistry {
         createLogDetailTool(),
         createPluginListTool(),
         createPluginHealthTool(),
+        createPluginToggleTool(),
+        createPluginReloadTool(),
         createPipelineStatusTool(),
+        createPipelineShadowStatsResetTool(),
         createPipelineModeSetTool(),
+        createConfigRefreshTool(),
         createConfigDoctorTool(),
     ]
     return new Map(tools.map((tool) => [tool.name, tool]))
