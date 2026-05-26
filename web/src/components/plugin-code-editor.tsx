@@ -149,6 +149,7 @@ export function PluginCodeEditor({
   const handleAIRevise = async () => {
     if (!extraInstruction.trim() || !isAIReady) return
 
+    const codeBeforeRevise = code
     setAiReviseOpen(true)
     setRevising(true)
     setError(null)
@@ -222,8 +223,10 @@ export function PluginCodeEditor({
         throw new Error('AI 未返回有效代码')
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'AI 更新代码失败')
-      setReviseStatus(null)
+      const message = err instanceof Error ? err.message : 'AI 更新代码失败'
+      setCode(codeBeforeRevise)
+      setError(message)
+      setReviseStatus(`更新失败，已恢复原代码：${message}`)
     } finally {
       setRevising(false)
     }

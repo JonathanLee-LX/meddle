@@ -30,6 +30,98 @@ export interface GeneratedPlugin {
     };
 }
 
+const AI_CODE_MAX_TOKENS = 4000;
+
+function extractTextContent(content: unknown): string {
+    if (typeof content === 'string') return content;
+    if (!Array.isArray(content)) return '';
+    return content
+        .map((part) => {
+            if (typeof part === 'string') return part;
+            if (part && typeof part === 'object' && 'text' in part && typeof part.text === 'string') {
+                return part.text;
+            }
+            return '';
+        })
+        .join('');
+}
+
+function readOpenAIMessageContent(data: any): string {
+    return extractTextContent(data?.choices?.[0]?.message?.content).trim();
+}
+
+function readOpenAIStreamChoice(data: any): { content: string; finishReason?: string } {
+    const choice = data?.choices?.[0];
+    return {
+        content: extractTextContent(choice?.delta?.content),
+        finishReason: typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined,
+    };
+}
+
+async function readOpenAIStream(
+    response: Response,
+    onChunk: (chunk: string) => void
+): Promise<string> {
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    if (!reader) {
+        throw new Error('无法读取响应流');
+    }
+
+    let fullCode = '';
+    let buffer = '';
+    let finishReason = '';
+    const consumeLine = (line: string) => {
+        if (!line.startsWith('data:')) return;
+        const data = line.slice(5).trim();
+        if (!data || data === '[DONE]') return;
+
+        try {
+            const parsed = JSON.parse(data);
+            const { content, finishReason: nextFinishReason } = readOpenAIStreamChoice(parsed);
+            if (nextFinishReason) {
+                finishReason = nextFinishReason;
+            }
+            if (content) {
+                fullCode += content;
+                onChunk(content);
+            }
+        } catch (_) {
+            // Ignore malformed SSE lines from compatible providers.
+        }
+    };
+
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                consumeLine(line);
+            }
+        }
+
+        if (buffer.trim()) {
+            consumeLine(buffer);
+        }
+    } finally {
+        reader.releaseLock();
+    }
+
+    if (finishReason === 'length') {
+        throw new Error('AI 输出被截断，请缩短补充需求后重试');
+    }
+    if (!fullCode.trim()) {
+        throw new Error('OpenAI 返回了空结果');
+    }
+
+    return cleanAIResponse(fullCode);
+}
+
 /**
  * 生成插件系统设计文档prompt
  */
@@ -204,7 +296,7 @@ ${requirement.permissions ? `需要的权限：${requirement.permissions.join(',
                 { role: 'user', content: userPrompt }
             ],
             temperature: 0.3,
-            max_tokens: 2000,
+            max_tokens: AI_CODE_MAX_TOKENS,
             stream: true
         })
     });
@@ -214,49 +306,7 @@ ${requirement.permissions ? `需要的权限：${requirement.permissions.join(',
         throw new Error(`OpenAI API 错误 (${response.status}): ${errorText}`);
     }
 
-    let fullCode = '';
-    const reader = response.body?.getReader();
-    const decoder = new TextDecoder();
-
-    if (!reader) {
-        throw new Error('无法读取响应流');
-    }
-
-    try {
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            const chunk = decoder.decode(value, { stream: true });
-            const lines = chunk.split('\n').filter(line => line.trim() !== '');
-
-            for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                    const data = line.slice(6);
-                    if (data === '[DONE]') continue;
-
-                    try {
-                        const parsed = JSON.parse(data);
-                        const content = parsed.choices?.[0]?.delta?.content;
-                        if (content) {
-                            fullCode += content;
-                            onChunk(content);
-                        }
-                    } catch (e) {
-                        // 忽略解析错误
-                    }
-                }
-            }
-        }
-    } finally {
-        reader.releaseLock();
-    }
-
-    if (!fullCode.trim()) {
-        throw new Error('OpenAI 返回了空结果');
-    }
-
-    return cleanAIResponse(fullCode);
+    return readOpenAIStream(response, onChunk);
 }
 
 /**
@@ -304,7 +354,7 @@ ${requirement.permissions ? `需要的权限：${requirement.permissions.join(',
         },
         body: JSON.stringify({
             model: config.model,
-            max_tokens: 2000,
+            max_tokens: AI_CODE_MAX_TOKENS,
             system: systemPrompt,
             messages: [
                 { role: 'user', content: userPrompt }
@@ -520,7 +570,7 @@ async function fixWithOpenAINonStream(
                 { role: 'user', content: userPrompt }
             ],
             temperature: 0.3,
-            max_tokens: 2000
+            max_tokens: AI_CODE_MAX_TOKENS
         })
     });
 
@@ -530,7 +580,7 @@ async function fixWithOpenAINonStream(
     }
 
     const data: any = await response.json();
-    const code = data.choices?.[0]?.message?.content?.trim();
+    const code = readOpenAIMessageContent(data);
 
     if (!code) {
         throw new Error('OpenAI 返回了空结果');
@@ -558,7 +608,7 @@ async function fixWithOpenAIStream(
                 { role: 'user', content: userPrompt }
             ],
             temperature: 0.3,
-            max_tokens: 2000,
+            max_tokens: AI_CODE_MAX_TOKENS,
             stream: true
         })
     });
@@ -568,46 +618,7 @@ async function fixWithOpenAIStream(
         throw new Error(`OpenAI API 错误 (${response.status}): ${errorText}`);
     }
 
-    const reader = response.body?.getReader();
-    const decoder = new TextDecoder();
-    if (!reader) {
-        throw new Error('无法读取响应流');
-    }
-
-    let fullCode = '';
-    try {
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            const chunk = decoder.decode(value, { stream: true });
-            const lines = chunk.split('\n').filter(line => line.trim() !== '');
-
-            for (const line of lines) {
-                if (!line.startsWith('data: ')) continue;
-                const data = line.slice(6);
-                if (data === '[DONE]') continue;
-                try {
-                    const parsed = JSON.parse(data);
-                    const content = parsed.choices?.[0]?.delta?.content;
-                    if (content) {
-                        fullCode += content;
-                        onChunk(content);
-                    }
-                } catch (_) {
-                    // ignore parse errors
-                }
-            }
-        }
-    } finally {
-        reader.releaseLock();
-    }
-
-    if (!fullCode.trim()) {
-        throw new Error('OpenAI 返回了空结果');
-    }
-
-    return cleanAIResponse(fullCode);
+    return readOpenAIStream(response, onChunk);
 }
 
 async function fixWithAnthropicNonStream(
@@ -624,7 +635,7 @@ async function fixWithAnthropicNonStream(
         },
         body: JSON.stringify({
             model: config.model,
-            max_tokens: 2000,
+            max_tokens: AI_CODE_MAX_TOKENS,
             system: systemPrompt,
             messages: [
                 { role: 'user', content: userPrompt }
@@ -663,7 +674,7 @@ async function fixWithAnthropicStream(
         },
         body: JSON.stringify({
             model: config.model,
-            max_tokens: 2000,
+            max_tokens: AI_CODE_MAX_TOKENS,
             system: systemPrompt,
             messages: [
                 { role: 'user', content: userPrompt }
