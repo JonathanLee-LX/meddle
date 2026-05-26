@@ -1,11 +1,14 @@
 import { useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react'
-import { GripVertical, Loader2, Save } from 'lucide-react'
+import { Code, GripVertical, Loader2, Save, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
+import { fixCode } from '@/lib/code-fixer'
+import { formatContent } from '@/lib/formatter'
+import { getAIConfig, isAIConfigValid } from '@/lib/ai-config-store'
 import { validateContent } from '@/lib/syntax-highlight'
 import type { MockRule } from '@/types'
 import { MonacoEditor } from './monaco-editor'
@@ -58,8 +61,12 @@ export function MockEditorPanel({
   const [headersText, setHeadersText] = useState(() => JSON.stringify(initialForm.headers || {}, null, 2))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [formatError, setFormatError] = useState<string | null>(null)
   const [validationError, setValidationError] = useState<string | null>(null)
+  const [fixing, setFixing] = useState(false)
+  const [formatting, setFormatting] = useState(false)
   const [editorHeight, setEditorHeight] = useState(300)
+  const isAIReady = isAIConfigValid(getAIConfig())
 
   const validateBody = useCallback((body: string) => {
     if (!body.trim()) {
@@ -97,6 +104,42 @@ export function MockEditorPanel({
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
   }, [editorHeight])
+
+  const formatBody = async () => {
+    if (!form.body.trim() || formatting) return
+
+    setFormatting(true)
+    setFormatError(null)
+    try {
+      const { formatted } = await formatContent(form.body)
+      updateField('body', formatted)
+    } catch (err) {
+      setFormatError(err instanceof Error ? err.message : '格式化失败')
+      window.setTimeout(() => setFormatError(null), 3000)
+    } finally {
+      setFormatting(false)
+    }
+  }
+
+  const fixBodyErrors = async () => {
+    if (!form.body.trim() || fixing || !isAIReady) return
+
+    setFixing(true)
+    setFormatError(null)
+    try {
+      const result = await fixCode(form.body, true)
+      if (!result.success) {
+        throw new Error('自动修复失败，请手动修正语法错误')
+      }
+      updateField('body', result.fixed)
+      setValidationError(null)
+    } catch (err) {
+      setFormatError(err instanceof Error ? err.message : '修复失败')
+      window.setTimeout(() => setFormatError(null), 3000)
+    } finally {
+      setFixing(false)
+    }
+  }
 
   const handleSave = async () => {
     if (!form.urlPattern.trim()) {
@@ -213,7 +256,42 @@ export function MockEditorPanel({
         </div>
 
         <div className="space-y-2">
-          <Label>响应内容</Label>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Label>响应内容</Label>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {formatError && (
+                <span className="max-w-[280px] truncate text-xs text-red-500" title={formatError}>
+                  {formatError}
+                </span>
+              )}
+              {form.body.trim() && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={fixBodyErrors}
+                  disabled={fixing || !isAIReady}
+                  title={!isAIReady ? 'AI 未配置或未启用' : '使用 AI 修复响应内容'}
+                >
+                  {fixing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Wand2 className="mr-1 h-3 w-3" />}
+                  {fixing ? '修复中...' : 'AI修复'}
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={formatBody}
+                disabled={formatting || !form.body.trim()}
+                title="格式化响应内容"
+              >
+                {formatting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Code className="mr-1 h-3 w-3" />}
+                {formatting ? '格式化中...' : '代码格式化'}
+              </Button>
+            </div>
+          </div>
           <div className="relative group" style={{ height: `${editorHeight}px` }}>
             <MonacoEditor
               value={form.body}
