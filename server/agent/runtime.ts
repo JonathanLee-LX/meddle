@@ -20,6 +20,10 @@ const SYSTEM_PROMPT = [
     '回答要简洁，使用中文。'
 ].join('\n')
 
+export interface AgentRuntimeEvents {
+    onContentDelta?: (delta: string) => void
+}
+
 function parseToolArguments(raw: string): Record<string, unknown> {
     try {
         const parsed = JSON.parse(raw || '{}') as unknown
@@ -45,6 +49,7 @@ export async function runAgent(
     toolRegistry: Map<string, AgentTool>,
     toolContext: AgentToolContext,
     createConfirmation: (confirmation: Omit<AgentPendingConfirmation, 'id' | 'createdAt'>) => AgentPendingConfirmation,
+    events: AgentRuntimeEvents = {},
 ): Promise<AgentChatResponse> {
     const runId = randomUUID()
     const messages: AgentChatMessage[] = [
@@ -55,7 +60,9 @@ export async function runAgent(
     const pendingConfirmations: AgentPendingConfirmation[] = []
 
     for (let step = 0; step < MAX_TOOL_STEPS; step += 1) {
-        const response = await requestAgentModel(request.aiConfig, messages, toToolDefinitions(toolRegistry))
+        const response = await requestAgentModel(request.aiConfig, messages, toToolDefinitions(toolRegistry), {
+            onContentDelta: events.onContentDelta,
+        })
 
         if (response.toolCalls.length === 0) {
             return {

@@ -27,6 +27,10 @@ export interface AgentModelResponse {
     toolCalls: AgentModelToolCall[]
 }
 
+export interface AgentModelStreamOptions {
+    onContentDelta?: (delta: string) => void
+}
+
 function normalizeOpenAIChatUrl(baseUrl: string): string {
     const trimmed = baseUrl.trim().replace(/\/$/, '')
     if (/\/chat\/completions$/i.test(trimmed)) return trimmed
@@ -55,11 +59,13 @@ export async function requestAgentModel(
     config: AgentAIConfig,
     messages: AgentChatMessage[],
     tools: AgentToolDefinition[],
+    streamOptions: AgentModelStreamOptions = {},
 ): Promise<AgentModelResponse> {
     if (config.provider !== 'openai') {
         throw new Error('当前命令面板 Agent MVP 仅支持 OpenAI-compatible Chat Completions。')
     }
 
+    const stream = Boolean(streamOptions.onContentDelta)
     const response = await fetch(normalizeOpenAIChatUrl(config.baseUrl), {
         method: 'POST',
         headers: {
@@ -73,14 +79,20 @@ export async function requestAgentModel(
             tools,
             tool_choice: 'auto',
             max_tokens: 1200,
+            ...(stream ? { stream: true } : {}),
         }),
     })
 
-    const text = await response.text()
     if (!response.ok) {
+        const text = await response.text()
         throw new Error(`AI 请求失败: ${response.status} ${text.slice(0, 300)}`)
     }
 
+    if (stream) {
+        return readStreamingResponse(response, streamOptions)
+    }
+
+    const text = await response.text()
     const payload = JSON.parse(text) as Record<string, unknown>
     const choices = Array.isArray(payload.choices) ? payload.choices : []
     const firstChoice = asObject(choices[0])
@@ -94,5 +106,82 @@ export async function requestAgentModel(
         content,
         reasoningContent,
         toolCalls: parseToolCalls(message.tool_calls),
+    }
+}
+
+async function readStreamingResponse(
+    response: Response,
+    streamOptions: AgentModelStreamOptions,
+): Promise<AgentModelResponse> {
+    if (!response.body) {
+        throw new Error('AI 流式响应不可用')
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    const toolCallParts = new Map<number, AgentModelToolCall>()
+    let buffer = ''
+    let content = ''
+    let reasoningContent = ''
+
+    const handlePayload = (payload: Record<string, unknown>) => {
+        const choices = Array.isArray(payload.choices) ? payload.choices : []
+        const firstChoice = asObject(choices[0])
+        const delta = asObject(firstChoice.delta)
+        const contentDelta = typeof delta.content === 'string' ? delta.content : ''
+        if (contentDelta) {
+            content += contentDelta
+            streamOptions.onContentDelta?.(contentDelta)
+        }
+        const reasoningDelta = typeof delta.reasoning_content === 'string'
+            ? delta.reasoning_content
+            : ''
+        if (reasoningDelta) {
+            reasoningContent += reasoningDelta
+        }
+
+        const toolCallDeltas = Array.isArray(delta.tool_calls) ? delta.tool_calls : []
+        for (const rawCall of toolCallDeltas) {
+            const call = asObject(rawCall)
+            const index = typeof call.index === 'number' ? call.index : toolCallParts.size
+            const existing = toolCallParts.get(index) || { id: `tool-call-${index}`, name: '', arguments: '' }
+            if (typeof call.id === 'string') existing.id = call.id
+            const fn = asObject(call.function)
+            if (typeof fn.name === 'string') existing.name += fn.name
+            if (typeof fn.arguments === 'string') existing.arguments += fn.arguments
+            toolCallParts.set(index, existing)
+        }
+    }
+
+    const handleEventBlock = (block: string) => {
+        const data = block
+            .split('\n')
+            .filter((line) => line.startsWith('data:'))
+            .map((line) => line.slice(5).trimStart())
+            .join('\n')
+            .trim()
+        if (!data || data === '[DONE]') return
+        handlePayload(JSON.parse(data) as Record<string, unknown>)
+    }
+
+    while (true) {
+        const { done, value } = await reader.read()
+        buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
+        const blocks = buffer.split(/\n\n/)
+        buffer = blocks.pop() || ''
+        for (const block of blocks) {
+            handleEventBlock(block)
+        }
+        if (done) break
+    }
+
+    if (buffer.trim()) {
+        handleEventBlock(buffer)
+    }
+
+    return {
+        content,
+        reasoningContent: reasoningContent || undefined,
+        toolCalls: Array.from(toolCallParts.values()).filter((call) => call.name),
     }
 }

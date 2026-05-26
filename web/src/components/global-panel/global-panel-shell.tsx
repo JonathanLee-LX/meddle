@@ -4,8 +4,7 @@ import { AlertCircle, ArrowLeft, Bot, CheckCircle2, Command, Loader2, Maximize2,
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { confirmAgentAction, sendAgentMessage, type AgentChatResponse } from '@/lib/agent-api'
+import { confirmAgentAction, streamAgentMessage, type AgentChatResponse } from '@/lib/agent-api'
 import { cn } from '@/lib/utils'
 import type { CommandAction, GlobalPanelRoute } from './types'
 import { useCommandSearch } from './use-command-search'
@@ -17,7 +16,7 @@ interface GlobalPanelShellProps {
 }
 
 const sizeClassNames: Record<string, string> = {
-  command: 'w-[min(720px,calc(100vw-32px))] max-h-[min(720px,calc(100vh-48px))]',
+  command: 'w-[min(760px,calc(100vw-32px))] h-[min(760px,calc(100vh-48px))]',
   md: 'w-[min(760px,calc(100vw-32px))] h-[min(720px,calc(100vh-48px))]',
   lg: 'w-[min(1040px,calc(100vw-32px))] h-[min(780px,calc(100vh-48px))]',
   xl: 'w-[min(1240px,calc(100vw-32px))] h-[min(860px,calc(100vh-32px))]',
@@ -282,6 +281,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
   const [agentLoading, setAgentLoading] = useState(false)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const agentOutputRef = useRef<HTMLDivElement>(null)
   const filteredCommands = useCommandSearch(commands, query)
   const trimmedQuery = query.trim()
   const hasAgentOutput = Boolean(agentError || agentResponse || agentLoading)
@@ -294,6 +294,12 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
   useEffect(() => {
     setActiveIndex(0)
   }, [query])
+
+  useEffect(() => {
+    const output = agentOutputRef.current
+    if (!output || !hasAgentOutput) return
+    output.scrollTop = output.scrollHeight
+  }, [agentError, agentLoading, agentResponse?.message, hasAgentOutput])
 
   const activeCommand = filteredCommands[activeIndex]
 
@@ -325,8 +331,19 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
     setAgentLoading(true)
     setAgentError(null)
     setAgentResponse(null)
+    let streamedMessage = ''
     try {
-      const response = await sendAgentMessage(message)
+      const response = await streamAgentMessage(message, {
+        onDelta: (delta) => {
+          streamedMessage += delta
+          setAgentResponse({
+            runId: 'streaming',
+            message: streamedMessage,
+            pendingConfirmations: [],
+            toolResults: [],
+          })
+        },
+      })
       setAgentResponse(response)
     } catch (error) {
       setAgentError((error as Error).message)
@@ -357,7 +374,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
   }
 
   return (
-    <div className="flex min-h-[420px] flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       <div className="global-panel-topbar flex items-center gap-3 border-b px-4 py-3">
         <Search className="h-4 w-4 text-muted-foreground" />
         <Input
@@ -389,7 +406,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
           ⌘K
         </Badge>
       </div>
-      <ScrollArea className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {trimmedQuery && (
           <div className="p-3 pb-0">
             <button
@@ -426,7 +443,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
                   {agentError ? 'AI 请求失败' : agentLoading ? 'AI 正在处理' : 'AI 响应'}
                 </div>
               </div>
-              <ScrollArea className="max-h-[min(430px,calc(100vh-260px))]">
+              <div ref={agentOutputRef} className="max-h-[min(520px,calc(100vh-220px))] overflow-y-auto overscroll-contain">
                 <div className="px-3 py-3">
                   {agentError ? (
                     <div className="whitespace-pre-wrap break-words leading-6 text-destructive">{agentError}</div>
@@ -466,7 +483,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
                     </div>
                   ))}
                 </div>
-              </ScrollArea>
+              </div>
             </div>
           </div>
         )}
@@ -531,7 +548,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
             ))}
           </div>
         ) : null}
-      </ScrollArea>
+      </div>
     </div>
   )
 }

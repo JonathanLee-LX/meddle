@@ -43,6 +43,11 @@ function sendJson(res: Response, statusCode: number, payload: unknown): void {
     res.status(statusCode).json(payload)
 }
 
+function writeSse(res: Response, event: string, payload: unknown): void {
+    res.write(`event: ${event}\n`)
+    res.write(`data: ${JSON.stringify(payload)}\n\n`)
+}
+
 export function registerAgentRoutes(app: Application, ctx: ServerContext): void {
     const tools = createAgentTools()
     const toolContext = { serverContext: ctx }
@@ -66,6 +71,35 @@ export function registerAgentRoutes(app: Application, ctx: ServerContext): void 
             sendJson(res, 200, response)
         } catch (err) {
             sendJson(res, 400, { error: (err as Error).message })
+        }
+    })
+
+    app.post('/api/agent/chat-stream', async (req: Request, res: Response) => {
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream; charset=utf-8',
+            'Cache-Control': 'no-cache, no-transform',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        })
+        try {
+            const chatRequest = parseChatRequest(req.body)
+            writeSse(res, 'start', { status: 'running' })
+            const response = await runAgent(chatRequest, tools, toolContext, (confirmation) => {
+                const item: AgentPendingConfirmation = {
+                    ...confirmation,
+                    id: randomUUID(),
+                    createdAt: Date.now(),
+                }
+                pendingConfirmations.set(item.id, item)
+                return item
+            }, {
+                onContentDelta: (delta) => writeSse(res, 'delta', { delta }),
+            })
+            writeSse(res, 'done', response)
+        } catch (err) {
+            writeSse(res, 'error', { error: (err as Error).message })
+        } finally {
+            res.end()
         }
     })
 
