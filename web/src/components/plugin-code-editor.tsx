@@ -140,9 +140,16 @@ export function PluginCodeEditor({
     setCode(originalCode)
   }
 
+  const handleClose = () => {
+    if (isDirty && !confirm('有未保存的修改，确定要关闭吗？')) return
+    setAiReviseOpen(false)
+    onOpenChange?.(false)
+  }
+
   const handleAIRevise = async () => {
     if (!extraInstruction.trim() || !isAIReady) return
 
+    setAiReviseOpen(true)
     setRevising(true)
     setError(null)
     setReviseStatus('AI 正在根据补充需求更新代码...')
@@ -259,6 +266,71 @@ export function PluginCodeEditor({
           )}
         </div>
 
+        <div
+          aria-hidden={!aiReviseOpen}
+          className={[
+            'overflow-hidden transition-[max-height,opacity] duration-200 ease-out',
+            aiReviseOpen ? 'max-h-[260px] border-t opacity-100' : 'max-h-0 border-t-0 opacity-0 pointer-events-none',
+          ].join(' ')}
+        >
+          <div className="space-y-3 px-6 py-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <PencilLine className="h-4 w-4" />
+                  AI 更新代码
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  输入补充需求后，AI 会直接把结果写回当前编辑器。
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setAiReviseOpen(false)}
+                disabled={!aiReviseOpen || revising}
+              >
+                收起
+              </Button>
+            </div>
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+              <div className="space-y-2">
+                <Label htmlFor="plugin-editor-extra-instruction">补充需求信息</Label>
+                <Textarea
+                  id="plugin-editor-extra-instruction"
+                  value={extraInstruction}
+                  onChange={(e) => setExtraInstruction(e.target.value)}
+                  placeholder="例如：补充 onBeforeResponse 对空 referer 的处理；保留现有 manifest 和 hook，不要改插件 id。"
+                  className="min-h-[88px] resize-none"
+                  disabled={!aiReviseOpen || revising || saving}
+                />
+              </div>
+              <Button
+                size="sm"
+                onClick={handleAIRevise}
+                disabled={!aiReviseOpen || !extraInstruction.trim() || !isAIReady || revising || saving}
+                title={!isAIReady ? 'AI 未配置或未启用' : '根据补充需求更新当前代码'}
+              >
+                {revising ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    更新中...
+                  </>
+                ) : (
+                  <>
+                    <PencilLine className="h-4 w-4 mr-1" />
+                    更新代码
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {reviseStatus || (isAIReady ? '生成结果会写回上方编辑器，请检查后再保存或热加载。' : 'AI 未配置或未启用，请先在设置中配置 AI 服务。')}
+            </p>
+          </div>
+        </div>
+
         {error && code && (
           <div className="px-6 py-2 text-sm text-destructive bg-destructive/10">
             {error}
@@ -282,8 +354,8 @@ export function PluginCodeEditor({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setAiReviseOpen(true)}
-              disabled={!code || !isAIReady || saving || revising}
+              onClick={() => setAiReviseOpen((open) => !open)}
+              disabled={!code || saving || revising}
               title={!isAIReady ? 'AI 未配置或未启用' : '使用 AI 根据补充需求更新代码'}
             >
               <PencilLine className="h-4 w-4 mr-1" />
@@ -294,10 +366,7 @@ export function PluginCodeEditor({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                if (isDirty && !confirm('有未保存的修改，确定要关闭吗？')) return
-                onOpenChange?.(false)
-              }}
+              onClick={handleClose}
               disabled={saving || revising}
             >
               关闭
@@ -321,72 +390,6 @@ export function PluginCodeEditor({
             </Button>
           </div>
         </div>
-
-        <Sheet open={aiReviseOpen} onOpenChange={setAiReviseOpen}>
-          <SheetContent className="p-0 flex flex-col" resizable defaultWidth={480} storageKey="plugin-code-ai-revise">
-            <SheetHeader className="border-b px-5 py-4">
-              <SheetTitle className="flex items-center gap-2">
-                <PencilLine className="h-5 w-5" />
-                AI 更新代码
-              </SheetTitle>
-              <SheetDescription>
-                输入补充需求后，AI 会基于当前插件代码直接更新编辑器内容。
-              </SheetDescription>
-            </SheetHeader>
-
-            <div className="flex-1 overflow-auto px-5 py-4 space-y-3">
-              <div className="space-y-2">
-                <Label htmlFor="plugin-editor-extra-instruction">补充需求信息</Label>
-                <Textarea
-                  id="plugin-editor-extra-instruction"
-                  value={extraInstruction}
-                  onChange={(e) => setExtraInstruction(e.target.value)}
-                  placeholder="例如：补充 onBeforeResponse 对空 referer 的处理；保留现有 manifest 和 hook，不要改插件 id。"
-                  className="min-h-[160px]"
-                  disabled={revising || saving}
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {reviseStatus || '生成结果会写回左侧代码编辑器，请检查后再保存或热加载。'}
-              </p>
-              {!isAIReady && (
-                <div className="rounded-md border border-yellow-200 bg-yellow-50/80 px-3 py-2 text-sm text-yellow-700 dark:border-yellow-900 dark:bg-yellow-950/20 dark:text-yellow-300">
-                  AI 未配置或未启用，请先在设置中配置 AI 服务。
-                </div>
-              )}
-            </div>
-
-            <div className="border-t p-4">
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setAiReviseOpen(false)}
-                  disabled={revising}
-                >
-                  关闭
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleAIRevise}
-                  disabled={!extraInstruction.trim() || !isAIReady || revising || saving}
-                >
-                  {revising ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                      AI 更新中...
-                    </>
-                  ) : (
-                    <>
-                      <PencilLine className="h-4 w-4 mr-1" />
-                      更新代码
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </SheetContent>
-        </Sheet>
     </>
   )
 
