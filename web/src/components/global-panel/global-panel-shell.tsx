@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Dialog as DialogPrimitive } from 'radix-ui'
 import { AlertCircle, ArrowLeft, Bot, CheckCircle2, Command, Loader2, Maximize2, Minimize2, Search, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -282,6 +282,8 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const agentOutputRef = useRef<HTMLDivElement>(null)
+  const activeCommandRef = useRef<HTMLButtonElement | null>(null)
+  const commandScrollRef = useRef<HTMLDivElement>(null)
   const filteredCommands = useCommandSearch(commands, query)
   const trimmedQuery = query.trim()
   const hasAgentOutput = Boolean(agentError || agentResponse || agentLoading)
@@ -302,6 +304,21 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
   }, [agentError, agentLoading, agentResponse?.message, hasAgentOutput])
 
   const activeCommand = filteredCommands[activeIndex]
+
+  useLayoutEffect(() => {
+    const activeElement = activeCommandRef.current
+    const scrollContainer = commandScrollRef.current
+    if (!activeElement || !scrollContainer) return
+
+    const itemRect = activeElement.getBoundingClientRect()
+    const containerRect = scrollContainer.getBoundingClientRect()
+    const padding = 12
+    if (itemRect.top < containerRect.top + padding) {
+      scrollContainer.scrollTop -= containerRect.top + padding - itemRect.top
+    } else if (itemRect.bottom > containerRect.bottom - padding) {
+      scrollContainer.scrollTop += itemRect.bottom - (containerRect.bottom - padding)
+    }
+  }, [activeIndex, filteredCommands])
 
   const groupedCommands = useMemo(() => {
     const groups = new Map<string, CommandAction[]>()
@@ -406,7 +423,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
           ⌘K
         </Badge>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={commandScrollRef} className="min-h-0 flex-1 overflow-y-auto">
         {trimmedQuery && (
           <div className="p-3 pb-0">
             <button
@@ -507,6 +524,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
                   return (
                     <button
                       key={command.id}
+                      ref={selected ? activeCommandRef : undefined}
                       type="button"
                       data-selected={selected ? 'true' : undefined}
                       className={cn(
