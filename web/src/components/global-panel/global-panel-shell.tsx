@@ -77,6 +77,201 @@ function readStoredPanelSize(routeId: string) {
   }
 }
 
+function renderInlineMarkdown(text: string): React.ReactNode[] {
+  const nodes: React.ReactNode[] = []
+  const pattern = /(`[^`]+`|\*\*[^*]+\*\*)/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = pattern.exec(text))) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index))
+    }
+    const token = match[0]
+    if (token.startsWith('`')) {
+      nodes.push(
+        <code key={`${match.index}-code`} className="rounded bg-muted/70 px-1 py-0.5 font-mono text-[0.92em]">
+          {token.slice(1, -1)}
+        </code>
+      )
+    } else {
+      nodes.push(<strong key={`${match.index}-strong`}>{token.slice(2, -2)}</strong>)
+    }
+    lastIndex = match.index + token.length
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex))
+  }
+  return nodes
+}
+
+function isTableDivider(line: string) {
+  return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line)
+}
+
+function splitTableRow(line: string) {
+  return line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim())
+}
+
+function MarkdownContent({ content }: { content: string }) {
+  const lines = content.replace(/\r\n/g, '\n').split('\n')
+  const blocks: React.ReactNode[] = []
+  let index = 0
+
+  while (index < lines.length) {
+    const line = lines[index]
+    const trimmed = line.trim()
+
+    if (!trimmed) {
+      index += 1
+      continue
+    }
+
+    const fence = trimmed.match(/^```(\w+)?/)
+    if (fence) {
+      const language = fence[1]
+      const codeLines: string[] = []
+      index += 1
+      while (index < lines.length && !lines[index].trim().startsWith('```')) {
+        codeLines.push(lines[index])
+        index += 1
+      }
+      index += 1
+      blocks.push(
+        <div key={`code-${index}`} className="overflow-hidden rounded-md border bg-muted/45">
+          {language && (
+            <div className="border-b bg-background/45 px-3 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+              {language}
+            </div>
+          )}
+          <pre className="max-h-64 overflow-auto p-3 text-xs leading-5">
+            <code>{codeLines.join('\n')}</code>
+          </pre>
+        </div>
+      )
+      continue
+    }
+
+    const heading = trimmed.match(/^(#{1,4})\s+(.+)$/)
+    if (heading) {
+      const level = heading[1].length
+      const headingClassName = cn(
+        'font-semibold leading-6 text-foreground',
+        level <= 2 ? 'mt-2 text-sm' : 'text-[13px]'
+      )
+      const headingContent = renderInlineMarkdown(heading[2])
+      blocks.push(
+        level === 1 ? (
+          <h3 key={`heading-${index}`} className={headingClassName}>{headingContent}</h3>
+        ) : level === 2 ? (
+          <h4 key={`heading-${index}`} className={headingClassName}>{headingContent}</h4>
+        ) : (
+          <h5 key={`heading-${index}`} className={headingClassName}>{headingContent}</h5>
+        )
+      )
+      index += 1
+      continue
+    }
+
+    if (/^---+$/.test(trimmed)) {
+      blocks.push(<div key={`hr-${index}`} className="h-px bg-border/70" />)
+      index += 1
+      continue
+    }
+
+    if (trimmed.includes('|') && index + 1 < lines.length && isTableDivider(lines[index + 1])) {
+      const headers = splitTableRow(trimmed)
+      const rows: string[][] = []
+      index += 2
+      while (index < lines.length && lines[index].trim().includes('|')) {
+        rows.push(splitTableRow(lines[index]))
+        index += 1
+      }
+      blocks.push(
+        <div key={`table-${index}`} className="overflow-auto rounded-md border">
+          <table className="w-full min-w-max border-collapse text-xs">
+            <thead className="bg-muted/50 text-muted-foreground">
+              <tr>
+                {headers.map((header, cellIndex) => (
+                  <th key={`${header}-${cellIndex}`} className="border-b px-2 py-1.5 text-left font-medium">
+                    {renderInlineMarkdown(header)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, rowIndex) => (
+                <tr key={rowIndex} className="border-b last:border-0">
+                  {row.map((cell, cellIndex) => (
+                    <td key={`${rowIndex}-${cellIndex}`} className="px-2 py-1.5 align-top">
+                      {renderInlineMarkdown(cell)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+      continue
+    }
+
+    if (/^[-*]\s+/.test(trimmed) || /^\d+\.\s+/.test(trimmed)) {
+      const ordered = /^\d+\.\s+/.test(trimmed)
+      const items: string[] = []
+      while (index < lines.length) {
+        const item = lines[index].trim()
+        const match = ordered ? item.match(/^\d+\.\s+(.+)$/) : item.match(/^[-*]\s+(.+)$/)
+        if (!match) break
+        items.push(match[1])
+        index += 1
+      }
+      const ListTag = ordered ? 'ol' : 'ul'
+      blocks.push(
+        <ListTag key={`list-${index}`} className={cn('space-y-1 pl-5', ordered ? 'list-decimal' : 'list-disc')}>
+          {items.map((item, itemIndex) => (
+            <li key={itemIndex}>{renderInlineMarkdown(item)}</li>
+          ))}
+        </ListTag>
+      )
+      continue
+    }
+
+    const paragraph: string[] = [trimmed]
+    index += 1
+    while (index < lines.length) {
+      const next = lines[index].trim()
+      if (
+        !next ||
+        next.startsWith('```') ||
+        /^#{1,4}\s+/.test(next) ||
+        /^[-*]\s+/.test(next) ||
+        /^\d+\.\s+/.test(next) ||
+        /^---+$/.test(next) ||
+        (next.includes('|') && index + 1 < lines.length && isTableDivider(lines[index + 1]))
+      ) {
+        break
+      }
+      paragraph.push(next)
+      index += 1
+    }
+
+    blocks.push(
+      <p key={`p-${index}`} className="leading-6 text-foreground/90">
+        {renderInlineMarkdown(paragraph.join(' '))}
+      </p>
+    )
+  }
+
+  return <div className="agent-markdown-content space-y-3 text-sm">{blocks}</div>
+}
+
 function CommandPalette({ commands }: { commands: CommandAction[] }) {
   const panel = useGlobalPanel()
   const [query, setQuery] = useState('')
@@ -89,6 +284,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const filteredCommands = useCommandSearch(commands, query)
   const trimmedQuery = query.trim()
+  const hasAgentOutput = Boolean(agentError || agentResponse || agentLoading)
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => inputRef.current?.focus())
@@ -215,21 +411,30 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
         {(agentError || agentResponse || agentLoading) && (
           <div className="p-3 pb-0">
             <div className={cn(
-              'rounded-md border px-3 py-2 text-sm',
+              'overflow-hidden rounded-md border text-sm',
               agentError ? 'border-destructive/40 bg-destructive/5' : 'bg-background/35 backdrop-blur'
             )}>
-              <div className="flex items-start gap-2">
+              <div className="flex items-center gap-2 border-b bg-background/35 px-3 py-2">
                 {agentError ? (
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                  <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
                 ) : agentLoading ? (
-                  <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
                 ) : (
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
                 )}
-                <div className="min-w-0 flex-1">
-                  <div className={cn('leading-5', agentError && 'text-destructive')}>
-                    {agentError || (agentLoading ? 'AI 正在处理...' : agentResponse?.message)}
-                  </div>
+                <div className="min-w-0 flex-1 font-medium">
+                  {agentError ? 'AI 请求失败' : agentLoading ? 'AI 正在处理' : 'AI 响应'}
+                </div>
+              </div>
+              <ScrollArea className="max-h-[min(430px,calc(100vh-260px))]">
+                <div className="px-3 py-3">
+                  {agentError ? (
+                    <div className="whitespace-pre-wrap break-words leading-6 text-destructive">{agentError}</div>
+                  ) : agentLoading ? (
+                    <div className="leading-6 text-muted-foreground">正在分析你的请求并调用可用工具...</div>
+                  ) : agentResponse?.message ? (
+                    <MarkdownContent content={agentResponse.message} />
+                  ) : null}
                   {agentResponse?.pendingConfirmations.map((confirmation) => (
                     <div key={confirmation.id} className="mt-3 rounded-md border bg-background/55 p-3 backdrop-blur">
                       <div className="font-medium">{confirmation.summary}</div>
@@ -261,16 +466,16 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
                     </div>
                   ))}
                 </div>
-              </div>
+              </ScrollArea>
             </div>
           </div>
         )}
-        {filteredCommands.length === 0 ? (
+        {filteredCommands.length === 0 && !hasAgentOutput ? (
           <div className="flex h-64 flex-col items-center justify-center gap-2 px-6 text-center text-muted-foreground">
             <Command className="h-8 w-8 opacity-50" />
             <div className="text-sm">没有找到匹配的操作</div>
           </div>
-        ) : (
+        ) : filteredCommands.length > 0 ? (
           <div className="space-y-4 p-3">
             {groupedCommands.map(([section, sectionCommands]) => (
               <div key={section} className="space-y-1">
@@ -325,7 +530,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
               </div>
             ))}
           </div>
-        )}
+        ) : null}
       </ScrollArea>
     </div>
   )
