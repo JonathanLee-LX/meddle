@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { MonacoEditor } from './monaco-editor'
 import { getAIConfig, getActiveModel, isAIConfigValid } from '@/lib/ai-config-store'
-import { Code2, Save, Loader2, Zap, RotateCcw, PencilLine, GripVertical } from 'lucide-react'
+import { Code2, Save, Loader2, Zap, RotateCcw, PencilLine } from 'lucide-react'
 
 interface PluginCodeEditorProps {
   open?: boolean
@@ -40,7 +40,6 @@ export function PluginCodeEditor({
   const [extraInstruction, setExtraInstruction] = useState('')
   const [reviseStatus, setReviseStatus] = useState<string | null>(null)
   const [aiReviseOpen, setAiReviseOpen] = useState(false)
-  const [editorHeight, setEditorHeight] = useState(420)
 
   const isDirty = code !== originalCode
   const aiConfig = getAIConfig()
@@ -79,10 +78,10 @@ export function PluginCodeEditor({
   }, [filename])
 
   useEffect(() => {
-    if (open && filename) {
+    if ((open || embedded) && filename) {
       fetchCode()
     }
-  }, [open, filename, fetchCode])
+  }, [open, embedded, filename, fetchCode])
 
   const handleSave = async () => {
     setSaving(true)
@@ -140,26 +139,6 @@ export function PluginCodeEditor({
   const handleRevert = () => {
     setCode(originalCode)
   }
-
-  const handleEditorResize = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    const startY = e.clientY
-    const startHeight = editorHeight
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const deltaY = moveEvent.clientY - startY
-      const newHeight = Math.max(220, startHeight + deltaY)
-      setEditorHeight(newHeight)
-    }
-
-    const handleMouseUp = () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-    }
-
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
-  }, [editorHeight])
 
   const handleAIRevise = async () => {
     if (!extraInstruction.trim() || !isAIReady) return
@@ -256,33 +235,27 @@ export function PluginCodeEditor({
 
         <Separator />
 
-        <div className="flex-1 overflow-auto px-4 py-3 space-y-3">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-3">
           {loading ? (
-            <div className="flex items-center justify-center h-[320px] gap-2 text-muted-foreground">
+            <div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
               <span>加载中...</span>
             </div>
           ) : error && !code ? (
-            <div className="flex items-center justify-center h-[320px] text-destructive">
+            <div className="flex flex-1 items-center justify-center text-destructive">
               {error}
             </div>
           ) : (
-            <>
-              <div className="relative group" style={{ height: `${editorHeight}px` }}>
+            <div className="min-h-0 flex-1">
+              <div className="relative h-full min-h-[320px]">
                 <MonacoEditor
                   value={code}
                   onChange={setCode}
                   language="javascript"
                   height="flex"
                 />
-                <div
-                  className="absolute bottom-0 left-0 right-0 h-4 cursor-ns-resize flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-border/50 to-transparent"
-                  onMouseDown={handleEditorResize}
-                >
-                  <GripVertical className="h-4 w-4 text-muted-foreground" />
-                </div>
               </div>
-            </>
+            </div>
           )}
         </div>
 
