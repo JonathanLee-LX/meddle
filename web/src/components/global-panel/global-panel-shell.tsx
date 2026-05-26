@@ -5,7 +5,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
 import { confirmAgentAction, sendAgentMessage, type AgentChatResponse } from '@/lib/agent-api'
 import { cn } from '@/lib/utils'
 import type { CommandAction, GlobalPanelRoute } from './types'
@@ -163,7 +162,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
 
   return (
     <div className="flex min-h-[420px] flex-col">
-      <div className="flex items-center gap-3 px-4 py-3">
+      <div className="global-panel-topbar flex items-center gap-3 border-b px-4 py-3">
         <Search className="h-4 w-4 text-muted-foreground" />
         <Input
           ref={inputRef}
@@ -188,23 +187,22 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
             }
           }}
           placeholder="搜索命令，或直接描述你想让 AI 完成的操作..."
-          className="h-9 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+          className="h-9 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
         />
         <Badge variant="outline" className="hidden shrink-0 text-[11px] font-normal sm:inline-flex">
           ⌘K
         </Badge>
       </div>
-      <Separator />
       <ScrollArea className="min-h-0 flex-1">
         {trimmedQuery && (
           <div className="p-3 pb-0">
             <button
               type="button"
-              className="flex w-full items-center gap-3 rounded-md border bg-muted/30 px-3 py-2 text-left text-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              className="global-command-action flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60"
               disabled={agentLoading}
               onClick={() => void runAgent(trimmedQuery)}
             >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-background">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-background/55 backdrop-blur">
                 {agentLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
               </div>
               <div className="min-w-0 flex-1">
@@ -218,7 +216,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
           <div className="p-3 pb-0">
             <div className={cn(
               'rounded-md border px-3 py-2 text-sm',
-              agentError ? 'border-destructive/40 bg-destructive/5' : 'bg-muted/20'
+              agentError ? 'border-destructive/40 bg-destructive/5' : 'bg-background/35 backdrop-blur'
             )}>
               <div className="flex items-start gap-2">
                 {agentError ? (
@@ -233,7 +231,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
                     {agentError || (agentLoading ? 'AI 正在处理...' : agentResponse?.message)}
                   </div>
                   {agentResponse?.pendingConfirmations.map((confirmation) => (
-                    <div key={confirmation.id} className="mt-3 rounded-md border bg-background p-3">
+                    <div key={confirmation.id} className="mt-3 rounded-md border bg-background/55 p-3 backdrop-blur">
                       <div className="font-medium">{confirmation.summary}</div>
                       {confirmation.diff && (
                         <pre className="mt-2 max-h-40 overflow-auto rounded border bg-muted/40 p-2 text-xs leading-5 text-muted-foreground">
@@ -288,9 +286,10 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
                     <button
                       key={command.id}
                       type="button"
+                      data-selected={selected ? 'true' : undefined}
                       className={cn(
                         'flex w-full items-center gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors',
-                        selected ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/70',
+                        selected ? 'bg-accent/70 text-accent-foreground shadow-sm' : 'hover:bg-accent/45',
                         command.disabled && 'cursor-not-allowed opacity-50',
                         command.danger && !command.disabled && 'text-destructive',
                       )}
@@ -298,7 +297,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
                       onClick={() => void execute(command)}
                       disabled={running}
                     >
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-background">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-background/55 backdrop-blur">
                         {running ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : Icon ? (
@@ -443,18 +442,18 @@ export function GlobalPanelShell({ commands, renderPanel }: GlobalPanelShellProp
       }}
     >
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="global-panel-overlay fixed inset-0 z-[80] bg-black/30 backdrop-blur-md" />
+        <DialogPrimitive.Overlay className="global-panel-overlay fixed inset-0 z-[80]" />
         <DialogPrimitive.Content
           style={panelStyle}
           className={cn(
-            'global-panel-content fixed left-1/2 top-4 z-[81] flex flex-col overflow-hidden rounded-lg border bg-background shadow-2xl outline-none',
+            'global-panel-content global-panel-surface fixed left-1/2 top-4 z-[81] flex flex-col overflow-hidden rounded-lg border outline-none',
             route && !resizing && 'transition-[width,height] duration-200 ease-out',
             !route && sizeClassNames[size],
           )}
         >
           {route ? (
             <>
-              <div className="flex items-center gap-2 border-b px-4 py-3">
+              <div className="global-panel-topbar flex items-center gap-2 border-b px-4 py-3">
                 <Button
                   variant="ghost"
                   size="icon"
