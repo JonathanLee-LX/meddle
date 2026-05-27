@@ -42,6 +42,7 @@ import { PluginCodeEditor } from '@/components/plugin-code-editor'
 import { PluginTestDialog } from '@/components/plugin-test-dialog'
 import { RuleAiAssistantPanel } from '@/components/rule-ai-assistant-panel'
 import { MockEditorPanel } from '@/components/mock-editor-panel'
+import { RoutePreview } from '@/components/route-preview'
 import type { CommandAction, GlobalPanelApi, GlobalPanelRoute } from '@/components/global-panel/types'
 import type { MockRule, ResourceType } from '@/types'
 
@@ -225,14 +226,15 @@ function App() {
         run: () => panel.openPanel({ id: 'rules.ai', title: 'AI 规则助手', description: '用自然语言生成规则，或安全合并当前配置', size: 'md' }),
       },
       {
-        id: 'rules.preview.focus',
+        id: 'rules.preview',
         title: '预览 URL 转发结果',
-        description: '聚焦路由规则页的 URL 预览输入框',
+        description: '输入 URL，使用当前规则计算真实转发地址',
         section: '路由规则',
         icon: Search,
+        keywords: ['URL', 'preview', 'route', '转发', '预览'],
+        closeOnRun: false,
         run: () => {
-          navigate('/config')
-          window.setTimeout(() => document.getElementById('route-preview-url')?.focus(), 80)
+          panel.openPanel({ id: 'rules.preview', title: 'URL 预览', description: '使用当前编辑中的规则计算真实转发地址', size: 'md' })
         },
       },
       {
@@ -612,6 +614,14 @@ function App() {
             ruleFiles={store.ruleFiles}
             activeFileName={store.activeFileName}
             fetchRuleFileRawContent={store.fetchRuleFileRawContent}
+          />
+        )
+      case 'rules.preview':
+        return (
+          <RoutePreview
+            embedded
+            rules={store.rules}
+            activeFileName={store.activeFileName}
           />
         )
       default:
