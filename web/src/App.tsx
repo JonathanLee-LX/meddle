@@ -622,6 +622,18 @@ function App() {
             embedded
             rules={store.rules}
             activeFileName={store.activeFileName}
+            onRevealRule={(matchedRule) => {
+              panel.close()
+              navigate('/config')
+              window.setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('route-rule:highlight', {
+                  detail: {
+                    pattern: matchedRule.pattern,
+                    target: matchedRule.target,
+                  },
+                }))
+              }, 120)
+            }}
           />
         )
       default:

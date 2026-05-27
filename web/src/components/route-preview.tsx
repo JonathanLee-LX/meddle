@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react'
-import { AlertTriangle, ArrowRight, FileText, Loader2, Search } from 'lucide-react'
+import { AlertTriangle, ArrowRight, FileText, Loader2, LocateFixed, Search } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +10,13 @@ interface RoutePreviewProps {
   rules: RuleItem[]
   activeFileName: string | null
   embedded?: boolean
+  onRevealRule?: (rule: RoutePreviewMatchedRule) => void
+}
+
+interface RoutePreviewMatchedRule {
+  pattern: string
+  target: string
+  kind: 'empty' | 'file' | 'absolute-url' | 'host'
 }
 
 interface RoutePreviewResponse {
@@ -17,16 +24,12 @@ interface RoutePreviewResponse {
   inputUrl: string
   matched: boolean
   resolvedUrl: string
-  matchedRule?: {
-    pattern: string
-    target: string
-    kind: 'empty' | 'file' | 'absolute-url' | 'host'
-  }
+  matchedRule?: RoutePreviewMatchedRule
   notes: string[]
   error?: string
 }
 
-export function RoutePreview({ rules, activeFileName, embedded = false }: RoutePreviewProps) {
+export function RoutePreview({ rules, activeFileName, embedded = false, onRevealRule }: RoutePreviewProps) {
   const [inputUrl, setInputUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<RoutePreviewResponse | null>(null)
@@ -150,10 +153,25 @@ export function RoutePreview({ rules, activeFileName, embedded = false }: RouteP
           {result.matchedRule && (
             <div className="space-y-1">
               <div className="text-[11px] uppercase tracking-wide text-muted-foreground">命中规则</div>
-              <div className="rounded-md border bg-background px-3 py-2 font-mono text-xs break-all">
-                {result.matchedRule.pattern}
-                <span className="text-muted-foreground"> → </span>
-                {result.matchedRule.target}
+              <div className="flex items-stretch gap-2">
+                <div className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 font-mono text-xs break-all">
+                  {result.matchedRule.pattern}
+                  <span className="text-muted-foreground"> → </span>
+                  {result.matchedRule.target}
+                </div>
+                {onRevealRule && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-auto shrink-0 gap-1.5 px-3 text-xs"
+                    onClick={() => result.matchedRule && onRevealRule(result.matchedRule)}
+                    title="在路由规则页面定位这条规则"
+                  >
+                    <LocateFixed className="h-3.5 w-3.5" />
+                    定位
+                  </Button>
+                )}
               </div>
             </div>
           )}

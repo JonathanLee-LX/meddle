@@ -50,6 +50,11 @@ interface RuleConfigProps {
   deleteRuleFile: (name: string) => Promise<boolean>
 }
 
+interface RouteRuleHighlightEventDetail {
+  pattern?: string
+  target?: string
+}
+
 interface SortableRuleRowProps {
   id: string
   item: RuleItem
@@ -386,6 +391,26 @@ export function RuleConfig(props: RuleConfigProps) {
     const timer = setTimeout(() => setHighlightIndex(null), 1600)
     return () => { cancelAnimationFrame(raf); clearTimeout(timer) }
   }, [rules, highlightIndex])
+
+  useEffect(() => {
+    const handleHighlightRule = (event: Event) => {
+      const detail = (event as CustomEvent<RouteRuleHighlightEventDetail>).detail || {}
+      const pattern = detail.pattern?.trim()
+      const target = detail.target?.trim()
+      if (!pattern || target == null) return
+
+      const index = rules.findIndex((item) => item.rule.trim() === pattern && item.target.trim() === target)
+      if (index < 0) return
+
+      setViewMode('table')
+      setRuleFilter('')
+      setTargetFilter('')
+      setHighlightIndex(index)
+    }
+
+    window.addEventListener('route-rule:highlight', handleHighlightRule)
+    return () => window.removeEventListener('route-rule:highlight', handleHighlightRule)
+  }, [rules])
 
   const filteredRules = useMemo(() => {
     if (!deferredRuleFilter && !deferredTargetFilter) return rules.map((item, index) => ({ item, index }))
