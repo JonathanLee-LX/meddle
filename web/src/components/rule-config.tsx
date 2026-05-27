@@ -34,7 +34,6 @@ import { CSS } from '@dnd-kit/utilities'
 import { buildRuleGraph } from '@/utils/rule-graph'
 import { RouteCanvas } from '@/components/route-canvas'
 import { supportsOpenFilePicker } from '@/types/file-system-access'
-import { RoutePreview } from '@/components/route-preview'
 import { FEATURE_FLAGS } from '@/lib/feature-flags'
 
 interface RuleConfigProps {
@@ -414,8 +413,6 @@ export function RuleConfig(props: RuleConfigProps) {
 
   return (
     <div className="space-y-4">
-      <RoutePreview rules={rules} activeFileName={activeFileName} />
-
       {/* 规则文件 Tab 切换 */}
       <div className="flex items-center gap-2 flex-wrap">
         <Tabs value={activeFileName || ''} onValueChange={(val) => {
