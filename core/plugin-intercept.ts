@@ -29,13 +29,14 @@ export function createPluginIntercept(ctx: ProxyContext) {
     }
 
     function shouldInterceptResponse(): boolean {
-        return ctx.requestPipeline.mode === 'on'
+        return ctx.requestPipeline.mode === 'on' || ctx.requestPipeline.mode === 'shadow'
     }
 
     async function interceptResponseWithPlugins(opts: InterceptOptions): Promise<boolean> {
         const { req, res, source, target, startTime, statusCode, headers, bodyBuffer, reqBody, inspectionMeta, cleanHeaders } = opts
         const contentType: string = headers['content-type'] || ''
         const contentEncoding: string = headers['content-encoding'] || ''
+        const shouldApplyPluginResponse = ctx.requestPipeline.mode === 'on'
 
         if (!isTextContentType(contentType)) return false
 
@@ -69,13 +70,19 @@ export function createPluginIntercept(ctx: ProxyContext) {
         try { await dispatchWithInspection(ctx.hookDispatcher, console, 'onBeforeResponse', responseCtx) }
         catch (e) { console.error('[plugin] onBeforeResponse hook error:', e) }
 
-        const finalBody = Buffer.from(responseCtx.response.body, 'utf-8')
-        const finalHeaders: Record<string, any> = { ...responseCtx.response.headers }
-        delete finalHeaders['content-encoding']
-        finalHeaders['content-length'] = String(finalBody.length)
+        const finalBody = shouldApplyPluginResponse
+            ? Buffer.from(responseCtx.response.body, 'utf-8')
+            : bodyBuffer
+        const finalHeaders: Record<string, any> = shouldApplyPluginResponse
+            ? { ...responseCtx.response.headers }
+            : { ...headers }
+        if (shouldApplyPluginResponse) {
+            delete finalHeaders['content-encoding']
+            finalHeaders['content-length'] = String(finalBody.length)
+        }
 
         const finalWriteHeaders = cleanHeaders ? cleanHeaders(finalHeaders) : finalHeaders
-        res.writeHead(responseCtx.response.statusCode, finalWriteHeaders)
+        res.writeHead(shouldApplyPluginResponse ? responseCtx.response.statusCode : statusCode, finalWriteHeaders)
         res.end(finalBody)
 
         try { await dispatchWithInspection(ctx.hookDispatcher, console, 'onAfterResponse', responseCtx) } catch (_) { /* ignore */ }
