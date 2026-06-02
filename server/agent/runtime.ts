@@ -24,6 +24,11 @@ export interface AgentRuntimeEvents {
     onContentDelta?: (delta: string) => void
 }
 
+export interface AgentRunResult {
+    response: AgentChatResponse
+    messages: AgentChatMessage[]
+}
+
 function parseToolArguments(raw: string): Record<string, unknown> {
     try {
         const parsed = JSON.parse(raw || '{}') as unknown
@@ -50,10 +55,12 @@ export async function runAgent(
     toolContext: AgentToolContext,
     createConfirmation: (confirmation: Omit<AgentPendingConfirmation, 'id' | 'createdAt'>) => AgentPendingConfirmation,
     events: AgentRuntimeEvents = {},
-): Promise<AgentChatResponse> {
+    history?: AgentChatMessage[],
+): Promise<AgentRunResult> {
     const runId = randomUUID()
     const messages: AgentChatMessage[] = [
         { role: 'system', content: SYSTEM_PROMPT },
+        ...(history || []),
         { role: 'user', content: request.message },
     ]
     const toolResults: unknown[] = []
@@ -66,10 +73,14 @@ export async function runAgent(
 
         if (response.toolCalls.length === 0) {
             return {
-                runId,
-                message: response.content || '已完成。',
-                pendingConfirmations,
-                toolResults,
+                response: {
+                    runId,
+                    message: response.content || '已完成。',
+                    pendingConfirmations,
+                    toolResults,
+                    conversationId: '',
+                },
+                messages,
             }
         }
 
@@ -127,10 +138,14 @@ export async function runAgent(
                 })
                 pendingConfirmations.push(confirmation)
                 return {
-                    runId,
-                    message: '需要确认后才能执行写入操作。',
-                    pendingConfirmations,
-                    toolResults,
+                    response: {
+                        runId,
+                        message: '需要确认后才能执行写入操作。',
+                        pendingConfirmations,
+                        toolResults,
+                        conversationId: '',
+                    },
+                    messages,
                 }
             }
 
@@ -153,9 +168,13 @@ export async function runAgent(
     }
 
     return {
-        runId,
-        message: 'Agent 已达到工具调用步数上限，请把需求拆小后重试。',
-        pendingConfirmations,
-        toolResults,
+        response: {
+            runId,
+            message: 'Agent 已达到工具调用步数上限，请把需求拆小后重试。',
+            pendingConfirmations,
+            toolResults,
+            conversationId: '',
+        },
+        messages,
     }
 }

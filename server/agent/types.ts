@@ -51,6 +51,7 @@ export interface AgentPendingConfirmation extends AgentToolConfirmation {
 export interface AgentChatRequest {
     message: string
     aiConfig: AgentAIConfig
+    conversationId?: string
 }
 
 export interface AgentChatResponse {
@@ -58,4 +59,5 @@ export interface AgentChatResponse {
     message: string
     pendingConfirmations: AgentPendingConfirmation[]
     toolResults: unknown[]
+    conversationId: string
 }
