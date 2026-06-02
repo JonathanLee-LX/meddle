@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseEprcRules, rulesToEprc } from './eprc-parser'
+import { hostsTextToEprc, normalizeImportedRuleText, parseEprcRules, rulesToEprc } from './eprc-parser'
 
 describe('eprc-parser', () => {
   describe('parseEprcRules', () => {
@@ -97,6 +97,74 @@ describe('eprc-parser', () => {
       })
     })
 
+  })
+
+  describe('hostsTextToEprc', () => {
+    it('should convert system hosts lines to EPRC lines', () => {
+      const input = '127.0.0.1 example.com api.example.com'
+      const result = hostsTextToEprc(input)
+
+      expect(result).toBe('example.com api.example.com 127.0.0.1')
+    })
+
+    it('should ignore blank lines and hosts comments', () => {
+      const input = [
+        '# local dev',
+        '127.0.0.1 example.com # inline comment',
+        '',
+        '192.168.1.10 api.example.com',
+      ].join('\n')
+      const result = hostsTextToEprc(input)
+
+      expect(result).toBe('example.com 127.0.0.1\napi.example.com 192.168.1.10')
+    })
+
+    it('should wrap IPv6 addresses as URL host targets', () => {
+      const input = '::1 local.example.test'
+      const result = hostsTextToEprc(input)
+
+      expect(result).toBe('local.example.test [::1]')
+    })
+
+    it('should skip lines that do not start with an IP address', () => {
+      const input = 'example.com localhost:3000'
+      const result = hostsTextToEprc(input)
+
+      expect(result).toBe('')
+    })
+  })
+
+  describe('normalizeImportedRuleText', () => {
+    it('should normalize hosts text before parsing imported rules', () => {
+      const input = '127.0.0.1 example.com api.example.com'
+      const result = parseEprcRules(normalizeImportedRuleText(input))
+
+      expect(result).toEqual([
+        { rule: 'example.com', target: '127.0.0.1', enabled: true, exclusions: [] },
+        { rule: 'api.example.com', target: '127.0.0.1', enabled: true, exclusions: [] },
+      ])
+    })
+
+    it('should preserve EPRC text when it is not hosts format', () => {
+      const input = 'example.com localhost:3000'
+      const result = normalizeImportedRuleText(input)
+
+      expect(result).toBe(input)
+    })
+
+    it('should preserve non-host lines when hosts lines are present', () => {
+      const input = '127.0.0.1 example.com\napi.example.com localhost:3000'
+      const result = normalizeImportedRuleText(input)
+
+      expect(result).toBe('example.com 127.0.0.1\napi.example.com localhost:3000')
+    })
+
+    it('should not treat EPRC lines with port targets as hosts lines', () => {
+      const input = '127.0.0.1 localhost:3000'
+      const result = normalizeImportedRuleText(input)
+
+      expect(result).toBe(input)
+    })
   })
 
   describe('rulesToEprc', () => {

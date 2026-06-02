@@ -1,5 +1,60 @@
 import type { RuleItem } from '@/types'
 
+const IPV4_PATTERN = /^(?:\d{1,3}\.){3}\d{1,3}$/
+const IPV6_PATTERN = /^(?:[0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}(?:%[\w.-]+)?$/
+const HOSTS_NAME_PATTERN = /^[A-Za-z0-9_.-]+$/
+
+function isHostsAddressToken(value: string): boolean {
+  return IPV4_PATTERN.test(value) || IPV6_PATTERN.test(value)
+}
+
+function formatHostsTarget(address: string): string {
+  return address.includes(':') && !address.startsWith('[') ? `[${address}]` : address
+}
+
+function stripHostsComment(line: string): string {
+  const commentIndex = line.indexOf('#')
+  return (commentIndex >= 0 ? line.slice(0, commentIndex) : line).trim()
+}
+
+function convertHostsLineToEprc(line: string): string | null {
+  const stripped = stripHostsComment(line)
+  if (!stripped) return null
+
+  const [address, ...hosts] = stripped.split(/\s+/).filter(Boolean)
+  if (!address || hosts.length === 0 || !isHostsAddressToken(address)) return null
+  if (!hosts.every((host) => HOSTS_NAME_PATTERN.test(host))) return null
+
+  return `${hosts.join(' ')} ${formatHostsTarget(address)}`
+}
+
+/**
+ * Convert system hosts file text into EPRC text.
+ * Hosts line format: `127.0.0.1 example.com api.example.com`
+ * EPRC line format: `example.com api.example.com 127.0.0.1`
+ */
+export function hostsTextToEprc(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .flatMap((line) => convertHostsLineToEprc(line) ?? [])
+    .join('\n')
+}
+
+export function normalizeImportedRuleText(text: string): string {
+  let converted = false
+  const normalized = text
+    .split(/\r?\n/)
+    .map((line) => {
+      const hostsLine = convertHostsLineToEprc(line)
+      if (!hostsLine) return line
+      converted = true
+      return hostsLine
+    })
+    .join('\n')
+
+  return converted ? normalized : text
+}
+
 /**
  * Parse EPRC format text into RuleItem array
  * @param text - EPRC format text (one rule per line)

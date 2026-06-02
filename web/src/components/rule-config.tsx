@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useMemo, useRef, useState, memo, useTransition, useDeferredValue } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
@@ -11,7 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Plus, Save, Trash2, Filter, X, GripVertical, ArrowUpToLine, FolderOpen, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Plus, Save, Trash2, Filter, X, GripVertical, ArrowUpToLine, FolderOpen, ToggleLeft, ToggleRight, ClipboardPaste } from 'lucide-react'
 import type { RuleItem, RuleFile } from '@/types'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -35,6 +36,7 @@ import { buildRuleGraph } from '@/utils/rule-graph'
 import { RouteCanvas } from '@/components/route-canvas'
 import { supportsOpenFilePicker } from '@/types/file-system-access'
 import { FEATURE_FLAGS } from '@/lib/feature-flags'
+import { normalizeImportedRuleText } from '@/utils/eprc-parser'
 
 interface RuleConfigProps {
   rules: RuleItem[]
@@ -73,6 +75,17 @@ interface ExclusionsInputProps {
 
 function parseExclusionsInput(value: string): string[] {
   return value.split(/\s+/).filter(Boolean)
+}
+
+function getAvailableRuleFileName(files: RuleFile[], baseName: string): string {
+  const existingNames = new Set(files.map((file) => file.name))
+  if (!existingNames.has(baseName)) return baseName
+
+  let index = 2
+  while (existingNames.has(`${baseName}-${index}`)) {
+    index += 1
+  }
+  return `${baseName}-${index}`
 }
 
 const ExclusionsInput = memo(function ExclusionsInput({
@@ -251,8 +264,10 @@ export function RuleConfig(props: RuleConfigProps) {
 
   // 从文件加载
   const [isImporting, setIsImporting] = useState(false)
+  const [isTextImporting, setIsTextImporting] = useState(false)
   const [importName, setImportName] = useState('')
   const [importContent, setImportContent] = useState<string | null>(null)
+  const [textImportDraft, setTextImportDraft] = useState('')
   const importFileRef = useRef<HTMLInputElement>(null)
 
   // 筛选
@@ -262,6 +277,16 @@ export function RuleConfig(props: RuleConfigProps) {
   const deferredRuleFilter = useDeferredValue(ruleFilter)
   const deferredTargetFilter = useDeferredValue(targetFilter)
   const [isPending, startTransition] = useTransition()
+
+  const resetCreateDialog = useCallback(() => {
+    setIsCreating(false)
+    setIsImporting(false)
+    setIsTextImporting(false)
+    setImportContent(null)
+    setImportName('')
+    setTextImportDraft('')
+    setCreateError(null)
+  }, [])
 
   // 初始化：加载文件列表并选中第一个
   useEffect(() => {
@@ -282,17 +307,20 @@ export function RuleConfig(props: RuleConfigProps) {
   const handleCreate = useCallback(async () => {
     if (!newFileName.trim()) return
     setCreateError(null)
-    const result = await createRuleFile(newFileName.trim(), importContent || '')
+    const content = isTextImporting ? normalizeImportedRuleText(textImportDraft) : (importContent || '')
+    if (isTextImporting && !content.trim()) {
+      setCreateError('请输入规则文本')
+      return
+    }
+    const result = await createRuleFile(newFileName.trim(), content)
     if (result.success) {
-      setIsCreating(false)
-      setIsImporting(false)
-      setImportContent(null)
+      resetCreateDialog()
       setNewFileName('默认规则')
       await fetchFileContent(newFileName.trim())
     } else {
       setCreateError(result.error || '创建失败')
     }
-  }, [createRuleFile, newFileName, importContent, fetchFileContent])
+  }, [createRuleFile, newFileName, isTextImporting, textImportDraft, importContent, resetCreateDialog, fetchFileContent])
 
   // 从文件导入 → 创建新规则文件
   const handleImportFile = useCallback(async () => {
@@ -309,6 +337,8 @@ export function RuleConfig(props: RuleConfigProps) {
         setImportName(baseName)
         setNewFileName(baseName)
         setIsImporting(true)
+        setIsTextImporting(false)
+        setTextImportDraft('')
         setIsCreating(true)
         return
       } catch { /* cancelled */ }
@@ -325,11 +355,25 @@ export function RuleConfig(props: RuleConfigProps) {
         setImportName(baseName)
         setNewFileName(baseName)
         setIsImporting(true)
+        setIsTextImporting(false)
+        setTextImportDraft('')
         setIsCreating(true)
       })
     }
     e.target.value = ''
   }, [])
+
+  const handleImportText = useCallback(() => {
+    const name = getAvailableRuleFileName(ruleFiles, '文本导入')
+    setNewFileName(name)
+    setImportContent(null)
+    setImportName('文本导入')
+    setTextImportDraft('')
+    setIsImporting(true)
+    setIsTextImporting(true)
+    setIsCreating(true)
+    setCreateError(null)
+  }, [ruleFiles])
 
   // 保存当前文件
   const handleSave = useCallback(async () => {
@@ -443,7 +487,12 @@ export function RuleConfig(props: RuleConfigProps) {
         <Tabs value={activeFileName || ''} onValueChange={(val) => {
           if (val === '__create__') {
             setIsCreating(true)
+            setIsImporting(false)
+            setIsTextImporting(false)
             setImportContent(null)
+            setImportName('')
+            setTextImportDraft('')
+            setCreateError(null)
           } else {
             handleSelectFile(val)
           }
@@ -485,11 +534,11 @@ export function RuleConfig(props: RuleConfigProps) {
       {/* 创建/导入规则文件对话框 */}
       {isCreating && (
         <div className="rounded-md border p-3 bg-muted/30 space-y-2">
-          <p className="text-sm font-medium">{isImporting ? '从文件导入为新规则' : '创建新规则文件'}</p>
-          {isImporting && importName && (
+          <p className="text-sm font-medium">{isTextImporting ? '从文本导入为新规则' : isImporting ? '从文件导入为新规则' : '创建新规则文件'}</p>
+          {isImporting && importName && !isTextImporting && (
             <p className="text-xs text-muted-foreground">导入自: {importName}</p>
           )}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Input
               value={newFileName}
               onChange={(e) => { setNewFileName(e.target.value); setCreateError(null) }}
@@ -498,12 +547,20 @@ export function RuleConfig(props: RuleConfigProps) {
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleCreate()
-                if (e.key === 'Escape') { setIsCreating(false); setIsImporting(false); setImportContent(null); setCreateError(null) }
+                if (e.key === 'Escape') resetCreateDialog()
               }}
             />
             <Button size="sm" onClick={handleCreate}>创建</Button>
-            <Button size="sm" variant="ghost" onClick={() => { setIsCreating(false); setIsImporting(false); setImportContent(null); setCreateError(null) }}>取消</Button>
+            <Button size="sm" variant="ghost" onClick={resetCreateDialog}>取消</Button>
           </div>
+          {isTextImporting && (
+            <Textarea
+              value={textImportDraft}
+              onChange={(e) => { setTextImportDraft(e.target.value); setCreateError(null) }}
+              placeholder={'127.0.0.1 example.com api.example.com\n::1 local.example.test'}
+              className="min-h-[160px] resize-y font-mono text-sm"
+            />
+          )}
           {createError && <p className="text-xs text-destructive">{createError}</p>}
         </div>
       )}
@@ -535,6 +592,9 @@ export function RuleConfig(props: RuleConfigProps) {
               <input ref={importFileRef} type="file" accept=".txt,.rules" className="hidden" onChange={handleImportInputChange} />
               <Button variant="outline" size="sm" onClick={handleImportFile}>
                 <FolderOpen className="h-4 w-4 mr-1" />从文件加载
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleImportText}>
+                <ClipboardPaste className="h-4 w-4 mr-1" />文本导入
               </Button>
               {activeFileName && (
                 <>
