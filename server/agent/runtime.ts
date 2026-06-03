@@ -72,6 +72,9 @@ export async function runAgent(
         })
 
         if (response.toolCalls.length === 0) {
+            if (response.content) {
+                messages.push({ role: 'assistant', content: response.content })
+            }
             return {
                 response: {
                     runId,
