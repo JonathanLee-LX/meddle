@@ -3,9 +3,12 @@ import type { Application, Request, Response } from 'express'
 import type { ServerContext } from '../index'
 import { createAgentTools, describeAgentTools } from './tools'
 import { runAgent } from './runtime'
+import type { AgentChatMessage } from './model'
 import type { AgentAIConfig, AgentChatRequest, AgentPendingConfirmation } from './types'
 
+const MAX_CONVERSATIONS = 100
 const pendingConfirmations = new Map<string, AgentPendingConfirmation>()
+const conversations = new Map<string, AgentChatMessage[]>()
 
 function asObject(value: unknown): Record<string, unknown> {
     return value && typeof value === 'object' ? value as Record<string, unknown> : {}
@@ -36,7 +39,22 @@ function parseChatRequest(value: unknown): AgentChatRequest {
     if (!aiConfig.enabled || !aiConfig.apiKey || !aiConfig.baseUrl || !aiConfig.model) {
         throw new Error('AI 配置不可用')
     }
-    return { message, aiConfig }
+    const conversationId = typeof body.conversationId === 'string' ? body.conversationId : undefined
+    return { message, aiConfig, conversationId }
+}
+
+function getOrCreateConversationId(request: AgentChatRequest): string {
+    if (request.conversationId && conversations.has(request.conversationId)) {
+        return request.conversationId
+    }
+    return randomUUID()
+}
+
+function pruneConversations(): void {
+    while (conversations.size > MAX_CONVERSATIONS) {
+        const oldest = conversations.keys().next().value
+        if (oldest) conversations.delete(oldest)
+    }
 }
 
 function sendJson(res: Response, statusCode: number, payload: unknown): void {
@@ -59,7 +77,9 @@ export function registerAgentRoutes(app: Application, ctx: ServerContext): void 
     app.post('/api/agent/chat', async (req: Request, res: Response) => {
         try {
             const chatRequest = parseChatRequest(req.body)
-            const response = await runAgent(chatRequest, tools, toolContext, (confirmation) => {
+            const conversationId = getOrCreateConversationId(chatRequest)
+            const history = conversations.get(conversationId)
+            const result = await runAgent(chatRequest, tools, toolContext, (confirmation) => {
                 const item: AgentPendingConfirmation = {
                     ...confirmation,
                     id: randomUUID(),
@@ -67,8 +87,10 @@ export function registerAgentRoutes(app: Application, ctx: ServerContext): void 
                 }
                 pendingConfirmations.set(item.id, item)
                 return item
-            })
-            sendJson(res, 200, response)
+            }, {}, history)
+            conversations.set(conversationId, result.messages)
+            pruneConversations()
+            sendJson(res, 200, { ...result.response, conversationId })
         } catch (err) {
             sendJson(res, 400, { error: (err as Error).message })
         }
@@ -83,8 +105,10 @@ export function registerAgentRoutes(app: Application, ctx: ServerContext): void 
         })
         try {
             const chatRequest = parseChatRequest(req.body)
+            const conversationId = getOrCreateConversationId(chatRequest)
+            const history = conversations.get(conversationId)
             writeSse(res, 'start', { status: 'running' })
-            const response = await runAgent(chatRequest, tools, toolContext, (confirmation) => {
+            const result = await runAgent(chatRequest, tools, toolContext, (confirmation) => {
                 const item: AgentPendingConfirmation = {
                     ...confirmation,
                     id: randomUUID(),
@@ -94,8 +118,10 @@ export function registerAgentRoutes(app: Application, ctx: ServerContext): void 
                 return item
             }, {
                 onContentDelta: (delta) => writeSse(res, 'delta', { delta }),
-            })
-            writeSse(res, 'done', response)
+            }, history)
+            conversations.set(conversationId, result.messages)
+            pruneConversations()
+            writeSse(res, 'done', { ...result.response, conversationId })
         } catch (err) {
             writeSse(res, 'error', { error: (err as Error).message })
         } finally {

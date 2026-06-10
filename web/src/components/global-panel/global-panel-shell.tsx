@@ -280,13 +280,17 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
   const [agentError, setAgentError] = useState<string | null>(null)
   const [agentLoading, setAgentLoading] = useState(false)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [conversationTurns, setConversationTurns] = useState<Array<{ userMessage: string; aiMessage: string }>>([])
+  const [followUpQuery, setFollowUpQuery] = useState('')
+  const [streamingUserMessage, setStreamingUserMessage] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const agentOutputRef = useRef<HTMLDivElement>(null)
   const activeCommandRef = useRef<HTMLButtonElement | null>(null)
   const commandScrollRef = useRef<HTMLDivElement>(null)
   const filteredCommands = useCommandSearch(commands, query)
   const trimmedQuery = query.trim()
-  const hasAgentOutput = Boolean(agentError || agentResponse || agentLoading)
+  const hasAgentOutput = Boolean(agentError || agentResponse || agentLoading || conversationTurns.length > 0)
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => inputRef.current?.focus())
@@ -301,7 +305,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
     const output = agentOutputRef.current
     if (!output || !hasAgentOutput) return
     output.scrollTop = output.scrollHeight
-  }, [agentError, agentLoading, agentResponse?.message, hasAgentOutput])
+  }, [agentError, agentLoading, agentResponse?.message, conversationTurns, hasAgentOutput])
 
   const activeCommand = filteredCommands[activeIndex]
 
@@ -343,11 +347,16 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
     }
   }
 
-  const runAgent = async (message: string) => {
+  const runAgent = async (message: string, existingConversationId?: string) => {
     if (!message || agentLoading) return
     setAgentLoading(true)
     setAgentError(null)
     setAgentResponse(null)
+    setStreamingUserMessage(message)
+    if (!existingConversationId) {
+      setConversationId(null)
+      setConversationTurns([])
+    }
     let streamedMessage = ''
     try {
       const response = await streamAgentMessage(message, {
@@ -358,15 +367,26 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
             message: streamedMessage,
             pendingConfirmations: [],
             toolResults: [],
+            conversationId: existingConversationId || '',
           })
         },
-      })
+      }, existingConversationId)
       setAgentResponse(response)
+      setConversationId(response.conversationId)
+      setConversationTurns((prev) => [...prev, { userMessage: message, aiMessage: response.message }])
     } catch (error) {
       setAgentError((error as Error).message)
     } finally {
       setAgentLoading(false)
+      setStreamingUserMessage(null)
     }
+  }
+
+  const sendFollowup = async () => {
+    const message = followUpQuery.trim()
+    if (!message || agentLoading || !conversationId) return
+    setFollowUpQuery('')
+    await runAgent(message, conversationId)
   }
 
   const confirmAgent = async (confirmationId: string, approved: boolean) => {
@@ -382,6 +402,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
         message: result?.message || response.message,
         pendingConfirmations: [],
         toolResults: response.result ? [response.result] : [],
+        conversationId: current?.conversationId || '',
       }))
     } catch (error) {
       setAgentError((error as Error).message)
@@ -442,7 +463,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
             </button>
           </div>
         )}
-        {(agentError || agentResponse || agentLoading) && (
+        {(agentError || agentResponse || agentLoading || conversationTurns.length > 0) && (
           <div className="p-3 pb-0">
             <div className={cn(
               'overflow-hidden rounded-md border text-sm',
@@ -462,13 +483,32 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
               </div>
               <div ref={agentOutputRef} className="max-h-[min(520px,calc(100vh-220px))] overflow-y-auto overscroll-contain">
                 <div className="px-3 py-3">
-                  {agentError ? (
+                  {agentError && conversationTurns.length === 0 ? (
                     <div className="whitespace-pre-wrap break-words leading-6 text-destructive">{agentError}</div>
-                  ) : agentLoading ? (
-                    <div className="leading-6 text-muted-foreground">正在分析你的请求并调用可用工具...</div>
-                  ) : agentResponse?.message ? (
-                    <MarkdownContent content={agentResponse.message} />
                   ) : null}
+                  {conversationTurns.map((turn, turnIndex) => (
+                    <div key={turnIndex} className={cn(turnIndex > 0 && 'mt-4 border-t pt-4')}>
+                      <div className="mb-1 text-xs font-medium text-muted-foreground">你</div>
+                      <div className="mb-3 whitespace-pre-wrap break-words leading-6 text-foreground/90">{turn.userMessage}</div>
+                      <div className="mb-1 text-xs font-medium text-muted-foreground">AI</div>
+                      <MarkdownContent content={turn.aiMessage} />
+                    </div>
+                  ))}
+                  {streamingUserMessage && (
+                    <div className={cn(conversationTurns.length > 0 && 'mt-4 border-t pt-4')}>
+                      <div className="mb-1 text-xs font-medium text-muted-foreground">你</div>
+                      <div className="mb-3 whitespace-pre-wrap break-words leading-6 text-foreground/90">{streamingUserMessage}</div>
+                      <div className="mb-1 text-xs font-medium text-muted-foreground">AI</div>
+                      {agentLoading && !agentResponse?.message ? (
+                        <div className="leading-6 text-muted-foreground">正在分析你的请求并调用可用工具...</div>
+                      ) : agentResponse?.message ? (
+                        <MarkdownContent content={agentResponse.message} />
+                      ) : null}
+                      {agentError ? (
+                        <div className="whitespace-pre-wrap break-words leading-6 text-destructive">{agentError}</div>
+                      ) : null}
+                    </div>
+                  )}
                   {agentResponse?.pendingConfirmations.map((confirmation) => (
                     <div key={confirmation.id} className="mt-3 rounded-md border bg-background/55 p-3 backdrop-blur">
                       <div className="font-medium">{confirmation.summary}</div>
@@ -501,6 +541,27 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
                   ))}
                 </div>
               </div>
+              {conversationId && !agentLoading && agentResponse && agentResponse.pendingConfirmations.length === 0 && (
+                <div className="border-t px-3 py-2">
+                  <div className="flex gap-2">
+                    <Input
+                      value={followUpQuery}
+                      onChange={(event) => setFollowUpQuery(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' && !event.shiftKey) {
+                          event.preventDefault()
+                          void sendFollowup()
+                        }
+                      }}
+                      placeholder="继续对话..."
+                      className="h-8 text-sm"
+                    />
+                    <Button size="sm" disabled={!followUpQuery.trim() || agentLoading} onClick={() => void sendFollowup()}>
+                      发送
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

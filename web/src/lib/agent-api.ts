@@ -15,6 +15,7 @@ export interface AgentChatResponse {
   message: string
   pendingConfirmations: AgentPendingConfirmation[]
   toolResults: unknown[]
+  conversationId: string
 }
 
 export interface AgentConfirmResponse {
@@ -77,6 +78,7 @@ function parseSseData(eventBlock: string) {
 export async function streamAgentMessage(
   message: string,
   handlers: AgentStreamHandlers = {},
+  conversationId?: string,
 ): Promise<AgentChatResponse> {
   const aiConfig = resolveAgentAIConfig()
   if (!isAIConfigValid(aiConfig)) {
@@ -86,7 +88,7 @@ export async function streamAgentMessage(
   const response = await fetch('/api/agent/chat-stream', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ message, aiConfig }),
+    body: JSON.stringify({ message, aiConfig, ...(conversationId ? { conversationId } : {}) }),
   })
 
   if (!response.ok || !response.body) {

@@ -128,6 +128,6 @@ describe('agent runtime', () => {
 
         expect(requestBody.stream).toBe(true)
         expect(deltas).toEqual(['第一段', '，第二段'])
-        expect(result.message).toBe('第一段，第二段')
+        expect(result.response.message).toBe('第一段，第二段')
     })
 })
