@@ -1,7 +1,7 @@
-import * as zlib from 'zlib'
 import _debug from 'debug'
 import type { ProxyContext, InterceptOptions } from './types'
 import { dispatchWithInspection } from './inspection-dispatch'
+import { decompressContentEncoding } from './content-encoding'
 
 const proxyDebug = _debug('proxy')
 
@@ -18,16 +18,6 @@ export function createPluginIntercept(ctx: ProxyContext) {
             lower.includes('+xml')
     }
 
-    function decompressBuffer(buf: Buffer, encoding: string): Buffer {
-        if (!encoding) return buf
-        try {
-            if (encoding === 'gzip') return zlib.gunzipSync(buf)
-            if (encoding === 'deflate') return zlib.inflateSync(buf)
-            if (encoding === 'br') return zlib.brotliDecompressSync(buf)
-        } catch (_) { /* ignore */ }
-        return buf
-    }
-
     function shouldInterceptResponse(): boolean {
         return ctx.requestPipeline.mode === 'on' || ctx.requestPipeline.mode === 'shadow'
     }
@@ -40,11 +30,9 @@ export function createPluginIntercept(ctx: ProxyContext) {
 
         if (!isTextContentType(contentType)) return false
 
-        let bodyStr: string
-        try {
-            const decompressed = decompressBuffer(bodyBuffer, contentEncoding)
-            bodyStr = decompressed.toString('utf-8')
-        } catch (_) { return false }
+        const decompressed = decompressContentEncoding(bodyBuffer, contentEncoding)
+        if (!decompressed) return false
+        const bodyStr = decompressed.toString('utf-8')
 
         const pluginLogger = {
             debug: (...a: any[]) => console.debug('[plugin]', ...a),

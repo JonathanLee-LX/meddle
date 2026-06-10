@@ -1,4 +1,4 @@
-import * as zlib from 'zlib';
+import { decompressContentEncoding } from './content-encoding';
 
 export function safeBodyToString(
     buf: Buffer | any, 
@@ -7,14 +7,8 @@ export function safeBodyToString(
 ): string {
     if (!Buffer.isBuffer(buf) || buf.length === 0) return '';
     
-    let content: Buffer = buf;
-    if (encoding === 'gzip' || encoding === 'deflate' || encoding === 'br') {
-        try {
-            content = zlib.unzipSync(content);
-        } catch (_) {
-            // ignore decompression errors and use original content
-        }
-    }
+    const content = decompressContentEncoding(buf, encoding);
+    if (!content) return `(compressed body: ${encoding || 'unknown'}, ${buf.length} bytes)`;
     
     if (content.length > max) {
         return `(truncated, ${content.length} bytes)\n` + content.slice(0, max).toString('utf8');
