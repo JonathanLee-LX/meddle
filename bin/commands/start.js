@@ -8,6 +8,9 @@ const path = require('path')
 // Parse arguments
 const args = process.argv.slice(3)
 const openFlag = args.includes('--open')
+const remoteFlag = args.includes('--remote')
+const interceptHttpsFlag = args.includes('--intercept-https')
+const noInterceptHttpsFlag = args.includes('--no-intercept-https')
 
 let env = null
 for (let i = 0; i < args.length; i++) {
@@ -21,6 +24,17 @@ for (let i = 0; i < args.length; i++) {
 const indexPath = path.join(__dirname, '..', 'index.js')
 const spawnEnv = { ...process.env, DEBUG: process.env.DEBUG || '' }
 if (env) spawnEnv.EP_ENV = env
+if (openFlag) spawnEnv.EP_OPEN = '1'
+if (remoteFlag) spawnEnv.EP_REMOTE = '1'
+if (interceptHttpsFlag) spawnEnv.EP_INTERCEPT_HTTPS = '1'
+if (noInterceptHttpsFlag) spawnEnv.EP_INTERCEPT_HTTPS = '0'
+
+const remoteTokenIndex = args.indexOf('--remote-token')
+if (remoteTokenIndex >= 0 && args[remoteTokenIndex + 1]) {
+  spawnEnv.EP_REMOTE_TOKEN = args[remoteTokenIndex + 1]
+}
+const inlineRemoteToken = args.find(arg => arg.startsWith('--remote-token='))
+if (inlineRemoteToken) spawnEnv.EP_REMOTE_TOKEN = inlineRemoteToken.slice('--remote-token='.length)
 
 const child = spawn(process.execPath, [indexPath], {
   env: spawnEnv,
@@ -36,10 +50,3 @@ child.on('error', (err) => {
 child.on('exit', (code) => {
   process.exit(code || 0)
 })
-
-// Handle --open flag (browser launch)
-if (openFlag) {
-  // The main index.js handles browser opening when --open is passed
-  // Just pass the flag through environment
-  spawnEnv.EP_OPEN = '1'
-}

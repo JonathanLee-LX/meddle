@@ -106,7 +106,10 @@ function proxyViaH1(target: string, method: string, headers: Record<string, any>
     const h1Headers: Record<string, any> = {}
     const originalHost: string = headers[':authority'] || headers.host || headers.Host || url.host
     for (const [key, value] of Object.entries(headers)) {
-        if (!key.startsWith(':')) h1Headers[key] = value
+        const normalized = key.toLowerCase()
+        if (!key.startsWith(':') && normalized !== 'proxy-authorization' && normalized !== 'proxy-connection') {
+            h1Headers[key] = value
+        }
     }
     if (!h1Headers.host && !h1Headers.Host) h1Headers.host = originalHost
 

@@ -55,6 +55,30 @@ export function normalizeImportedRuleText(text: string): string {
   return converted ? normalized : text
 }
 
+export interface EprcTextDiagnostic {
+  line: number
+  content: string
+}
+
+export function getEprcTextDiagnostics(text: string): EprcTextDiagnostic[] {
+  return text
+    .split(/\r?\n/)
+    .flatMap((line, index) => {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) return []
+
+      const ruleText = trimmed.startsWith('//') ? trimmed.slice(2).trim() : trimmed
+      const regularParts = ruleText
+        .split(/\s+/)
+        .filter(Boolean)
+        .filter((part) => !part.startsWith('!'))
+
+      return regularParts.length >= 2
+        ? []
+        : [{ line: index + 1, content: line }]
+    })
+}
+
 /**
  * Parse EPRC format text into RuleItem array
  * @param text - EPRC format text (one rule per line)

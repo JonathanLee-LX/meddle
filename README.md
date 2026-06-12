@@ -64,6 +64,39 @@ ep --help
 
 启动后将使用 Chrome/Edge/Chromium 的 `--proxy-server` 参数启动浏览器，仅该浏览器实例使用代理，不修改系统代理设置。
 
+### 手机远程代理与抓包
+
+电脑和手机连接同一局域网后，使用远程模式启动：
+
+```bash
+ep --remote
+
+# 推荐：在支持代理认证的设备上设置口令
+ep --remote --remote-token "change-me"
+```
+
+启动日志会输出手机配置入口和代理地址，例如：
+
+```text
+手机配置入口: http://192.168.1.10:8989/
+代理服务器: 192.168.1.10:8989
+```
+
+也可以在电脑上打开 `http://127.0.0.1:8989/_easy-proxy/setup` 查看手机配置页。
+
+1. 用手机浏览器打开“手机配置入口”。
+2. 在当前 Wi-Fi 的 HTTP 代理设置中选择手动，填写电脑 IP 和端口。
+3. 下载并安装 `easy-proxy-ca.crt`。
+4. 在系统设置中完全信任该根证书，然后在电脑 Web 界面查看 HTTP/HTTPS 请求与响应。
+
+iOS 安装证书后，还需前往“设置 → 通用 → 关于本机 → 证书信任设置”开启完全信任。Android 应用是否信任用户证书取决于应用配置；使用证书锁定的 App 无法解密 HTTPS 流量。
+
+远程模式只允许局域网私有地址接入，且远程设备不能访问管理 API。默认会解密 HTTPS；如只需普通隧道代理，可使用：
+
+```bash
+ep --remote --no-intercept-https
+```
+
 ### MCP Server
 
 提供 MCP 工具 `start_proxy`：启动代理服务器并返回代理地址。
@@ -158,6 +191,10 @@ Easy Proxy 提供了强大的插件系统，允许开发者扩展代理功能。
 | `EP_ENABLE_BUILTIN_LOGGER` | 启用内置日志插件 | `true` |
 | `EP_ENABLE_BUILTIN_MOCK` | 启用内置 Mock 插件 | `false` |
 | `PORT` | Web 界面端口 | `8989` |
+| `EP_REMOTE` | 允许局域网设备连接代理 | `false` |
+| `EP_REMOTE_TOKEN` | 远程代理认证口令，用户名固定为 `easy-proxy` | 空 |
+| `EP_INTERCEPT_HTTPS` | 解密并记录全部 HTTPS 流量；远程模式默认开启 | `false` |
+| `EP_BIND_HOST` | 监听地址；远程模式默认 `0.0.0.0` | `127.0.0.1` |
 
 详见 [插件 Pipeline 模式指南](./docs/plugin/PIPELINE_MODE_GUIDE.md)
 

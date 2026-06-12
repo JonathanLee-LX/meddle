@@ -20,6 +20,11 @@ export function useRules() {
     }
   }, [])
 
+  const fetchRuleFileRawContent = useCallback(async (name: string): Promise<string> => {
+    const res = await fetch(`/api/rule-files/${encodeURIComponent(name)}/content`)
+    return res.text()
+  }, [])
+
   const fetchFileContent = useCallback(async (name: string) => {
     try {
       const text = await fetchRuleFileRawContent(name)
@@ -28,19 +33,14 @@ export function useRules() {
     } catch (err) {
       console.error('Failed to fetch file content:', err)
     }
-  }, [])
+  }, [fetchRuleFileRawContent])
 
-  const fetchRuleFileRawContent = useCallback(async (name: string): Promise<string> => {
-    const res = await fetch(`/api/rule-files/${encodeURIComponent(name)}/content`)
-    return res.text()
-  }, [])
-
-  const saveFileContent = useCallback(async (name: string, items: RuleItem[]): Promise<boolean> => {
+  const saveRuleFileRawContent = useCallback(async (name: string, content: string): Promise<boolean> => {
     try {
       const res = await fetch(`/api/rule-files/${encodeURIComponent(name)}/content`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: rulesToEprc(items) }),
+        body: JSON.stringify({ content }),
       })
       const data = await res.json()
       return data.status === 'success'
@@ -49,6 +49,10 @@ export function useRules() {
       return false
     }
   }, [])
+
+  const saveFileContent = useCallback(async (name: string, items: RuleItem[]): Promise<boolean> => {
+    return saveRuleFileRawContent(name, rulesToEprc(items))
+  }, [saveRuleFileRawContent])
 
   const createRuleFile = useCallback(async (name: string, content = ''): Promise<{ success: boolean; error?: string }> => {
     try {
@@ -114,6 +118,7 @@ export function useRules() {
     fetchRuleFiles,
     fetchFileContent,
     fetchRuleFileRawContent,
+    saveRuleFileRawContent,
     saveFileContent,
     createRuleFile,
     toggleRuleFile,

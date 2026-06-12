@@ -5,8 +5,8 @@ import type { ProxyRecord } from '@/types'
 
 describe('useFuzzyFilter', () => {
   const mockRecords: ProxyRecord[] = [
-    { id: 1, method: 'GET', source: 'http://example.com/api/users', target: 'localhost:3000', time: '12:00:00' },
-    { id: 2, method: 'POST', source: 'http://example.com/api/login', target: 'localhost:3000', time: '12:00:01' },
+    { id: 1, method: 'GET', source: 'http://example.com/api/users', target: 'localhost:3000', time: '12:00:00', clientType: 'local', clientIp: '127.0.0.1', clientName: '本机' },
+    { id: 2, method: 'POST', source: 'http://example.com/api/login', target: 'localhost:3000', time: '12:00:01', clientType: 'remote', clientIp: '10.13.232.187', clientName: 'iPhone' },
     { id: 3, method: 'GET', source: 'http://example.com/style.css', target: 'localhost:3000', time: '12:00:02' },
     { id: 4, method: 'GET', source: 'http://example.com/app.js', target: 'localhost:3000', time: '12:00:03' },
     { id: 5, method: 'GET', source: 'http://example.com/logo.png', target: 'localhost:3000', time: '12:00:04' },
@@ -168,6 +168,25 @@ describe('useFuzzyFilter', () => {
 
       const sources = result.current.filteredRecords.map(r => r.source)
       expect(sources.every(s => s.includes('test.com'))).toBe(true)
+    })
+
+    it('should filter by client type, alias, and IP', () => {
+      const { result } = renderHook(() => useFuzzyFilter(mockRecords))
+
+      act(() => result.current.setClientSourceFilter('remote'))
+      expect(result.current.filteredRecords).toHaveLength(1)
+      expect(result.current.filteredRecords[0].clientName).toBe('iPhone')
+
+      act(() => {
+        result.current.setClientSourceFilter('all')
+        result.current.setFilterText('client:iPhone')
+      })
+      expect(result.current.filteredRecords).toHaveLength(1)
+      expect(result.current.filteredRecords[0].id).toBe(2)
+
+      act(() => result.current.setFilterText('ip:10.13.232.187'))
+      expect(result.current.filteredRecords).toHaveLength(1)
+      expect(result.current.filteredRecords[0].id).toBe(2)
     })
 
     it('should support negative filters with -keyword', () => {

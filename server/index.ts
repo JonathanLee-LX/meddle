@@ -28,6 +28,9 @@ export interface ServerContext {
         time: string
         statusCode?: number
         duration?: number
+        clientType?: 'local' | 'remote' | 'plugin'
+        clientIp?: string
+        clientName?: string
     }>
     proxyRecordDetailMap: Map<number, {
         requestHeaders: Record<string, string>
@@ -104,7 +107,7 @@ export interface ServerContext {
     reloadAllRuleFiles: () => void
     broadcastToAllClients: (data: unknown) => void
     appendProxyRecordFromPluginTest: (
-        logData: { method: string; source: string; target: string; time: string; statusCode?: number; duration?: number; _fromPluginTest?: boolean },
+        logData: { method: string; source: string; target: string; time: string; statusCode?: number; duration?: number; clientType?: 'local' | 'remote' | 'plugin'; clientIp?: string; clientName?: string; _fromPluginTest?: boolean },
         detail?: { requestHeaders: Record<string, string>; requestBody?: string; responseHeaders: Record<string, string>; responseBody?: string; statusCode: number; statusMessage?: string; method: string; url: string }
     ) => void
     getMockFilePath: () => string
@@ -115,6 +118,7 @@ export interface ServerContext {
         warnings: string[]
     }
     loadSettingsSync: () => unknown
+    refreshClientAliases: () => void
     /** 供插件测试：解析路由得到目标 URL */
     resolveTargetUrlForTest?: (url: string) => string
     /** 供插件测试：该请求是否会走 request pipeline */
@@ -125,6 +129,20 @@ export interface ServerContext {
     shouldUseMockForTest?: (source: string, rule: unknown) => boolean
     /** 供插件测试：根据 Mock 规则构建响应对象 */
     buildMockResponseForTest?: (rule: unknown) => { statusCode: number; headers: Record<string, string>; body: string }
+    /** 获取手机远程代理的地址与安全状态 */
+    getRemoteAccessInfo: () => {
+        enabled: boolean
+        interceptHttps: boolean
+        authenticationRequired: boolean
+        proxyPort: number | null
+        localSetupPath: string
+        targets: Array<{
+            address: string
+            proxyUrl: string
+            setupUrl: string
+            certificateUrl: string
+        }>
+    }
 }
 
 /**

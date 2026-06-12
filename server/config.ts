@@ -16,6 +16,10 @@ export function refreshConfig(ctx: ServerContext): { status: string; message: st
 }
 
 export function registerConfigRoutes(app: Application, ctx: ServerContext): void {
+    app.get('/api/remote-access', (_req: Request, res: Response) => {
+        res.json(ctx.getRemoteAccessInfo())
+    })
+
     // API: 刷新配置
     app.post('/api/refresh-config', async (_req: Request, res: Response) => {
         res.setHeader('Content-Type', 'application/json')
@@ -38,6 +42,7 @@ export function registerConfigRoutes(app: Application, ctx: ServerContext): void
             } else {
                 res.write(JSON.stringify({
                     theme: 'system',
+                    accentColor: 'auto',
                     fontSize: 'medium',
                     aiConfig: {
                         enabled: false,
@@ -62,6 +67,7 @@ export function registerConfigRoutes(app: Application, ctx: ServerContext): void
         try {
             const settings = req.body
             fs.writeFileSync(ctx.settingsPath, JSON.stringify(settings, null, 2), 'utf8')
+            ctx.refreshClientAliases()
             res.write(JSON.stringify({ status: 'success', message: '设置已保存' }))
         } catch (error) {
             res.statusCode = 500

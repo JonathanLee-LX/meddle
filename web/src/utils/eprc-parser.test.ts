@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { hostsTextToEprc, normalizeImportedRuleText, parseEprcRules, rulesToEprc } from './eprc-parser'
+import {
+  getEprcTextDiagnostics,
+  hostsTextToEprc,
+  normalizeImportedRuleText,
+  parseEprcRules,
+  rulesToEprc,
+} from './eprc-parser'
 
 describe('eprc-parser', () => {
   describe('parseEprcRules', () => {
@@ -213,6 +219,21 @@ describe('eprc-parser', () => {
       const result = rulesToEprc(rules)
 
       expect(result).toBe('example.com 192.168.1.1')
+    })
+  })
+
+  describe('getEprcTextDiagnostics', () => {
+    it('reports lines that cannot be parsed as rules', () => {
+      const input = [
+        '# comment',
+        'example.com localhost:3000',
+        'invalid-line',
+        '//disabled.example.com localhost:4000',
+      ].join('\n')
+
+      expect(getEprcTextDiagnostics(input)).toEqual([
+        { line: 3, content: 'invalid-line' },
+      ])
     })
   })
 

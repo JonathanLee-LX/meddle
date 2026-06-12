@@ -21,3 +21,4 @@ helpers.*.map
 cert.js
 cert.d.ts
 cert.*.mapserver.log
+.ghfs

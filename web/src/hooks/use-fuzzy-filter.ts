@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { ProxyRecord, ResourceType } from '@/types'
+import type { ClientSourceFilter, ProxyRecord, ResourceType } from '@/types'
 import { getResourceType } from '@/utils/resource-type'
 
 /**
@@ -16,12 +16,16 @@ import { getResourceType } from '@/utils/resource-type'
 export function useFuzzyFilter(records: ProxyRecord[]) {
   const [filterText, setFilterText] = useState('')
   const [resourceTypeFilter, setResourceTypeFilter] = useState<ResourceType>('all')
+  const [clientSourceFilter, setClientSourceFilter] = useState<ClientSourceFilter>('all')
 
   const filteredRecords = useMemo(() => {
     // First filter by resource type
     let result = records
     if (resourceTypeFilter !== 'all') {
       result = result.filter((record) => getResourceType(record) === resourceTypeFilter)
+    }
+    if (clientSourceFilter !== 'all') {
+      result = result.filter((record) => record.clientType === clientSourceFilter)
     }
     
     // Then filter by text
@@ -35,6 +39,9 @@ export function useFuzzyFilter(records: ProxyRecord[]) {
       const source = typeof record.source === 'string' ? record.source : ''
       const target = typeof record.target === 'string' ? record.target : ''
       const time = typeof record.time === 'string' ? record.time : ''
+      const clientType = record.clientType || ''
+      const clientIp = record.clientIp || ''
+      const clientName = record.clientName || ''
 
       return terms.every((term) => {
         const isNegative = term.startsWith('-') && term.length > 1
@@ -69,10 +76,19 @@ export function useFuzzyFilter(records: ProxyRecord[]) {
             matches = source.toLowerCase().includes(domain)
           }
         }
+        // client: filter (type, alias, or IP)
+        else if (cleanTerm.startsWith('client:')) {
+          const expected = cleanTerm.slice(7).toLowerCase()
+          matches = `${clientType} ${clientName} ${clientIp}`.toLowerCase().includes(expected)
+        }
+        // ip: filter
+        else if (cleanTerm.startsWith('ip:')) {
+          matches = clientIp.toLowerCase().includes(cleanTerm.slice(3).toLowerCase())
+        }
         // Plain text fuzzy match against source, target, method
         else {
           const lower = cleanTerm.toLowerCase()
-          const haystack = `${method} ${source} ${target} ${time}`.toLowerCase()
+          const haystack = `${method} ${source} ${target} ${time} ${clientType} ${clientIp} ${clientName}`.toLowerCase()
           // Fuzzy: check if all characters appear in order
           matches = fuzzyMatch(lower, haystack)
         }
@@ -80,9 +96,17 @@ export function useFuzzyFilter(records: ProxyRecord[]) {
         return isNegative ? !matches : matches
       })
     })
-  }, [records, filterText, resourceTypeFilter])
+  }, [records, filterText, resourceTypeFilter, clientSourceFilter])
 
-  return { filterText, setFilterText, resourceTypeFilter, setResourceTypeFilter, filteredRecords }
+  return {
+    filterText,
+    setFilterText,
+    resourceTypeFilter,
+    setResourceTypeFilter,
+    clientSourceFilter,
+    setClientSourceFilter,
+    filteredRecords,
+  }
 }
 
 function fuzzyMatch(needle: string, haystack: string): boolean {

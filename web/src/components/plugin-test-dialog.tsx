@@ -679,7 +679,7 @@ export function PluginTestDialog({
                   <Button
                     key={method}
                     type="button"
-                    variant={testMethod === method ? 'default' : 'outline'}
+                    variant={testMethod === method ? 'selected' : 'outline'}
                     size="sm"
                     onClick={() => setTestMethod(method)}
                     disabled={testing}
@@ -695,7 +695,7 @@ export function PluginTestDialog({
               <div className="flex gap-2 flex-wrap">
                 <Button
                   type="button"
-                  variant={testMode === 'standalone' ? 'default' : 'outline'}
+                  variant={testMode === 'standalone' ? 'selected' : 'outline'}
                   size="sm"
                   onClick={() => setTestMode('standalone')}
                   disabled={testing}
@@ -705,7 +705,7 @@ export function PluginTestDialog({
                 </Button>
                 <Button
                   type="button"
-                  variant={testMode === 'integrated' ? 'default' : 'outline'}
+                  variant={testMode === 'integrated' ? 'selected' : 'outline'}
                   size="sm"
                   onClick={() => setTestMode('integrated')}
                   disabled={testing}

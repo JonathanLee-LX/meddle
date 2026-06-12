@@ -5,10 +5,31 @@ const path = require('path')
 const { connect } = require('net')
 const { WebSocket, WebSocketServer } = require('ws')
 const { resolveTargetUrl, getFreePort } = require('./dist/helpers')
-const { crtMgr, ensureRootCA } = require('./dist/cert')
+const { crtMgr, ensureRootCA, getRootCAPath } = require('./dist/cert')
 const { decideRoute } = require('./dist/core/route-decision')
 const { sendShortResponse } = require('./dist/core/short-response')
 const { safeBodyToString } = require('./dist/core/body-utils')
+const {
+    establishConnectTunnel,
+    isExpectedSocketError,
+} = require('./dist/core/connect-tunnel')
+const {
+    createClientIdentityResolver,
+    createMitmClientIdentityRegistry,
+    getRequestClientIdentity,
+    pluginClientIdentity,
+} = require('./dist/core/client-identity')
+const {
+    authorizeProxyClient,
+    buildRemoteAccessConfig,
+    buildRemoteSetupHtml,
+    createRemoteAccessInfo,
+    getLanIPv4Addresses,
+    isLoopbackAddress,
+    isProxyHost,
+    parseConnectAuthority,
+    stripProxyHeaders,
+} = require('./dist/core/remote-access')
 const chalk = require('chalk')
 const _debug = require('debug')
 
@@ -29,6 +50,10 @@ const { openBrowserWithProxy } = require('./dist/core/browser')
 const { handleLocalRequest } = require('./dist/core/static-server')
 const { createConfigDiagnostics } = require('./dist/core/config-diagnostics')
 const { appendProxyRecord } = require('./dist/core/proxy-record')
+
+const remoteAccess = buildRemoteAccessConfig()
+const lanAddresses = getLanIPv4Addresses()
+const clientIdentityResolver = createClientIdentityResolver(ctx.settingsPath)
 
 const mockHandler = createMockHandler(ctx)
 const pluginIntercept = createPluginIntercept(ctx)
@@ -77,17 +102,23 @@ const serverContext = {
     },
     appendProxyRecordFromPluginTest: (logData, detail) => {
         const recordId = ctx.recordIdSeq++
-        const entry = { id: recordId, ...logData }
+        const entry = { id: recordId, ...pluginClientIdentity(), ...logData }
         appendProxyRecord(ctx, entry, detail)
     },
     getMockFilePath: () => mockHandler.getMockFilePath(),
     performConfigDiagnostics: () => configDiag && configDiag.performConfigDiagnostics(),
     loadSettingsSync: () => configDiag && configDiag.loadSettingsSync(),
+    refreshClientAliases: () => clientIdentityResolver.refresh(),
     resolveTargetUrlForTest: (url) => resolveTargetUrl(url, ctx.routeRules) || url,
     canUsePipelineExecuteForTest: (source) => pluginIntercept.canUsePipelineExecuteForSource(source),
     matchMockRuleForTest: (url, method) => mockHandler.matchMockRule(url, method),
     shouldUseMockForTest: (source, rule) => !pluginIntercept.shouldUsePluginMockForRequest(source, rule),
     buildMockResponseForTest: (rule) => mockHandler.buildMockResponseForTest(rule),
+    getRemoteAccessInfo: () => {
+        const address = proxyServer.address()
+        const port = address && typeof address === 'object' ? address.port : null
+        return createRemoteAccessInfo(remoteAccess, lanAddresses, port)
+    },
 }
 
 configDiag = createConfigDiagnostics(ctx, serverContext, mockHandler)
@@ -107,13 +138,78 @@ const plugins = [{
 
 // ===== HTTP 代理服务器 =====
 const proxyServer = http.createServer((req, res) => {
-    const [hostname, port] = req.headers.host.split(':')
     const serverPort = proxyServer.address().port
+    const requestUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
+    const requestTargetsProxy = isProxyHost(req.headers.host, serverPort, lanAddresses)
 
-    if ((hostname === '127.0.0.1' || hostname === 'localhost') && parseInt(port) === serverPort) {
-        handleLocalRequest(req, res, { expressApp, serverContext, ctx })
+    if (requestTargetsProxy) {
+        if (requestUrl.pathname === '/_easy-proxy/ca.crt') {
+            const rootCAPath = getRootCAPath()
+            res.writeHead(200, {
+                'Content-Type': 'application/x-x509-ca-cert',
+                'Content-Disposition': 'attachment; filename="easy-proxy-ca.crt"',
+                'Cache-Control': 'no-store',
+            })
+            fs.createReadStream(rootCAPath).pipe(res)
+            return
+        }
+
+        if (remoteAccess.enabled && requestUrl.pathname === '/_easy-proxy/setup') {
+            const requestedHost = requestUrl.hostname.replace(/^\[|\]$/g, '')
+            const setupHost = requestedHost === 'localhost' || isLoopbackAddress(requestedHost)
+                ? (lanAddresses[0] || requestedHost)
+                : requestedHost
+            const html = buildRemoteSetupHtml(
+                setupHost,
+                serverPort,
+                remoteAccess.interceptHttps,
+                !!remoteAccess.token,
+            )
+            res.writeHead(200, {
+                'Content-Type': 'text/html; charset=utf-8',
+                'Cache-Control': 'no-store',
+            })
+            res.end(html)
+            return
+        }
+
+        if (isLoopbackAddress(req.socket.remoteAddress)) {
+            handleLocalRequest(req, res, { expressApp, serverContext, ctx })
+            return
+        }
+
+        if (remoteAccess.enabled && requestUrl.pathname === '/') {
+            const html = buildRemoteSetupHtml(
+                requestUrl.hostname,
+                serverPort,
+                remoteAccess.interceptHttps,
+                !!remoteAccess.token,
+            )
+            res.writeHead(200, {
+                'Content-Type': 'text/html; charset=utf-8',
+                'Cache-Control': 'no-store',
+            })
+            res.end(html)
+            return
+        }
+
+        res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' })
+        res.end('Remote access to the Easy Proxy management interface is forbidden')
         return
     }
+
+    const access = authorizeProxyClient(req.socket.remoteAddress, req.headers, remoteAccess)
+    if (!access.allowed) {
+        const headers = { 'Content-Type': 'text/plain; charset=utf-8' }
+        if (access.statusCode === 407) headers['Proxy-Authenticate'] = 'Basic realm="Easy Proxy"'
+        res.writeHead(access.statusCode, headers)
+        res.end(access.message)
+        return
+    }
+
+    const clientIdentity = clientIdentityResolver.resolve(req.socket.remoteAddress)
+    req._epClientIdentity = clientIdentity
+    req.socket._epClientIdentity = clientIdentity
 
     // ===== HTTP 代理 =====
     const source = req.url
@@ -147,7 +243,7 @@ const proxyServer = http.createServer((req, res) => {
         const startTime = Date.now()
         const intercepting = pluginIntercept.shouldInterceptResponse()
 
-        const proxyReq = http.request(url, { method: req.method, headers: req.headers }, (proxyRes) => {
+        const proxyReq = http.request(url, { method: req.method, headers: stripProxyHeaders(req.headers) }, (proxyRes) => {
             const resChunks = []
             if (routeChanged) proxyRes.headers['x-real-url'] = url.href
             if (!intercepting) res.writeHead(proxyRes.statusCode, proxyRes.headers)
@@ -170,7 +266,8 @@ const proxyServer = http.createServer((req, res) => {
                 const logData = {
                     id: recordId, method: req.method, source, target: url.href,
                     time: new Date().toLocaleTimeString(), statusCode: proxyRes.statusCode,
-                    duration: Date.now() - startTime
+                    duration: Date.now() - startTime,
+                    ...clientIdentity,
                 }
                 if (!intercepting) pluginIntercept.emitLegacyResponseToPlugins(logData)
                 const responseEncoding = proxyRes.headers && proxyRes.headers['content-encoding']
@@ -216,7 +313,7 @@ localWSServer.on('connection', (client, req) => {})
     await ensureRootCA()
     await pluginBoot.bootstrapBuiltinPlugins()
     const port = await getFreePort()
-    proxyServer.listen(port, () => {
+    proxyServer.listen(port, remoteAccess.bindHost, () => {
         const proxyUrl = `http://127.0.0.1:${port}`
         proxyDebug('proxy-server start on ' + chalk.green(proxyUrl))
         proxyDebug('plugin pipeline mode: ' + chalk.cyan(ctx.requestPipeline.mode))
@@ -238,30 +335,62 @@ localWSServer.on('connection', (client, req) => {})
                 console.log(chalk.yellow('浏览器并未启动，请手动打开'), chalk.cyan(proxyUrl), chalk.yellow('并设置代理'), proxyAddr)
             }
         }
+        if (remoteAccess.enabled) {
+            console.log(chalk.green('远程代理已启用，HTTPS 解密:'), remoteAccess.interceptHttps ? '开启' : '关闭')
+            if (lanAddresses.length === 0) {
+                console.log(chalk.yellow('未发现可用的局域网 IPv4 地址'))
+            }
+            for (const address of lanAddresses) {
+                console.log(chalk.cyan(`手机配置入口: http://${address}:${port}/`))
+                console.log(chalk.cyan(`代理服务器: ${address}:${port}`))
+            }
+            if (remoteAccess.token) {
+                console.log(chalk.green('代理认证已启用，用户名: easy-proxy'))
+            } else {
+                console.log(chalk.yellow('代理认证未启用，请仅在可信局域网中使用'))
+            }
+        }
     })
 })()
 
 // ===== HTTPS CONNECT 处理 =====
-proxyServer.on('connect', async (req, socket, header) => {
-    const originHost = req.url.split(':')[0]
-    const needDecrypt = !!resolveTargetUrl('https://' + req.url + '/', ctx.routeRules)
+proxyServer.on('connect', async (req, socket, head) => {
+    socket.on('error', (err) => {
+        if (!isExpectedSocketError(err)) proxyDebug('client CONNECT socket error', req.url, err.message)
+    })
+
+    const access = authorizeProxyClient(socket.remoteAddress, req.headers, remoteAccess)
+    if (!access.allowed) {
+        const authenticate = access.statusCode === 407
+            ? 'Proxy-Authenticate: Basic realm="Easy Proxy"\r\n'
+            : ''
+        socket.end(`HTTP/1.1 ${access.statusCode} ${access.message}\r\n${authenticate}Connection: close\r\n\r\n`)
+        return
+    }
+
+    const authority = parseConnectAuthority(req.url)
+    if (!authority) {
+        socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n')
+        return
+    }
+    const originHost = authority.host
+    const clientIdentity = clientIdentityResolver.resolve(socket.remoteAddress)
+    const needDecrypt = remoteAccess.interceptHttps
+        || !!resolveTargetUrl(`https://${req.url}/`, ctx.routeRules)
     proxyDebug('received connect request....', needDecrypt ? '(decrypt)' : '(tunnel)')
 
     socket.on('end', () => {})
-    socket.on('error', (err) => { console.error(err) })
 
     // 无规则：直接隧道转发
     if (!needDecrypt) {
-        const parts = req.url.split(':')
-        const host = parts[0]
-        const port = parts[1] ? parseInt(parts[1], 10) : 443
+        const { host, port } = authority
         const connection = connect({ host, port }, () => {
-            socket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
-            socket.pipe(connection)
-            connection.pipe(socket)
+            establishConnectTunnel(socket, connection, head)
         })
         connection.on('error', (err) => {
-            proxyDebug('tunnel connect error', host + ':' + port, err.message)
+            if (!isExpectedSocketError(err)) {
+                proxyDebug('tunnel connect error', host + ':' + port, err.message)
+            }
             if (!socket.destroyed) {
                 try { socket.end('HTTP/1.1 502 Bad Gateway\r\n\r\n') } catch (_) {}
             }
@@ -269,14 +398,13 @@ proxyServer.on('connect', async (req, socket, header) => {
         return
     }
 
-    // 有规则：MITM 解密
-    socket.write('HTTP/1.1 200 Connection Established\r\nProxy-Agent: Node.js-Proxy\r\n\r\n')
-
     function createHttpsServerByCert() {
         return new Promise((resolve, reject) => {
             crtMgr.getCertificate(originHost, (error, key, crt) => {
                 if (error) return reject(error)
+                const clientIdentityRegistry = createMitmClientIdentityRegistry()
                 const server = http2.createSecureServer({ cert: crt, key, allowHTTP1: true }, (req, res) => {
+                    const requestClientIdentity = getRequestClientIdentity(req)
                     const source = 'https://' + (req.headers.host || req.authority || originHost) + req.url
 
                     const mockRule = mockHandler.matchMockRule(source, req.method)
@@ -307,7 +435,7 @@ proxyServer.on('connect', async (req, socket, header) => {
                         const startTime = Date.now()
                         const intercepting = pluginIntercept.shouldInterceptResponse()
                         try {
-                            const proxyRes = await makeProxyRequest(target, req.method, req.headers, reqBody)
+                            const proxyRes = await makeProxyRequest(target, req.method, stripProxyHeaders(req.headers), reqBody)
                             const resChunks = []
                             if (routeChanged) proxyRes.headers['x-real-url'] = target
                             if (!intercepting) res.writeHead(proxyRes.statusCode, cleanHeadersForH2(proxyRes.headers))
@@ -331,7 +459,8 @@ proxyServer.on('connect', async (req, socket, header) => {
                                 const logData = {
                                     id: recordId, method: req.method, source, target,
                                     time: new Date().toLocaleTimeString(), protocol: proxyRes.protocol,
-                                    statusCode: proxyRes.statusCode, duration: Date.now() - startTime
+                                    statusCode: proxyRes.statusCode, duration: Date.now() - startTime,
+                                    ...requestClientIdentity,
                                 }
                                 if (!intercepting) pluginIntercept.emitLegacyResponseToPlugins(logData)
                                 const responseEncoding = proxyRes.headers && proxyRes.headers['content-encoding']
@@ -366,6 +495,13 @@ proxyServer.on('connect', async (req, socket, header) => {
                             try { res.end() } catch (_) {}
                         }
                     })
+                })
+
+                server._epRegisterClientIdentity = (remotePort, identity) => {
+                    clientIdentityRegistry.register(remotePort, identity)
+                }
+                server.on('secureConnection', tlsSocket => {
+                    clientIdentityRegistry.attach(tlsSocket)
                 })
 
                 // WebSocket 代理（MITM HTTPS 服务器）- 使用 noServer 模式，统一在此处理并强制上游→客户端为文本
@@ -474,27 +610,40 @@ proxyServer.on('connect', async (req, socket, header) => {
         })
     }
 
-    let server = ctx.httpsServerMap.get(originHost)
-    if (!server) {
-        const port = await getFreePort()
-        server = await createHttpsServerByCert()
-        server.listen(port, () => { proxyDebug('listening on ' + port) })
-        ctx.httpsServerMap.set(originHost, server)
-    }
+    try {
+        let server = ctx.httpsServerMap.get(originHost)
+        if (!server) {
+            const port = await getFreePort()
+            server = await createHttpsServerByCert()
+            server.listen(port, '127.0.0.1', () => { proxyDebug('listening on ' + port) })
+            ctx.httpsServerMap.set(originHost, server)
+        }
 
-    if (server.listening) {
-        connectToLocalHttpsServer(server)
-    } else {
-        server.on('listening', () => { connectToLocalHttpsServer(server) })
+        if (server.listening) {
+            connectToLocalHttpsServer(server)
+        } else {
+            server.once('listening', () => { connectToLocalHttpsServer(server) })
+        }
+    } catch (err) {
+        proxyDebug('MITM setup error', originHost, err.message)
+        if (!socket.destroyed) {
+            try { socket.end('HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n') } catch (_) {}
+        }
     }
 
     function connectToLocalHttpsServer(server) {
         const connection = connect({
-            host: server.address().address,
+            host: '127.0.0.1',
             port: server.address().port,
         }, () => {
-            socket.pipe(connection)
-            connection.pipe(socket)
+            server._epRegisterClientIdentity?.(connection.localPort, clientIdentity)
+            establishConnectTunnel(socket, connection, head)
+        })
+        connection.on('error', (err) => {
+            if (!isExpectedSocketError(err)) {
+                proxyDebug('local MITM connection error', originHost, err.message)
+            }
+            if (!socket.destroyed) socket.destroy()
         })
     }
 })
@@ -504,7 +653,7 @@ proxyServer.on('upgrade', (req, socket, head) => {
         if (err.code !== 'ECONNRESET') proxyDebug('[ws] upgrade socket error:', err.message)
     })
 
-    if (req.url === '/ws' || req.url.startsWith('/ws?')) {
+    if (isLoopbackAddress(socket.remoteAddress) && (req.url === '/ws' || req.url.startsWith('/ws?'))) {
         if (socket._epWsUpgradeHandled) return
         socket._epWsUpgradeHandled = true
         localWSServer.handleUpgrade(req, socket, head, (ws) => {

@@ -705,6 +705,21 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
                 {detail.statusCode} {detail.statusMessage}
               </Badge>
             )}
+            {selectedRecord?.clientType && (
+              <Badge
+                variant="outline"
+                className="max-w-48 text-[10px] font-mono"
+                title={[selectedRecord.clientName, selectedRecord.clientIp].filter(Boolean).join(' · ')}
+              >
+                {selectedRecord.clientName
+                  || (selectedRecord.clientType === 'local'
+                    ? '本机'
+                    : selectedRecord.clientType === 'plugin'
+                      ? '插件测试'
+                      : '远程设备')}
+                {selectedRecord.clientIp ? ` · ${selectedRecord.clientIp}` : ''}
+              </Badge>
+            )}
             <div className="flex items-center gap-1.5 ml-auto">
               {detail && onReplay && selectedRecord?.id != null && (
                 <Button

@@ -3,40 +3,35 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Plus, Save, Trash2, Filter, X, GripVertical, ArrowUpToLine, FolderOpen, ToggleLeft, ToggleRight, ClipboardPaste } from 'lucide-react'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import {
+  ArrowUpToLine,
+  ClipboardPaste,
+  FileCode2,
+  Filter,
+  FolderOpen,
+  GitBranch,
+  GripVertical,
+  Plus,
+  Save,
+  Table2,
+  ToggleLeft,
+  ToggleRight,
+  Trash2,
+  X,
+} from 'lucide-react'
 import type { RuleItem, RuleFile } from '@/types'
 import { Badge } from '@/components/ui/badge'
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable'
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { buildRuleGraph } from '@/utils/rule-graph'
 import { RouteCanvas } from '@/components/route-canvas'
 import { supportsOpenFilePicker } from '@/types/file-system-access'
 import { FEATURE_FLAGS } from '@/lib/feature-flags'
-import { normalizeImportedRuleText } from '@/utils/eprc-parser'
+import { getEprcTextDiagnostics, normalizeImportedRuleText, parseEprcRules, rulesToEprc } from '@/utils/eprc-parser'
 
 interface RuleConfigProps {
   rules: RuleItem[]
@@ -46,6 +41,7 @@ interface RuleConfigProps {
   fetchRuleFiles: () => Promise<RuleFile[]>
   fetchFileContent: (name: string) => Promise<void>
   fetchRuleFileRawContent: (name: string) => Promise<string>
+  saveRuleFileRawContent: (name: string, content: string) => Promise<boolean>
   saveFileContent: (name: string, items: RuleItem[]) => Promise<boolean>
   createRuleFile: (name: string, content?: string) => Promise<{ success: boolean; error?: string }>
   toggleRuleFile: (name: string, enabled: boolean) => Promise<boolean>
@@ -88,15 +84,8 @@ function getAvailableRuleFileName(files: RuleFile[], baseName: string): string {
   return `${baseName}-${index}`
 }
 
-const ExclusionsInput = memo(function ExclusionsInput({
-  exclusions,
-  onCommit,
-}: ExclusionsInputProps) {
+const ExclusionsInput = memo(function ExclusionsInput({ exclusions, onCommit }: ExclusionsInputProps) {
   const [draft, setDraft] = useState(exclusions.join(' '))
-
-  useEffect(() => {
-    setDraft(exclusions.join(' '))
-  }, [exclusions])
 
   const commitDraft = useCallback(() => {
     onCommit(parseExclusionsInput(draft))
@@ -118,82 +107,75 @@ const ExclusionsInput = memo(function ExclusionsInput({
   )
 })
 
-const SortableRuleRow = memo(function SortableRuleRow({
-  id,
-  item,
-  highlighted,
-  highlightRef,
-  onToggle,
-  onUpdateRule,
-  onDelete,
-  onMoveToTop,
-}: SortableRuleRowProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id })
+const SortableRuleRow = memo(
+  function SortableRuleRow({ id, item, highlighted, highlightRef, onToggle, onUpdateRule, onDelete, onMoveToTop }: SortableRuleRowProps) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  }
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.5 : 1,
+    }
 
-  const handleToggle = useCallback(() => onToggle(), [onToggle])
-  const handleUpdateRule = useCallback((field: 'rule' | 'target') => (e: React.ChangeEvent<HTMLInputElement>) => {
-    onUpdateRule(field, e.target.value)
-  }, [onUpdateRule])
-  const handleCommitExclusions = useCallback((value: string[]) => {
-    onUpdateRule('exclusions', value)
-  }, [onUpdateRule])
-  const handleDelete = useCallback(() => onDelete(), [onDelete])
-  const handleMoveToTop = useCallback(() => onMoveToTop(), [onMoveToTop])
+    const handleToggle = useCallback(() => onToggle(), [onToggle])
+    const handleUpdateRule = useCallback(
+      (field: 'rule' | 'target') => (e: React.ChangeEvent<HTMLInputElement>) => {
+        onUpdateRule(field, e.target.value)
+      },
+      [onUpdateRule],
+    )
+    const handleCommitExclusions = useCallback(
+      (value: string[]) => {
+        onUpdateRule('exclusions', value)
+      },
+      [onUpdateRule],
+    )
+    const handleDelete = useCallback(() => onDelete(), [onDelete])
+    const handleMoveToTop = useCallback(() => onMoveToTop(), [onMoveToTop])
 
-  return (
-    <TableRow
-      ref={(node) => {
-        setNodeRef(node)
-        if (highlighted && highlightRef) {
-          highlightRef.current = node
-        }
-      }}
-      style={style}
-      className={highlighted ? 'bg-amber-100/60 dark:bg-amber-500/20 transition-colors' : undefined}
-    >
-      <TableCell className="w-8 cursor-grab active:cursor-grabbing" {...attributes} {...listeners}>
-        <GripVertical className="h-4 w-4 text-muted-foreground" />
-      </TableCell>
-      <TableCell className="w-12">
-        <Checkbox checked={item.enabled} onCheckedChange={handleToggle} />
-      </TableCell>
-      <TableCell>
-        <Input value={item.rule} onChange={handleUpdateRule('rule')} placeholder="example.com" className="h-8" />
-      </TableCell>
-      <TableCell>
-        <ExclusionsInput exclusions={item.exclusions || []} onCommit={handleCommitExclusions} />
-      </TableCell>
-      <TableCell>
-        <Input value={item.target} onChange={handleUpdateRule('target')} placeholder="127.0.0.1:3000" className="h-8" />
-      </TableCell>
-      <TableCell className="w-24">
-        <div className="flex gap-1">
-          <Button variant="ghost" size="sm" onClick={handleMoveToTop} className="h-8 w-8 p-0 text-muted-foreground hover:text-primary" title="置顶">
-            <ArrowUpToLine className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={handleDelete} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive">
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      </TableCell>
-    </TableRow>
-  )
-}, (prevProps, nextProps) => {
-  return prevProps.item === nextProps.item && prevProps.highlighted === nextProps.highlighted && prevProps.id === nextProps.id
-})
+    return (
+      <TableRow
+        ref={(node) => {
+          setNodeRef(node)
+          if (highlighted && highlightRef) {
+            highlightRef.current = node
+          }
+        }}
+        style={style}
+        className={highlighted ? 'bg-amber-100/60 dark:bg-amber-500/20 transition-colors' : undefined}
+      >
+        <TableCell className="w-8 cursor-grab active:cursor-grabbing" {...attributes} {...listeners}>
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
+        </TableCell>
+        <TableCell className="w-12">
+          <Checkbox checked={item.enabled} onCheckedChange={handleToggle} />
+        </TableCell>
+        <TableCell>
+          <Input value={item.rule} onChange={handleUpdateRule('rule')} placeholder="example.com" className="h-8" />
+        </TableCell>
+        <TableCell>
+          <ExclusionsInput key={JSON.stringify(item.exclusions || [])} exclusions={item.exclusions || []} onCommit={handleCommitExclusions} />
+        </TableCell>
+        <TableCell>
+          <Input value={item.target} onChange={handleUpdateRule('target')} placeholder="127.0.0.1:3000" className="h-8" />
+        </TableCell>
+        <TableCell className="w-24">
+          <div className="flex gap-1">
+            <Button variant="ghost" size="sm" onClick={handleMoveToTop} className="h-8 w-8 p-0 text-muted-foreground hover:text-primary" title="置顶">
+              <ArrowUpToLine className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleDelete} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive">
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </TableCell>
+      </TableRow>
+    )
+  },
+  (prevProps, nextProps) => {
+    return prevProps.item === nextProps.item && prevProps.highlighted === nextProps.highlighted && prevProps.id === nextProps.id
+  },
+)
 
 interface FilteredRuleRowProps {
   item: RuleItem
@@ -205,55 +187,76 @@ interface FilteredRuleRowProps {
   onMoveToTop: () => void
 }
 
-const FilteredRuleRow = memo(function FilteredRuleRow({
-  item,
-  highlighted,
-  highlightRef,
-  onToggle,
-  onUpdateRule,
-  onDelete,
-  onMoveToTop,
-}: FilteredRuleRowProps) {
-  const handleToggle = useCallback(() => onToggle(), [onToggle])
-  const handleUpdateRule = useCallback((field: 'rule' | 'target') => (e: React.ChangeEvent<HTMLInputElement>) => {
-    onUpdateRule(field, e.target.value)
-  }, [onUpdateRule])
-  const handleCommitExclusions = useCallback((value: string[]) => {
-    onUpdateRule('exclusions', value)
-  }, [onUpdateRule])
-  const handleDelete = useCallback(() => onDelete(), [onDelete])
-  const handleMoveToTop = useCallback(() => onMoveToTop(), [onMoveToTop])
+const FilteredRuleRow = memo(
+  function FilteredRuleRow({ item, highlighted, highlightRef, onToggle, onUpdateRule, onDelete, onMoveToTop }: FilteredRuleRowProps) {
+    const handleToggle = useCallback(() => onToggle(), [onToggle])
+    const handleUpdateRule = useCallback(
+      (field: 'rule' | 'target') => (e: React.ChangeEvent<HTMLInputElement>) => {
+        onUpdateRule(field, e.target.value)
+      },
+      [onUpdateRule],
+    )
+    const handleCommitExclusions = useCallback(
+      (value: string[]) => {
+        onUpdateRule('exclusions', value)
+      },
+      [onUpdateRule],
+    )
+    const handleDelete = useCallback(() => onDelete(), [onDelete])
+    const handleMoveToTop = useCallback(() => onMoveToTop(), [onMoveToTop])
 
-  return (
-    <TableRow
-      ref={highlighted ? highlightRef : undefined}
-      className={highlighted ? 'bg-amber-100/60 dark:bg-amber-500/20 transition-colors' : undefined}
-    >
-      <TableCell><Checkbox checked={item.enabled} onCheckedChange={handleToggle} /></TableCell>
-      <TableCell><Input value={item.rule} onChange={handleUpdateRule('rule')} placeholder="example.com" className="h-8" /></TableCell>
-      <TableCell><ExclusionsInput exclusions={item.exclusions || []} onCommit={handleCommitExclusions} /></TableCell>
-      <TableCell><Input value={item.target} onChange={handleUpdateRule('target')} placeholder="127.0.0.1:3000" className="h-8" /></TableCell>
-      <TableCell>
-        <div className="flex gap-1">
-          <Button variant="ghost" size="sm" onClick={handleMoveToTop} className="h-8 w-8 p-0 text-muted-foreground hover:text-primary" title="置顶"><ArrowUpToLine className="h-4 w-4" /></Button>
-          <Button variant="ghost" size="sm" onClick={handleDelete} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
-        </div>
-      </TableCell>
-    </TableRow>
-  )
-}, (prevProps, nextProps) => prevProps.item === nextProps.item && prevProps.highlighted === nextProps.highlighted)
+    return (
+      <TableRow ref={highlighted ? highlightRef : undefined} className={highlighted ? 'bg-amber-100/60 dark:bg-amber-500/20 transition-colors' : undefined}>
+        <TableCell>
+          <Checkbox checked={item.enabled} onCheckedChange={handleToggle} />
+        </TableCell>
+        <TableCell>
+          <Input value={item.rule} onChange={handleUpdateRule('rule')} placeholder="example.com" className="h-8" />
+        </TableCell>
+        <TableCell>
+          <ExclusionsInput key={JSON.stringify(item.exclusions || [])} exclusions={item.exclusions || []} onCommit={handleCommitExclusions} />
+        </TableCell>
+        <TableCell>
+          <Input value={item.target} onChange={handleUpdateRule('target')} placeholder="127.0.0.1:3000" className="h-8" />
+        </TableCell>
+        <TableCell>
+          <div className="flex gap-1">
+            <Button variant="ghost" size="sm" onClick={handleMoveToTop} className="h-8 w-8 p-0 text-muted-foreground hover:text-primary" title="置顶">
+              <ArrowUpToLine className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleDelete} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive">
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </TableCell>
+      </TableRow>
+    )
+  },
+  (prevProps, nextProps) => prevProps.item === nextProps.item && prevProps.highlighted === nextProps.highlighted,
+)
 
 export function RuleConfig(props: RuleConfigProps) {
   const {
-    rules, setRules,
-    ruleFiles, activeFileName,
-    fetchRuleFiles, fetchFileContent, saveFileContent,
-    createRuleFile, toggleRuleFile, deleteRuleFile,
+    rules,
+    setRules,
+    ruleFiles,
+    activeFileName,
+    fetchRuleFiles,
+    fetchFileContent,
+    fetchRuleFileRawContent,
+    saveRuleFileRawContent,
+    saveFileContent,
+    createRuleFile,
+    toggleRuleFile,
+    deleteRuleFile,
   } = props
 
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
-  const [viewMode, setViewMode] = useState<'table' | 'graph'>('table')
+  const [viewMode, setViewMode] = useState<'table' | 'text' | 'graph'>('table')
+  const [textDraft, setTextDraft] = useState('')
+  const [loadedTextFileName, setLoadedTextFileName] = useState<string | null>(null)
+  const textDraftRef = useRef('')
   const [highlightIndex, setHighlightIndex] = useState<number | null>(null)
   const highlightRowRef = useRef<HTMLTableRowElement | null>(null)
 
@@ -290,24 +293,68 @@ export function RuleConfig(props: RuleConfigProps) {
 
   // 初始化：加载文件列表并选中第一个
   useEffect(() => {
-    fetchRuleFiles().then(files => {
+    fetchRuleFiles().then((files) => {
       if (files.length > 0 && !activeFileName) {
-        const enabledFile = files.find(f => f.enabled) || files[0]
+        const enabledFile = files.find((f) => f.enabled) || files[0]
         fetchFileContent(enabledFile.name)
       }
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 切换文件
-  const handleSelectFile = useCallback(async (name: string) => {
-    await fetchFileContent(name)
-  }, [fetchFileContent])
+  const handleSelectFile = useCallback(
+    async (name: string) => {
+      await fetchFileContent(name)
+    },
+    [fetchFileContent],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    if (!activeFileName) {
+      textDraftRef.current = ''
+      return
+    }
+
+    fetchRuleFileRawContent(activeFileName)
+      .then((content) => {
+        if (!cancelled) {
+          textDraftRef.current = content
+          setTextDraft(content)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          const content = rulesToEprc(rules)
+          textDraftRef.current = content
+          setTextDraft(content)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadedTextFileName(activeFileName)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeFileName, fetchRuleFileRawContent]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!activeFileName || viewMode === 'text') return
+
+    const serializedRules = rulesToEprc(rules)
+    const serializedDraftRules = rulesToEprc(parseEprcRules(textDraftRef.current))
+    if (serializedDraftRules === serializedRules) return
+
+    textDraftRef.current = serializedRules
+    setTextDraft(serializedRules)
+  }, [activeFileName, rules, viewMode])
 
   // 创建新规则文件
   const handleCreate = useCallback(async () => {
     if (!newFileName.trim()) return
     setCreateError(null)
-    const content = isTextImporting ? normalizeImportedRuleText(textImportDraft) : (importContent || '')
+    const content = isTextImporting ? normalizeImportedRuleText(textImportDraft) : importContent || ''
     if (isTextImporting && !content.trim()) {
       setCreateError('请输入规则文本')
       return
@@ -327,7 +374,12 @@ export function RuleConfig(props: RuleConfigProps) {
     if (supportsOpenFilePicker(window)) {
       try {
         const [fileHandle] = await window.showOpenFilePicker({
-          types: [{ description: '规则文件', accept: { 'text/plain': ['.txt', '.rules'] } }],
+          types: [
+            {
+              description: '规则文件',
+              accept: { 'text/plain': ['.txt', '.rules'] },
+            },
+          ],
           multiple: false,
         })
         const file = await fileHandle.getFile()
@@ -341,7 +393,9 @@ export function RuleConfig(props: RuleConfigProps) {
         setTextImportDraft('')
         setIsCreating(true)
         return
-      } catch { /* cancelled */ }
+      } catch {
+        /* cancelled */
+      }
     }
     importFileRef.current?.click()
   }, [])
@@ -349,7 +403,7 @@ export function RuleConfig(props: RuleConfigProps) {
   const handleImportInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      file.text().then(content => {
+      file.text().then((content) => {
         const baseName = file.name.replace(/\.[^.]+$/, '')
         setImportContent(content)
         setImportName(baseName)
@@ -380,60 +434,107 @@ export function RuleConfig(props: RuleConfigProps) {
     if (!activeFileName) return
     setSaving(true)
     setSaveStatus('idle')
-    const ok = await saveFileContent(activeFileName, rules)
+    const ok = viewMode === 'text' ? await saveRuleFileRawContent(activeFileName, textDraft) : await saveFileContent(activeFileName, rules)
     setSaving(false)
     setSaveStatus(ok ? 'success' : 'error')
     setTimeout(() => setSaveStatus('idle'), 2000)
     if (ok) fetchRuleFiles()
-  }, [activeFileName, rules, saveFileContent, fetchRuleFiles])
+  }, [activeFileName, fetchRuleFiles, rules, saveFileContent, saveRuleFileRawContent, textDraft, viewMode])
 
   // 删除规则文件
-  const handleDelete = useCallback(async (name: string) => {
-    if (!confirm(`确定要删除规则文件「${name}」吗？`)) return
-    await deleteRuleFile(name)
-  }, [deleteRuleFile])
+  const handleDelete = useCallback(
+    async (name: string) => {
+      if (!confirm(`确定要删除规则文件「${name}」吗？`)) return
+      await deleteRuleFile(name)
+    },
+    [deleteRuleFile],
+  )
 
   // 规则编辑操作
-  const toggleRule = useCallback((index: number) => {
-    startTransition(() => setRules(prev => prev.map((r, i) => (i === index ? { ...r, enabled: !r.enabled } : r))))
-  }, [setRules])
+  const toggleRule = useCallback(
+    (index: number) => {
+      startTransition(() => setRules((prev) => prev.map((r, i) => (i === index ? { ...r, enabled: !r.enabled } : r))))
+    },
+    [setRules],
+  )
 
-  const updateRule = useCallback((index: number, field: 'rule' | 'target' | 'exclusions', value: string | string[]) => {
-    setRules(prev => prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)))
-  }, [setRules])
+  const updateRule = useCallback(
+    (index: number, field: 'rule' | 'target' | 'exclusions', value: string | string[]) => {
+      setRules((prev) => prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)))
+    },
+    [setRules],
+  )
 
-  const deleteRule = useCallback((index: number) => {
-    startTransition(() => setRules(prev => prev.filter((_, i) => i !== index)))
-  }, [setRules])
+  const deleteRule = useCallback(
+    (index: number) => {
+      startTransition(() => setRules((prev) => prev.filter((_, i) => i !== index)))
+    },
+    [setRules],
+  )
 
   const addRule = useCallback(() => {
-    startTransition(() => setRules(prev => [{ enabled: true, rule: '', target: '', exclusions: [] }, ...prev]))
+    startTransition(() => setRules((prev) => [{ enabled: true, rule: '', target: '', exclusions: [] }, ...prev]))
     setHighlightIndex(0)
   }, [setRules])
 
-  const moveToTop = useCallback((index: number) => {
-    startTransition(() => setRules(prev => { const n = [...prev]; const [item] = n.splice(index, 1); n.unshift(item); return n }))
-    setHighlightIndex(0)
-  }, [setRules])
+  const moveToTop = useCallback(
+    (index: number) => {
+      startTransition(() =>
+        setRules((prev) => {
+          const n = [...prev]
+          const [item] = n.splice(index, 1)
+          n.unshift(item)
+          return n
+        }),
+      )
+      setHighlightIndex(0)
+    },
+    [setRules],
+  )
 
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
-    const { active, over } = event
-    if (over && active.id !== over.id) {
-      setRules(prev => {
-        const oldIndex = prev.findIndex((_, i) => `rule-${i}` === active.id)
-        const newIndex = prev.findIndex((_, i) => `rule-${i}` === over.id)
-        return arrayMove(prev, oldIndex, newIndex)
-      })
-    }
-  }, [setRules])
+  const handleTextChange = useCallback(
+    (value: string) => {
+      textDraftRef.current = value
+      setTextDraft(value)
+      setRules(parseEprcRules(value))
+    },
+    [setRules],
+  )
 
-  const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event
+      if (over && active.id !== over.id) {
+        setRules((prev) => {
+          const oldIndex = prev.findIndex((_, i) => `rule-${i}` === active.id)
+          const newIndex = prev.findIndex((_, i) => `rule-${i}` === over.id)
+          return arrayMove(prev, oldIndex, newIndex)
+        })
+      }
+    },
+    [setRules],
+  )
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
 
   useEffect(() => {
     if (highlightIndex == null) return
-    const raf = requestAnimationFrame(() => { highlightRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }) })
+    const raf = requestAnimationFrame(() => {
+      highlightRowRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+    })
     const timer = setTimeout(() => setHighlightIndex(null), 1600)
-    return () => { cancelAnimationFrame(raf); clearTimeout(timer) }
+    return () => {
+      cancelAnimationFrame(raf)
+      clearTimeout(timer)
+    }
   }, [rules, highlightIndex])
 
   useEffect(() => {
@@ -460,72 +561,94 @@ export function RuleConfig(props: RuleConfigProps) {
     if (!deferredRuleFilter && !deferredTargetFilter) return rules.map((item, index) => ({ item, index }))
     const lr = deferredRuleFilter.toLowerCase()
     const lt = deferredTargetFilter.toLowerCase()
-    return rules.map((item, index) => ({ item, index })).filter(({ item }) => {
-      return (!deferredRuleFilter || item.rule.toLowerCase().includes(lr)) && (!deferredTargetFilter || item.target.toLowerCase().includes(lt))
-    })
+    return rules
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => {
+        return (!deferredRuleFilter || item.rule.toLowerCase().includes(lr)) && (!deferredTargetFilter || item.target.toLowerCase().includes(lt))
+      })
   }, [rules, deferredRuleFilter, deferredTargetFilter])
 
   const uniqueTargets = useMemo(() => {
     const targets = new Set<string>()
-    rules.forEach(item => { if (item.target.trim()) targets.add(item.target.trim()) })
+    rules.forEach((item) => {
+      if (item.target.trim()) targets.add(item.target.trim())
+    })
     return Array.from(targets).sort()
   }, [rules])
 
   const graphData = useMemo(() => {
-    return buildRuleGraph(rules, filteredRules.map(({ index }) => index))
+    return buildRuleGraph(
+      rules,
+      filteredRules.map(({ index }) => index),
+    )
   }, [rules, filteredRules])
 
+  const displayedTextDraft = activeFileName ? textDraft : ''
+  const textLoading = Boolean(activeFileName && loadedTextFileName !== activeFileName)
+  const textDiagnostics = useMemo(() => getEprcTextDiagnostics(displayedTextDraft), [displayedTextDraft])
+
   const createToggleRuleCallback = useCallback((index: number) => () => toggleRule(index), [toggleRule])
-  const createUpdateRuleCallback = useCallback((index: number) => (field: 'rule' | 'target' | 'exclusions', value: string | string[]) => updateRule(index, field, value), [updateRule])
+  const createUpdateRuleCallback = useCallback(
+    (index: number) => (field: 'rule' | 'target' | 'exclusions', value: string | string[]) => updateRule(index, field, value),
+    [updateRule],
+  )
   const createDeleteRuleCallback = useCallback((index: number) => () => deleteRule(index), [deleteRule])
   const createMoveToTopCallback = useCallback((index: number) => () => moveToTop(index), [moveToTop])
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {/* 规则文件 Tab 切换 */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <Tabs value={activeFileName || ''} onValueChange={(val) => {
-          if (val === '__create__') {
-            setIsCreating(true)
-            setIsImporting(false)
-            setIsTextImporting(false)
-            setImportContent(null)
-            setImportName('')
-            setTextImportDraft('')
-            setCreateError(null)
-          } else {
-            handleSelectFile(val)
-          }
-        }}>
-          <TabsList className="flex-wrap h-auto gap-1">
+      <div className="min-w-0 overflow-x-auto">
+        <Tabs
+          className="min-w-max"
+          value={activeFileName || ''}
+          onValueChange={(val) => {
+            if (val === '__create__') {
+              setIsCreating(true)
+              setIsImporting(false)
+              setIsTextImporting(false)
+              setImportContent(null)
+              setImportName('')
+              setTextImportDraft('')
+              setCreateError(null)
+            } else {
+              handleSelectFile(val)
+            }
+          }}
+        >
+          <TabsList className="h-auto justify-start gap-1">
             {ruleFiles.map((rf) => (
-              <TabsTrigger key={rf.name} value={rf.name} className="relative group gap-1.5">
+              <TabsTrigger key={rf.name} value={rf.name} className="group relative flex-none gap-1.5">
                 <button
                   className="shrink-0"
-                  onClick={(e) => { e.stopPropagation(); toggleRuleFile(rf.name, !rf.enabled) }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleRuleFile(rf.name, !rf.enabled)
+                  }}
                   title={rf.enabled ? '点击禁用路由' : '点击启用路由'}
                 >
-                  {rf.enabled ? (
-                    <ToggleRight className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <ToggleLeft className="h-4 w-4 text-muted-foreground" />
-                  )}
+                  {rf.enabled ? <ToggleRight className="size-4 text-primary" /> : <ToggleLeft className="size-4 text-muted-foreground" />}
                 </button>
                 <span>{rf.name}</span>
-                <Badge variant="secondary" className="text-[10px] px-1 py-0">{rf.ruleCount}</Badge>
+                <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                  {rf.ruleCount}
+                </Badge>
                 {ruleFiles.length > 1 && (
                   <button
                     className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                    onClick={(e) => { e.stopPropagation(); handleDelete(rf.name) }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDelete(rf.name)
+                    }}
                     title="删除规则文件"
                   >
-                    <X className="h-3 w-3" />
+                    <X className="size-3" />
                   </button>
                 )}
               </TabsTrigger>
             ))}
-            <TabsTrigger value="__create__" className="w-8">
-              <Plus className="h-4 w-4" />
+            <TabsTrigger value="__create__" className="flex-none">
+              <Plus />
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -533,15 +656,16 @@ export function RuleConfig(props: RuleConfigProps) {
 
       {/* 创建/导入规则文件对话框 */}
       {isCreating && (
-        <div className="rounded-md border p-3 bg-muted/30 space-y-2">
+        <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3">
           <p className="text-sm font-medium">{isTextImporting ? '从文本导入为新规则' : isImporting ? '从文件导入为新规则' : '创建新规则文件'}</p>
-          {isImporting && importName && !isTextImporting && (
-            <p className="text-xs text-muted-foreground">导入自: {importName}</p>
-          )}
+          {isImporting && importName && !isTextImporting && <p className="text-xs text-muted-foreground">导入自: {importName}</p>}
           <div className="flex flex-wrap items-center gap-2">
             <Input
               value={newFileName}
-              onChange={(e) => { setNewFileName(e.target.value); setCreateError(null) }}
+              onChange={(e) => {
+                setNewFileName(e.target.value)
+                setCreateError(null)
+              }}
               placeholder="规则文件名称"
               className="h-8 w-48"
               autoFocus
@@ -550,13 +674,20 @@ export function RuleConfig(props: RuleConfigProps) {
                 if (e.key === 'Escape') resetCreateDialog()
               }}
             />
-            <Button size="sm" onClick={handleCreate}>创建</Button>
-            <Button size="sm" variant="ghost" onClick={resetCreateDialog}>取消</Button>
+            <Button size="sm" onClick={handleCreate}>
+              创建
+            </Button>
+            <Button size="sm" variant="ghost" onClick={resetCreateDialog}>
+              取消
+            </Button>
           </div>
           {isTextImporting && (
             <Textarea
               value={textImportDraft}
-              onChange={(e) => { setTextImportDraft(e.target.value); setCreateError(null) }}
+              onChange={(e) => {
+                setTextImportDraft(e.target.value)
+                setCreateError(null)
+              }}
               placeholder={'127.0.0.1 example.com api.example.com\n::1 local.example.test'}
               className="min-h-[160px] resize-y font-mono text-sm"
             />
@@ -566,81 +697,153 @@ export function RuleConfig(props: RuleConfigProps) {
       )}
 
       {/* 操作栏 */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          {isPending && (
-            <div className="text-xs text-muted-foreground">(更新中...)</div>
-          )}
-          {FEATURE_FLAGS.ruleGraphView && (
-            <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as 'table' | 'graph')}>
-              <TabsList variant="line">
-                <TabsTrigger value="table">表格视图</TabsTrigger>
-                <TabsTrigger value="graph">图表视图</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          )}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-2">
+          {isPending && <div className="text-xs text-muted-foreground">(更新中...)</div>}
+          <ToggleGroup
+            type="single"
+            value={viewMode}
+            onValueChange={(value) => {
+              if (value) setViewMode(value as 'table' | 'text' | 'graph')
+            }}
+            variant="outline"
+            size="sm"
+            spacing={0}
+            aria-label="规则视图"
+          >
+            <ToggleGroupItem value="table">
+              <Table2 />
+              表格
+            </ToggleGroupItem>
+            <ToggleGroupItem value="text">
+              <FileCode2 />
+              文本
+            </ToggleGroupItem>
+            {FEATURE_FLAGS.ruleGraphView && (
+              <ToggleGroupItem value="graph">
+                <GitBranch />
+                图表
+              </ToggleGroupItem>
+            )}
+          </ToggleGroup>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant={showFilters ? 'default' : 'outline'} size="sm" onClick={() => setShowFilters(v => !v)} title="显示/隐藏筛选器">
-            <Filter className="h-4 w-4 mr-1" />筛选
-          </Button>
+          {viewMode !== 'text' && (
+            <Button variant={showFilters ? 'selected' : 'outline'} size="sm" onClick={() => setShowFilters((v) => !v)} title="显示/隐藏筛选器">
+              <Filter data-icon="inline-start" />
+              筛选
+            </Button>
+          )}
           {viewMode === 'table' && (
             <>
               <Button variant="outline" size="sm" onClick={addRule} disabled={!activeFileName}>
-                <Plus className="h-4 w-4 mr-1" />添加规则
+                <Plus data-icon="inline-start" />
+                添加规则
               </Button>
               <input ref={importFileRef} type="file" accept=".txt,.rules" className="hidden" onChange={handleImportInputChange} />
               <Button variant="outline" size="sm" onClick={handleImportFile}>
-                <FolderOpen className="h-4 w-4 mr-1" />从文件加载
+                <FolderOpen data-icon="inline-start" />
+                从文件加载
               </Button>
               <Button variant="outline" size="sm" onClick={handleImportText}>
-                <ClipboardPaste className="h-4 w-4 mr-1" />文本导入
+                <ClipboardPaste data-icon="inline-start" />
+                文本导入
               </Button>
-              {activeFileName && (
-                <>
-                  <Button size="sm" onClick={handleSave} disabled={saving}>
-                    <Save className="h-4 w-4 mr-1" />{saving ? '保存中...' : '保存'}
-                  </Button>
-                  {saveStatus === 'success' && <span className="text-sm text-green-600 self-center">已保存</span>}
-                  {saveStatus === 'error' && <span className="text-sm text-red-600 self-center">保存失败</span>}
-                </>
-              )}
+            </>
+          )}
+          {activeFileName && (
+            <>
+              <Button size="sm" onClick={handleSave} disabled={saving || textLoading}>
+                <Save data-icon="inline-start" />
+                {saving ? '保存中...' : '保存'}
+              </Button>
+              {saveStatus === 'success' && <Badge variant="secondary">已保存</Badge>}
+              {saveStatus === 'error' && <Badge variant="destructive">保存失败</Badge>}
             </>
           )}
         </div>
       </div>
 
       {/* 筛选器 */}
-      {showFilters && (
-        <div className="flex items-center gap-2 p-4 bg-muted/50 rounded-md">
+      {showFilters && viewMode !== 'text' && (
+        <div className="flex flex-col gap-3 rounded-lg bg-muted/50 p-4 md:flex-row md:items-end">
           <div className="flex-1 space-y-1">
             <label className="text-xs font-medium text-muted-foreground">筛选规则</label>
             <div className="relative">
               <Input value={ruleFilter} onChange={(e) => setRuleFilter(e.target.value)} placeholder="输入规则名称进行筛选..." className="h-9" />
               {ruleFilter && (
-                <Button variant="ghost" size="sm" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0" onClick={() => setRuleFilter('')}><X className="h-3 w-3" /></Button>
+                <Button variant="ghost" size="sm" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0" onClick={() => setRuleFilter('')}>
+                  <X className="h-3 w-3" />
+                </Button>
               )}
             </div>
           </div>
           <div className="flex-1 space-y-1">
             <label className="text-xs font-medium text-muted-foreground">筛选目标</label>
             <div className="relative">
-              <Input value={targetFilter} onChange={(e) => setTargetFilter(e.target.value)} placeholder="输入目标地址进行筛选..." className="h-9" list="target-list" />
-              <datalist id="target-list">{uniqueTargets.map(t => <option key={t} value={t} />)}</datalist>
+              <Input
+                value={targetFilter}
+                onChange={(e) => setTargetFilter(e.target.value)}
+                placeholder="输入目标地址进行筛选..."
+                className="h-9"
+                list="target-list"
+              />
+              <datalist id="target-list">
+                {uniqueTargets.map((t) => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
               {targetFilter && (
-                <Button variant="ghost" size="sm" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0" onClick={() => setTargetFilter('')}><X className="h-3 w-3" /></Button>
+                <Button variant="ghost" size="sm" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0" onClick={() => setTargetFilter('')}>
+                  <X className="h-3 w-3" />
+                </Button>
               )}
             </div>
           </div>
           {(ruleFilter || targetFilter) && (
             <div className="self-end">
-              <Button variant="outline" size="sm" onClick={() => { setRuleFilter(''); setTargetFilter('') }} className="h-9">清除筛选</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setRuleFilter('')
+                  setTargetFilter('')
+                }}
+                className="h-9"
+              >
+                清除筛选
+              </Button>
             </div>
           )}
         </div>
       )}
 
-      {viewMode === 'table' || !FEATURE_FLAGS.ruleGraphView ? (
+      {viewMode === 'text' ? (
+        <div className="flex flex-col gap-2">
+          <Textarea
+            aria-label="规则文本"
+            value={displayedTextDraft}
+            onChange={(event) => handleTextChange(event.target.value)}
+            disabled={!activeFileName || textLoading}
+            placeholder={activeFileName ? 'example.com !/api localhost:3000' : '请先选择或创建一个规则文件'}
+            className="min-h-[480px] resize-y font-mono text-sm leading-6"
+            spellCheck={false}
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span>{textLoading ? '正在加载规则文本...' : `已解析 ${rules.length} 条规则`}</span>
+            {textDiagnostics.length > 0 && (
+              <Badge variant="outline">
+                {textDiagnostics.length} 行未识别：
+                {textDiagnostics
+                  .slice(0, 3)
+                  .map((item) => item.line)
+                  .join('、')}
+                {textDiagnostics.length > 3 ? '…' : ''}
+              </Badge>
+            )}
+          </div>
+        </div>
+      ) : viewMode === 'table' || !FEATURE_FLAGS.ruleGraphView ? (
         <div className="rounded-md border">
           <Table>
             <TableHeader>
@@ -674,17 +877,32 @@ export function RuleConfig(props: RuleConfigProps) {
                 </TableRow>
               ) : ruleFilter || targetFilter ? (
                 filteredRules.map(({ item, index }) => (
-                  <FilteredRuleRow key={index} item={item} highlighted={highlightIndex === index} highlightRef={highlightRowRef}
-                    onToggle={createToggleRuleCallback(index)} onUpdateRule={createUpdateRuleCallback(index)}
-                    onDelete={createDeleteRuleCallback(index)} onMoveToTop={createMoveToTopCallback(index)} />
+                  <FilteredRuleRow
+                    key={index}
+                    item={item}
+                    highlighted={highlightIndex === index}
+                    highlightRef={highlightRowRef}
+                    onToggle={createToggleRuleCallback(index)}
+                    onUpdateRule={createUpdateRuleCallback(index)}
+                    onDelete={createDeleteRuleCallback(index)}
+                    onMoveToTop={createMoveToTopCallback(index)}
+                  />
                 ))
               ) : (
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                   <SortableContext items={rules.map((_, i) => `rule-${i}`)} strategy={verticalListSortingStrategy}>
                     {rules.map((item, index) => (
-                      <SortableRuleRow key={`rule-${index}`} id={`rule-${index}`} item={item} highlighted={highlightIndex === index} highlightRef={highlightRowRef}
-                        onToggle={createToggleRuleCallback(index)} onUpdateRule={createUpdateRuleCallback(index)}
-                        onDelete={createDeleteRuleCallback(index)} onMoveToTop={createMoveToTopCallback(index)} />
+                      <SortableRuleRow
+                        key={`rule-${index}`}
+                        id={`rule-${index}`}
+                        item={item}
+                        highlighted={highlightIndex === index}
+                        highlightRef={highlightRowRef}
+                        onToggle={createToggleRuleCallback(index)}
+                        onUpdateRule={createUpdateRuleCallback(index)}
+                        onDelete={createDeleteRuleCallback(index)}
+                        onMoveToTop={createMoveToTopCallback(index)}
+                      />
                     ))}
                   </SortableContext>
                 </DndContext>
@@ -695,17 +913,11 @@ export function RuleConfig(props: RuleConfigProps) {
       ) : (
         <div className="space-y-4">
           {!activeFileName ? (
-            <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
-              请选择或创建一个规则文件后查看图表
-            </div>
+            <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">请选择或创建一个规则文件后查看图表</div>
           ) : rules.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
-              暂无规则，点击“添加规则”后这里会自动生成路由流向图
-            </div>
+            <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">暂无规则，点击“添加规则”后这里会自动生成路由流向图</div>
           ) : filteredRules.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
-              没有匹配的规则，请调整筛选条件后再查看图表
-            </div>
+            <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">没有匹配的规则，请调整筛选条件后再查看图表</div>
           ) : (
             <RouteCanvas graphData={graphData} />
           )}
@@ -713,7 +925,9 @@ export function RuleConfig(props: RuleConfigProps) {
       )}
 
       {(ruleFilter || targetFilter) && filteredRules.length > 0 && (
-        <div className="text-sm text-muted-foreground">显示 {filteredRules.length} / {rules.length} 条规则</div>
+        <div className="text-sm text-muted-foreground">
+          显示 {filteredRules.length} / {rules.length} 条规则
+        </div>
       )}
     </div>
   )

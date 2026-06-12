@@ -339,6 +339,10 @@ ep route delete default "api.example.com"
 | `--help, -h` | Show help |
 | `--json` | JSON format output (for list/show/status) |
 | `--open` | Launch browser (for start) |
+| `--remote` | Allow private LAN devices to use the proxy |
+| `--remote-token <token>` | Require Basic proxy authentication; username is `easy-proxy` |
+| `--intercept-https` | Decrypt and capture all HTTPS traffic |
+| `--no-intercept-https` | Disable HTTPS decryption in remote mode |
 
 ---
 
@@ -350,6 +354,10 @@ ep route delete default "api.example.com"
 | `EP_PLUGIN_MODE` | Plugin mode (off/shadow/on) |
 | `EP_PLUGIN_ON_HOSTS` | On mode host whitelist |
 | `EP_OPEN` | Open browser flag (`1` to enable) |
+| `EP_REMOTE` | Enable private LAN proxy access (`1` to enable) |
+| `EP_REMOTE_TOKEN` | Remote proxy password; username is `easy-proxy` |
+| `EP_INTERCEPT_HTTPS` | Decrypt all HTTPS traffic (`1` or `0`) |
+| `EP_BIND_HOST` | Proxy listen address |
 | `DEBUG` | Debug logging |
 | `PORT` | Web interface port (default: 8989) |
 
@@ -373,6 +381,20 @@ ep route add default "api.test.com" "localhost:3000"
 # 添加 Mock 规则
 ep mock add --name "Test API" --pattern "/api/test" --status 200 --body '{"ok":true}'
 ```
+
+### Mobile Device Capture
+
+```bash
+# Bind to the LAN and decrypt HTTPS
+ep --remote
+
+# Enable proxy authentication when the mobile OS supports it
+ep --remote --remote-token "change-me"
+```
+
+The startup output contains a setup URL such as `http://192.168.1.10:8989/`. Open it on the phone, configure that host and port as the Wi-Fi HTTP proxy, then install and trust the linked CA certificate.
+
+Remote clients can access only the setup page, CA certificate, and proxy service. The Web UI and `/api` routes remain loopback-only. Certificate-pinned apps and Android apps that reject user-installed CAs cannot be decrypted.
 
 ### Environment Configuration
 

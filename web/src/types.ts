@@ -12,6 +12,8 @@ export type ResourceType =
   | 'wasm'
   | 'other'
 
+export type ClientSourceFilter = 'all' | 'local' | 'remote' | 'plugin'
+
 export interface ProxyRecord {
   id?: number
   method: string
@@ -20,6 +22,9 @@ export interface ProxyRecord {
   time: string
   mock?: boolean
   protocol?: string // 'h2' | 'h1.1'
+  clientType?: 'local' | 'remote' | 'plugin'
+  clientIp?: string
+  clientName?: string
   statusCode?: number
   duration?: number // milliseconds
   /** 来自「插件测试」的请求，会在日志页显示「插件测试」标识 */

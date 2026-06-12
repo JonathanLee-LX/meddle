@@ -37,6 +37,7 @@ export function useProxyStore() {
     fetchRuleFiles: rules.fetchRuleFiles,
     fetchFileContent: rules.fetchFileContent,
     fetchRuleFileRawContent: rules.fetchRuleFileRawContent,
+    saveRuleFileRawContent: rules.saveRuleFileRawContent,
     saveFileContent: rules.saveFileContent,
     createRuleFile: rules.createRuleFile,
     toggleRuleFile: rules.toggleRuleFile,
