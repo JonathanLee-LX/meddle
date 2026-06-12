@@ -26,30 +26,28 @@ import {
   Upload,
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { RuleConfig } from '@/components/rule-config'
 import { LogFilter } from '@/components/log-filter'
 import { LogTable } from '@/components/log-table'
-import { DetailPanel } from '@/components/detail-panel'
-import { PluginConfig } from '@/components/plugin-config'
-import { SettingsPanel } from '@/components/settings-panel'
 import { AppHeader } from '@/components/app-header'
 import { useProxyStore } from '@/hooks/use-proxy-store'
 import { useFuzzyFilter } from '@/hooks/use-fuzzy-filter'
 import { createMockFromLog, type CreateMockFromLogData } from '@/utils/mock-factory'
 import { GlobalPanelProvider } from '@/components/global-panel/global-panel-context'
-import { PluginGenerator } from '@/components/plugin-generator'
-import { PluginCodeEditor } from '@/components/plugin-code-editor'
-import { PluginTestDialog } from '@/components/plugin-test-dialog'
-import { RuleAiAssistantPanel } from '@/components/rule-ai-assistant-panel'
-import { MockEditorPanel } from '@/components/mock-editor-panel'
-import { RoutePreview } from '@/components/route-preview'
 import type { CommandAction, GlobalPanelApi, GlobalPanelRoute } from '@/components/global-panel/types'
 import type { MockRule, ResourceType } from '@/types'
 
-// 懒加载 MockConfig 组件
+const RuleConfig = lazy(() => import('@/components/rule-config').then(module => ({ default: module.RuleConfig })))
 const MockConfig = lazy(() => import('@/components/mock-config').then(module => ({ default: module.MockConfig })))
+const PluginConfig = lazy(() => import('@/components/plugin-config').then(module => ({ default: module.PluginConfig })))
+const DetailPanel = lazy(() => import('@/components/detail-panel').then(module => ({ default: module.DetailPanel })))
+const SettingsPanel = lazy(() => import('@/components/settings-panel').then(module => ({ default: module.SettingsPanel })))
+const PluginGenerator = lazy(() => import('@/components/plugin-generator').then(module => ({ default: module.PluginGenerator })))
+const PluginCodeEditor = lazy(() => import('@/components/plugin-code-editor').then(module => ({ default: module.PluginCodeEditor })))
+const PluginTestDialog = lazy(() => import('@/components/plugin-test-dialog').then(module => ({ default: module.PluginTestDialog })))
+const RuleAiAssistantPanel = lazy(() => import('@/components/rule-ai-assistant-panel').then(module => ({ default: module.RuleAiAssistantPanel })))
+const MockEditorPanel = lazy(() => import('@/components/mock-editor-panel').then(module => ({ default: module.MockEditorPanel })))
+const RoutePreview = lazy(() => import('@/components/route-preview').then(module => ({ default: module.RoutePreview })))
 
-// 懒加载加载占位符
 function LoadingPlaceholder() {
   return (
     <div className="flex items-center justify-center py-12">
@@ -60,6 +58,7 @@ function LoadingPlaceholder() {
 
 function App() {
   const store = useProxyStore()
+  const fetchPlugins = store.fetchPlugins
   const navigate = useNavigate()
   const location = useLocation()
   const { filterText, setFilterText, resourceTypeFilter, setResourceTypeFilter, filteredRecords } = useFuzzyFilter(store.records)
@@ -646,6 +645,7 @@ function App() {
   }, [
     handleCreateMockFromLog,
     handleReplay,
+    navigate,
     store,
   ])
 
@@ -654,11 +654,18 @@ function App() {
 
   // 页面加载时获取插件列表（仅用于显示第三方插件）
   useEffect(() => {
-    store.fetchPlugins()
-  }, [store.fetchPlugins])
+    fetchPlugins()
+  }, [fetchPlugins])
 
   return (
-    <GlobalPanelProvider commands={createCommands} renderPanel={renderPanel}>
+    <GlobalPanelProvider
+      commands={createCommands}
+      renderPanel={(route, panel) => (
+        <Suspense fallback={<LoadingPlaceholder />}>
+          {renderPanel(route, panel)}
+        </Suspense>
+      )}
+    >
     <div className="min-h-screen bg-background">
       <AppHeader
         onSettingsClick={() => openPanelRoute({ id: 'settings', title: '系统设置', description: '管理系统偏好、配置和 AI 功能', size: 'lg' })}
@@ -706,19 +713,21 @@ function App() {
 
           <TabsContent value="config" className="mt-0">
             <div className="rounded-lg border bg-card p-4">
-              <RuleConfig
-                rules={store.rules}
-                setRules={store.setRules}
-                ruleFiles={store.ruleFiles}
-                activeFileName={store.activeFileName}
-                fetchRuleFiles={store.fetchRuleFiles}
-                fetchFileContent={store.fetchFileContent}
-                fetchRuleFileRawContent={store.fetchRuleFileRawContent}
-                saveFileContent={store.saveFileContent}
-                createRuleFile={store.createRuleFile}
-                toggleRuleFile={store.toggleRuleFile}
-                deleteRuleFile={store.deleteRuleFile}
-              />
+              <Suspense fallback={<LoadingPlaceholder />}>
+                <RuleConfig
+                  rules={store.rules}
+                  setRules={store.setRules}
+                  ruleFiles={store.ruleFiles}
+                  activeFileName={store.activeFileName}
+                  fetchRuleFiles={store.fetchRuleFiles}
+                  fetchFileContent={store.fetchFileContent}
+                  fetchRuleFileRawContent={store.fetchRuleFileRawContent}
+                  saveFileContent={store.saveFileContent}
+                  createRuleFile={store.createRuleFile}
+                  toggleRuleFile={store.toggleRuleFile}
+                  deleteRuleFile={store.deleteRuleFile}
+                />
+              </Suspense>
             </div>
           </TabsContent>
 
@@ -738,22 +747,24 @@ function App() {
 
           <TabsContent value="plugins" className="mt-0">
             <div className="rounded-lg border bg-card p-4">
-              <PluginConfig
-                // 插件列表相关
-                plugins={store.plugins}
-                pluginMode={store.pluginMode}
-                switchPluginMode={store.switchPluginMode}
-                fetchPlugins={store.fetchPlugins}
-                startPlugin={store.startPlugin}
-                stopPlugin={store.stopPlugin}
-                togglePlugin={store.togglePlugin}
-                // 第三方插件相关
-                thirdPartyPlugins={store.thirdPartyPlugins}
-                thirdPartySecurity={store.thirdPartySecurity}
-                fetchThirdPartyPlugins={store.fetchThirdPartyPlugins}
-                loadThirdPartyPlugin={store.loadThirdPartyPlugin}
-                unloadThirdPartyPlugin={store.unloadThirdPartyPlugin}
-              />
+              <Suspense fallback={<LoadingPlaceholder />}>
+                <PluginConfig
+                  // 插件列表相关
+                  plugins={store.plugins}
+                  pluginMode={store.pluginMode}
+                  switchPluginMode={store.switchPluginMode}
+                  fetchPlugins={store.fetchPlugins}
+                  startPlugin={store.startPlugin}
+                  stopPlugin={store.stopPlugin}
+                  togglePlugin={store.togglePlugin}
+                  // 第三方插件相关
+                  thirdPartyPlugins={store.thirdPartyPlugins}
+                  thirdPartySecurity={store.thirdPartySecurity}
+                  fetchThirdPartyPlugins={store.fetchThirdPartyPlugins}
+                  loadThirdPartyPlugin={store.loadThirdPartyPlugin}
+                  unloadThirdPartyPlugin={store.unloadThirdPartyPlugin}
+                />
+              </Suspense>
             </div>
           </TabsContent>
         </Tabs>

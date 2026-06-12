@@ -1,9 +1,7 @@
 /**
  * 格式化工具
- * 使用 Prettier 进行专业的代码格式化
+ * 按需加载 Prettier 及对应解析器进行代码格式化
  */
-
-import * as prettier from 'prettier/standalone'
 
 /**
  * 检测内容类型
@@ -177,8 +175,27 @@ function simpleJsFormat(content: string): string {
  */
 async function formatWithPrettier(content: string, parser: 'json' | 'html' | 'css' | 'babel'): Promise<string> {
   try {
+    const prettierPromise = import('prettier/standalone')
+    const pluginPromises = parser === 'css'
+      ? [import('prettier/plugins/postcss')]
+      : parser === 'html'
+        ? [
+            import('prettier/plugins/html'),
+            import('prettier/plugins/babel'),
+            import('prettier/plugins/estree'),
+            import('prettier/plugins/postcss'),
+          ]
+        : [
+            import('prettier/plugins/babel'),
+            import('prettier/plugins/estree'),
+          ]
+    const [prettier, ...pluginModules] = await Promise.all([
+      prettierPromise,
+      ...pluginPromises,
+    ])
     const formatted = await prettier.format(content, {
-      parser,
+      parser: parser === 'json' ? 'json-stringify' : parser,
+      plugins: pluginModules.map(plugin => plugin.default),
       printWidth: 80,
       tabWidth: 2,
       useTabs: false,

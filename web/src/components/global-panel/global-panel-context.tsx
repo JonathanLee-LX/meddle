@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import type { GlobalPanelApi, GlobalPanelProviderProps, GlobalPanelRoute } from './types'
-import { GlobalPanelShell } from './global-panel-shell'
 import { GlobalPanelContext } from './global-panel-context-value'
 import { useGlobalShortcut } from './use-global-shortcut'
+
+const GlobalPanelShell = lazy(() => import('./global-panel-shell').then(module => ({
+  default: module.GlobalPanelShell,
+})))
 
 export function GlobalPanelProvider({ children, commands, renderPanel }: GlobalPanelProviderProps) {
   const [open, setOpen] = useState(false)
@@ -67,10 +70,14 @@ export function GlobalPanelProvider({ children, commands, renderPanel }: GlobalP
   return (
     <GlobalPanelContext.Provider value={value}>
       {children}
-      <GlobalPanelShell
-        commands={resolvedCommands}
-        renderPanel={(route) => renderPanel(route, value)}
-      />
+      {open && (
+        <Suspense fallback={null}>
+          <GlobalPanelShell
+            commands={resolvedCommands}
+            renderPanel={(route) => renderPanel(route, value)}
+          />
+        </Suspense>
+      )}
     </GlobalPanelContext.Provider>
   )
 }
