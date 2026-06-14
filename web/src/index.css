@@ -7,6 +7,12 @@
 :root {
   --font-size-base: 14px;
   --app-scale: 1;
+  --ui-page-padding: 1.5rem;
+  --ui-panel-padding: 1.75rem;
+  --ui-content-gap: 2rem;
+  --ui-section-gap: 1rem;
+  --ui-field-gap: 0.75rem;
+  --ui-copy-leading: 1.5rem;
 }
 
 @keyframes global-panel-overlay-in {
@@ -58,6 +64,51 @@
 }
 
 @layer components {
+  .app-workspace-content {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: var(--ui-content-gap);
+    padding: var(--ui-page-padding);
+  }
+
+  .app-page-stack {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: var(--ui-content-gap);
+  }
+
+  .app-panel-content {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex: 1 1 0%;
+    flex-direction: column;
+    gap: var(--ui-content-gap);
+    overflow: auto;
+    padding: var(--ui-panel-padding);
+  }
+
+  .app-section {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: var(--ui-section-gap);
+  }
+
+  .app-field-group {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: var(--ui-field-gap);
+  }
+
+  .app-panel-content p,
+  .app-workspace-content p {
+    line-height: var(--ui-copy-leading);
+  }
+
   .global-panel-overlay {
     background: color-mix(in oklab, var(--background) 18%, transparent);
     -webkit-backdrop-filter: blur(18px) saturate(1.2);
@@ -142,6 +193,14 @@
 
   .global-panel-content[data-state='closed'] {
     animation: global-panel-content-out 150ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --ui-page-padding: 1rem;
+    --ui-panel-padding: 1rem;
+    --ui-content-gap: 1.5rem;
   }
 }
 

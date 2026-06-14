@@ -98,7 +98,7 @@ export function RuleAiAssistantPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex-1 overflow-auto px-5 py-4 space-y-4">
+      <div className="app-panel-content">
         <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
           <span className="rounded-full border bg-muted/40 px-2 py-1">支持通配符合并</span>
           <span className="rounded-full border bg-muted/40 px-2 py-1">可带额外优化提示词</span>
@@ -121,7 +121,7 @@ export function RuleAiAssistantPanel({
           </Alert>
         )}
 
-        <div className="space-y-2">
+        <div className="app-field-group">
           <div className="text-sm font-medium">AI 规则提示词</div>
           <Textarea
             value={prompt}

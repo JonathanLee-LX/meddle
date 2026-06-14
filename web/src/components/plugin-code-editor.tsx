@@ -298,7 +298,7 @@ export function PluginCodeEditor({
               </Button>
             </div>
             <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-              <div className="space-y-2">
+              <div className="app-field-group">
                 <Label htmlFor="plugin-editor-extra-instruction">补充需求信息</Label>
                 <Textarea
                   id="plugin-editor-extra-instruction"

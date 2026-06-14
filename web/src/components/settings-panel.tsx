@@ -94,6 +94,10 @@ const accentColorOptions: Array<{ value: AccentColor; label: string; color: stri
   { value: 'rose', label: '玫红', color: 'oklch(0.645 0.246 16.439)' },
 ]
 
+const settingsContentClassName = 'app-panel-content mt-0'
+const settingsGroupClassName = 'app-field-group'
+const settingsSectionClassName = 'app-section'
+
 const normalizeZoomScale = (value?: string) => {
   if (!value) return '100'
 
@@ -387,18 +391,33 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
         </SheetHeader>
       )}
 
-      <Tabs defaultValue="preferences" className="flex-1 flex flex-col min-h-0">
-        <TabsList className="mx-6 !h-10 w-auto justify-start gap-1 overflow-x-auto p-1">
-          <TabsTrigger value="preferences" className="h-8 min-w-28 flex-1 px-3">偏好设置</TabsTrigger>
-          <TabsTrigger value="config" className="h-8 min-w-28 flex-1 px-3">配置文件</TabsTrigger>
-          <TabsTrigger value="clients" className="h-8 min-w-28 flex-1 px-3">客户端</TabsTrigger>
-          <TabsTrigger value="ai" className="h-8 min-w-28 flex-1 px-3">AI 配置</TabsTrigger>
+      <Tabs defaultValue="preferences" orientation="vertical" className="min-h-0 flex-1 gap-0">
+        <TabsList
+          aria-label="设置分类"
+          className="h-full w-14 shrink-0 self-stretch justify-start gap-1 rounded-none border-r bg-muted/25 p-2 group-data-[orientation=vertical]/tabs:!h-full sm:w-44 sm:p-3"
+        >
+          <TabsTrigger value="preferences" className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
+            <Settings />
+            <span className="hidden sm:inline">偏好设置</span>
+          </TabsTrigger>
+          <TabsTrigger value="config" className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
+            <FileText />
+            <span className="hidden sm:inline">配置文件</span>
+          </TabsTrigger>
+          <TabsTrigger value="clients" className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
+            <Smartphone />
+            <span className="hidden sm:inline">客户端</span>
+          </TabsTrigger>
+          <TabsTrigger value="ai" className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
+            <Sparkles />
+            <span className="hidden sm:inline">AI 配置</span>
+          </TabsTrigger>
         </TabsList>
 
         {/* 偏好设置 */}
-        <TabsContent value="preferences" className="mt-0 flex flex-1 flex-col gap-6 overflow-auto p-6">
+        <TabsContent value="preferences" className={settingsContentClassName}>
           {/* 主题 */}
-          <div className="space-y-2">
+          <div className={settingsGroupClassName}>
             <Label className="text-sm">主题</Label>
             <Select value={theme} onValueChange={(v: string) => setTheme(v as 'light' | 'dark' | 'system')}>
               <SelectTrigger>
@@ -429,8 +448,8 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
             </Select>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
               <Label className="text-sm">强调色</Label>
               <p className="text-xs text-muted-foreground">统一按钮、状态、选中项和焦点样式。自动模式会根据明暗主题选择合适的颜色。</p>
             </div>
@@ -459,7 +478,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
           </div>
 
           {/* 缩放比例 */}
-          <div className="space-y-2">
+          <div className={settingsGroupClassName}>
             <Label className="text-sm">缩放比例</Label>
             <Select value={zoomScale} onValueChange={setZoomScale}>
               <SelectTrigger>
@@ -479,27 +498,27 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
 
           <Separator />
 
-          <div>
-            <h3 className="text-sm font-medium mb-3">关于</h3>
+          <div className={settingsGroupClassName}>
+            <h3 className="text-sm font-medium">关于</h3>
             <p className="text-xs text-muted-foreground">Easy Proxy - HTTP 调试代理工具</p>
-            <p className="text-xs text-muted-foreground mt-1">版本: 1.0.0</p>
+            <p className="text-xs text-muted-foreground">版本: 1.0.0</p>
           </div>
         </TabsContent>
 
         {/* 配置文件 */}
-        <TabsContent value="config" className="mt-0 flex flex-1 flex-col gap-6 overflow-auto p-6">
+        <TabsContent value="config" className={settingsContentClassName}>
           {/* 路由规则文件 */}
-          <div className="space-y-3">
+          <div className={settingsSectionClassName}>
             <Label className="text-sm font-medium">路由规则文件</Label>
-            <div className="space-y-2">
+            <div className={settingsGroupClassName}>
               <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
                 <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                 <span className="text-xs font-mono truncate flex-1">~/.ep/route-rules/</span>
               </div>
               {ruleFiles.length > 0 ? (
-                <div className="space-y-1">
+                <div className="space-y-2">
                   {ruleFiles.map((rf) => (
-                    <div key={rf.name} className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border">
+                    <div key={rf.name} className="flex items-center gap-2 rounded-md border px-3 py-2.5 text-sm">
                       <Badge variant={rf.enabled ? 'default' : 'secondary'} className="text-[10px]">
                         {rf.enabled ? '已启用' : '未启用'}
                       </Badge>
@@ -518,14 +537,14 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
           <Separator />
 
           {/* Mock 规则文件 */}
-          <div className="space-y-3">
+          <div className={settingsSectionClassName}>
             <Label className="text-sm font-medium">Mock 规则文件</Label>
-            <div className="space-y-2">
+            <div className={settingsGroupClassName}>
               <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
                 <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                 <span className="text-xs font-mono truncate flex-1">{mocksFilePath || '默认: ~/.ep/mocks.json'}</span>
               </div>
-              <div className="space-y-2">
+              <div className={settingsGroupClassName}>
                 <Label htmlFor="mocksPath" className="text-xs text-muted-foreground">
                   自定义 Mock 规则文件路径（留空使用默认）
                 </Label>
@@ -562,8 +581,8 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
 
           <Separator />
 
-          <div>
-            <h3 className="text-sm font-medium mb-3">操作</h3>
+          <div className={settingsGroupClassName}>
+            <h3 className="text-sm font-medium">操作</h3>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleRefreshConfig}>
                 <RefreshCw className="h-4 w-4 mr-1" />
@@ -574,15 +593,15 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                 {diagnosing ? '诊断中...' : '诊断配置'}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">点击重新加载可应用修改后的配置文件，点击诊断配置可检查配置有效性</p>
+            <p className="text-xs text-muted-foreground">点击重新加载可应用修改后的配置文件，点击诊断配置可检查配置有效性</p>
           </div>
 
           {/* 诊断结果 */}
           {diagnostics && (
-            <div className="space-y-3">
+            <div className={settingsSectionClassName}>
               <Separator />
               <div>
-                <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+                <h3 className="mb-4 flex items-center gap-2 text-sm font-medium">
                   <Stethoscope className="h-4 w-4" />
                   诊断结果
                 </h3>
@@ -618,7 +637,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                 </div>
 
                 {/* 检查项列表 */}
-                <div className="space-y-2">
+                <div className={settingsGroupClassName}>
                   {diagnostics.checks.map((check, index) => (
                     <div key={index} className="p-2 rounded border bg-card">
                       <div className="flex items-start gap-2">
@@ -672,16 +691,16 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
         </TabsContent>
 
         {/* 客户端名称 */}
-        <TabsContent value="clients" className="mt-0 flex flex-1 flex-col gap-5 overflow-auto p-6">
-          <div>
+        <TabsContent value="clients" className={settingsContentClassName}>
+          <div className="space-y-1.5">
             <h3 className="text-sm font-medium flex items-center gap-2">
               <Smartphone className="h-4 w-4" />
               远程客户端名称
             </h3>
-            <p className="text-xs text-muted-foreground mt-1">将日志中的客户端 IP 映射为设备名称。保存后新请求立即生效，无需重启代理。</p>
+            <p className="text-xs text-muted-foreground">将日志中的客户端 IP 映射为设备名称。保存后新请求立即生效，无需重启代理。</p>
           </div>
 
-          <div className="space-y-2">
+          <div className={settingsGroupClassName}>
             {Object.entries(clientAliases).length === 0 ? (
               <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">尚未配置设备名称</div>
             ) : (
@@ -722,7 +741,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
 
           <Separator />
 
-          <div className="space-y-2">
+          <div className={settingsGroupClassName}>
             <Label className="text-sm">添加设备</Label>
             <div className="flex items-center gap-2">
               <Input
@@ -754,10 +773,10 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
         </TabsContent>
 
         {/* AI 配置 */}
-        <TabsContent value="ai" className="mt-0 flex flex-1 flex-col gap-4 overflow-auto p-6">
+        <TabsContent value="ai" className={settingsContentClassName}>
           {/* 启用开关 */}
           <div className="flex items-center justify-between">
-            <div>
+            <div className="space-y-1.5">
               <Label className="text-sm">启用 AI 功能</Label>
               <p className="text-xs text-muted-foreground">启用智能代码修复功能</p>
             </div>
@@ -767,7 +786,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
           <Separator />
 
           {/* 多模型配置 */}
-          <div className="space-y-2">
+          <div className={settingsSectionClassName}>
             <div className="flex items-center justify-between">
               <Label className="text-sm">AI 模型配置</Label>
               <Button
@@ -789,7 +808,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
             </div>
 
             {/* 模型列表 */}
-            <div className="space-y-2">
+            <div className={settingsGroupClassName}>
               {aiConfig.models && aiConfig.models.length > 0 ? (
                 aiConfig.models.map((model) => (
                   <div
@@ -831,7 +850,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
 
             {/* 新增模型表单 */}
             {newModelForm && (
-              <div className="p-4 rounded-md border border-primary bg-primary/5 space-y-3">
+              <div className="space-y-5 rounded-md border border-primary bg-primary/5 p-4">
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-medium">新增模型</Label>
                   <Button variant="ghost" size="sm" onClick={() => setNewModelForm(null)} className="h-6 w-6 p-0">
@@ -839,7 +858,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                   </Button>
                 </div>
 
-                <div className="space-y-2">
+                <div className={settingsGroupClassName}>
                   <Label htmlFor="newModelName" className="text-xs">
                     模型名称
                   </Label>
@@ -852,7 +871,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                   />
                 </div>
 
-                <div className="space-y-2">
+                <div className={settingsGroupClassName}>
                   <Label className="text-xs">服务商</Label>
                   <ToggleGroup
                     type="single"
@@ -885,7 +904,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                   </ToggleGroup>
                 </div>
 
-                <div className="space-y-2">
+                <div className={settingsGroupClassName}>
                   <Label htmlFor="newModelApiKey" className="text-xs">
                     API Key
                   </Label>
@@ -904,7 +923,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                   />
                 </div>
 
-                <div className="space-y-2">
+                <div className={settingsGroupClassName}>
                   <Label htmlFor="newModelModel" className="text-xs">
                     模型
                   </Label>
@@ -922,7 +941,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                   />
                 </div>
 
-                <div className="space-y-2">
+                <div className={settingsGroupClassName}>
                   <Label htmlFor="newModelBaseUrl" className="text-xs">
                     API 端点
                   </Label>
@@ -966,13 +985,13 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
           <Separator />
 
           {/* 传统单模型配置（向后兼容） */}
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label className="text-sm">传统配置（向后兼容）</Label>
             <p className="text-xs text-muted-foreground">如果未配置多模型，将使用此配置</p>
           </div>
 
           {/* Provider 选择 */}
-          <div className="space-y-2">
+          <div className={settingsGroupClassName}>
             <Label className="text-xs">AI 服务商</Label>
             <ToggleGroup
               type="single"
@@ -990,7 +1009,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
           </div>
 
           {/* API Key */}
-          <div className="space-y-2">
+          <div className={settingsGroupClassName}>
             <Label htmlFor="apiKey" className="text-xs">
               API Key
             </Label>
@@ -1010,7 +1029,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
           </div>
 
           {/* Model */}
-          <div className="space-y-2">
+          <div className={settingsGroupClassName}>
             <Label htmlFor="model" className="text-xs">
               模型
             </Label>
@@ -1024,7 +1043,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
           </div>
 
           {/* API 端点 */}
-          <div className="space-y-2">
+          <div className={settingsGroupClassName}>
             <Label htmlFor="baseUrl" className="text-xs">
               API 端点
             </Label>

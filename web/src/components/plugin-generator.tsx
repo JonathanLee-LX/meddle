@@ -308,7 +308,7 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
         
         <Separator />
         
-        <div className="flex-1 overflow-auto px-6 py-4 space-y-5">
+        <div className="app-panel-content">
           {!isAIReady && (
             <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900 rounded-md p-3">
               <p className="text-sm text-yellow-700 dark:text-yellow-300">
@@ -318,8 +318,8 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
           )}
 
           {/* 插件需求输入 */}
-          <div className="space-y-4">
-            <div className="space-y-2">
+          <div className="app-section">
+            <div className="app-field-group">
               <Label htmlFor="pluginName">
                 插件名称 <span className="text-red-500">*</span>
               </Label>
@@ -332,7 +332,7 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="app-field-group">
               <Label htmlFor="pluginDescription">
                 插件描述 <span className="text-red-500">*</span>
               </Label>
@@ -346,7 +346,7 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="app-field-group">
               <Label htmlFor="hooks">
                 需要的 Hooks（可选，用逗号分隔）
               </Label>
@@ -362,7 +362,7 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
               </p>
             </div>
 
-            <div className="space-y-2">
+            <div className="app-field-group">
               <Label htmlFor="permissions">
                 需要的权限（可选，用逗号分隔）
               </Label>
@@ -381,7 +381,7 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
 
           {/* 实时生成进度 */}
           {generating && generationProgress > 0 && (
-            <div className="space-y-2">
+            <div className="app-field-group">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">生成进度</span>
                 <span className="font-medium">{generationProgress}%</span>
@@ -397,7 +397,7 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
 
           {/* 生成的代码 */}
           {(generatedCode || generating) && (
-            <div className="space-y-2">
+            <div className="app-field-group">
               <div className="flex items-center justify-between">
                 <Label className="flex items-center gap-2">
                   <Code className="h-4 w-4" />

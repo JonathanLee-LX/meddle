@@ -55,11 +55,12 @@ export function useRules() {
   }, [saveRuleFileRawContent])
 
   const createRuleFile = useCallback(async (name: string, content = ''): Promise<{ success: boolean; error?: string }> => {
+    const trimmedName = name.trim()
     try {
       const res = await fetch('/api/rule-files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, content, enabled: true }),
+        body: JSON.stringify({ name: trimmedName, content, enabled: true }),
       })
       const data = await res.json()
       if (data.status === 'success') {
@@ -68,7 +69,14 @@ export function useRules() {
       }
       return { success: false, error: data.error }
     } catch (err) {
-      return { success: false, error: String(err) }
+      // The server may finish creating the file just before a transient
+      // connection drop. Reconcile with the authoritative file list so the UI
+      // does not report a false failure for an operation that already landed.
+      const files = await fetchRuleFiles()
+      if (files.some((file) => file.name === trimmedName)) {
+        return { success: true }
+      }
+      return { success: false, error: err instanceof Error ? err.message : '创建规则文件失败' }
     }
   }, [fetchRuleFiles])
 
@@ -90,6 +98,32 @@ export function useRules() {
       return false
     }
   }, [fetchRuleFiles])
+
+  const renameRuleFile = useCallback(async (name: string, newName: string): Promise<{ success: boolean; name?: string; error?: string }> => {
+    const trimmedName = newName.trim()
+    if (!trimmedName) return { success: false, error: '规则文件名称不能为空' }
+
+    try {
+      const res = await fetch(`/api/rule-files/${encodeURIComponent(name)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newName: trimmedName }),
+      })
+      const data = await res.json()
+      if (data.status !== 'success') {
+        return { success: false, error: data.error || '重命名失败' }
+      }
+
+      const resolvedName = typeof data.name === 'string' ? data.name : trimmedName
+      if (activeFileName === name) {
+        setActiveFileName(resolvedName)
+      }
+      await fetchRuleFiles()
+      return { success: true, name: resolvedName }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : '重命名失败' }
+    }
+  }, [activeFileName, fetchRuleFiles])
 
   const deleteRuleFile = useCallback(async (name: string): Promise<boolean> => {
     try {
@@ -122,6 +156,7 @@ export function useRules() {
     saveFileContent,
     createRuleFile,
     toggleRuleFile,
+    renameRuleFile,
     deleteRuleFile,
   }
 }

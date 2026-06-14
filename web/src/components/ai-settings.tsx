@@ -79,7 +79,7 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
         'Content-Type': 'application/json',
       }
 
-      let body: any
+      let body: Record<string, unknown>
 
       if (config.provider === 'anthropic') {
         headers['x-api-key'] = config.apiKey
@@ -153,7 +153,7 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
 
         <Separator />
 
-        <div className="flex-1 overflow-auto px-6 py-4 space-y-5">
+        <div className="app-panel-content">
           {/* 启用开关 */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
@@ -168,7 +168,7 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
           <Separator />
 
           {/* AI服务提供商 */}
-          <div className="space-y-2">
+          <div className="app-field-group">
             <Label>AI服务提供商</Label>
             <div className="flex gap-2">
               <Button
@@ -191,7 +191,7 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
           </div>
 
           {/* API密钥 */}
-          <div className="space-y-2">
+          <div className="app-field-group">
             <Label htmlFor="apiKey">
               API密钥 <span className="text-red-500">*</span>
             </Label>
@@ -220,7 +220,7 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
           </div>
 
           {/* 模型 */}
-          <div className="space-y-2">
+          <div className="app-field-group">
             <Label htmlFor="model">
               模型 <span className="text-red-500">*</span>
             </Label>
@@ -238,7 +238,7 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
           </div>
 
           {/* API端点 */}
-          <div className="space-y-2">
+          <div className="app-field-group">
             <Label htmlFor="baseUrl">API端点</Label>
             <Input
               id="baseUrl"

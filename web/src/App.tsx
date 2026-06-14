@@ -28,7 +28,7 @@ import {
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { LogFilter } from '@/components/log-filter'
 import { LogTable } from '@/components/log-table'
@@ -820,7 +820,7 @@ function App() {
       commands={createCommands}
       renderPanel={(route, panel) => <Suspense fallback={<LoadingPlaceholder />}>{renderPanel(route, panel)}</Suspense>}
     >
-      <div className="min-h-screen bg-muted/20">
+      <div className="flex h-dvh flex-col overflow-hidden bg-muted/20">
         <AppHeader
           onSettingsClick={() =>
             openPanelRoute({
@@ -842,37 +842,38 @@ function App() {
         />
 
         {/* Main Content */}
-        <main className="mx-auto w-full max-w-[1600px] px-4 py-5 lg:px-6">
-          <Tabs value={activeTab} onValueChange={handleTabChange} className="gap-4">
-            <TabsList className="!h-auto max-w-full justify-start gap-1 overflow-x-auto p-1">
-              <TabsTrigger value="logs" className="h-8 flex-none px-3">
-                <Globe />
-                日志
-              </TabsTrigger>
-              <TabsTrigger value="config" className="h-8 flex-none px-3">
-                <FileText />
-                路由规则
-              </TabsTrigger>
-              <TabsTrigger value="mock" className="h-8 flex-none px-3">
-                <ClipboardList />
-                Mock
-                {store.mockRules.filter((r) => r.enabled).length > 0 && <Badge variant="secondary">{store.mockRules.filter((r) => r.enabled).length}</Badge>}
-              </TabsTrigger>
-              <TabsTrigger value="plugins" className="h-8 flex-none px-3">
-                <Plug />
-                扩展插件
-              </TabsTrigger>
-            </TabsList>
+        <main className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 px-4 pt-4 lg:px-6">
+          <Card className="h-full min-h-0 w-full flex-1 gap-0 overflow-hidden rounded-b-none py-0">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="min-h-0 flex-1 gap-0">
+              <div className="flex shrink-0 items-center gap-3 border-b px-4 py-2">
+                <TabsList className="!h-auto max-w-full justify-start gap-1 overflow-x-auto p-1">
+                  <TabsTrigger value="logs" className="h-8 flex-none px-3" title="查看经过代理的本机、远程设备和插件测试流量">
+                    <Globe />
+                    日志
+                  </TabsTrigger>
+                  <TabsTrigger value="config" className="h-8 flex-none px-3" title="管理代理转发规则，并在表格、文本和图表视图间切换">
+                    <FileText />
+                    路由规则
+                  </TabsTrigger>
+                  <TabsTrigger value="mock" className="h-8 flex-none px-3" title="匹配请求后返回本地响应，用于联调和异常场景测试">
+                    <ClipboardList />
+                    Mock
+                    {store.mockRules.filter((r) => r.enabled).length > 0 && <Badge variant="secondary">{store.mockRules.filter((r) => r.enabled).length}</Badge>}
+                  </TabsTrigger>
+                  <TabsTrigger value="plugins" className="h-8 flex-none px-3" title="控制内置、自定义和第三方插件的运行状态">
+                    <Plug />
+                    扩展插件
+                  </TabsTrigger>
+                </TabsList>
+                {activeTab === 'logs' && (
+                  <Badge variant={recording ? 'default' : 'secondary'} className="ml-auto shrink-0">
+                    <span className={recording ? 'size-1.5 rounded-full bg-current opacity-70' : 'size-1.5 rounded-full bg-current opacity-50'} />
+                    {recording ? '记录中' : '已暂停'}
+                  </Badge>
+                )}
+              </div>
 
-            <TabsContent value="logs" className="mt-0">
-              <Card className="gap-0 overflow-hidden py-0">
-                <CardHeader className="border-b py-4">
-                  <CardTitle>请求日志</CardTitle>
-                  <CardDescription>查看经过代理的本机、远程设备和插件测试流量。</CardDescription>
-                  <CardAction>
-                    <Badge variant={recording ? 'default' : 'secondary'}>{recording ? '记录中' : '已暂停'}</Badge>
-                  </CardAction>
-                </CardHeader>
+              <TabsContent value="logs" className="mt-0 flex min-h-0 flex-col">
                 <CardContent className="px-4 py-3">
                   <LogFilter
                     filterText={filterText}
@@ -889,16 +890,10 @@ function App() {
                   />
                 </CardContent>
                 <LogTable records={displayRecords} selectedRecordId={store.selectedRecordId} onSelect={handleSelectRecord} autoScroll={autoScroll} />
-              </Card>
-            </TabsContent>
+              </TabsContent>
 
-            <TabsContent value="config" className="mt-0">
-              <Card className="gap-0 py-0">
-                <CardHeader className="border-b py-4">
-                  <CardTitle>路由规则</CardTitle>
-                  <CardDescription>管理代理转发规则，并在表格、文本和图表视图间切换。</CardDescription>
-                </CardHeader>
-                <CardContent className="p-4">
+              <TabsContent value="config" className="mt-0 min-h-0 overflow-y-auto">
+                <CardContent className="app-workspace-content">
                   <Suspense fallback={<LoadingPlaceholder />}>
                     <RuleConfig
                       rules={store.rules}
@@ -912,20 +907,15 @@ function App() {
                       saveFileContent={store.saveFileContent}
                       createRuleFile={store.createRuleFile}
                       toggleRuleFile={store.toggleRuleFile}
+                      renameRuleFile={store.renameRuleFile}
                       deleteRuleFile={store.deleteRuleFile}
                     />
                   </Suspense>
                 </CardContent>
-              </Card>
-            </TabsContent>
+              </TabsContent>
 
-            <TabsContent value="mock" className="mt-0">
-              <Card className="gap-0 py-0">
-                <CardHeader className="border-b py-4">
-                  <CardTitle>Mock 规则</CardTitle>
-                  <CardDescription>匹配请求后返回本地响应，用于联调和异常场景测试。</CardDescription>
-                </CardHeader>
-                <CardContent className="p-4">
+              <TabsContent value="mock" className="mt-0 min-h-0 overflow-y-auto">
+                <CardContent className="app-workspace-content">
                   <Suspense fallback={<LoadingPlaceholder />}>
                     <MockConfig
                       mockRules={store.mockRules}
@@ -936,16 +926,10 @@ function App() {
                     />
                   </Suspense>
                 </CardContent>
-              </Card>
-            </TabsContent>
+              </TabsContent>
 
-            <TabsContent value="plugins" className="mt-0">
-              <Card className="gap-0 py-0">
-                <CardHeader className="border-b py-4">
-                  <CardTitle>扩展插件</CardTitle>
-                  <CardDescription>控制内置、自定义和第三方插件的运行状态。</CardDescription>
-                </CardHeader>
-                <CardContent className="p-4">
+              <TabsContent value="plugins" className="mt-0 min-h-0 overflow-y-auto">
+                <CardContent className="app-workspace-content">
                   <Suspense fallback={<LoadingPlaceholder />}>
                     <PluginConfig
                       // 插件列表相关
@@ -965,9 +949,9 @@ function App() {
                     />
                   </Suspense>
                 </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+              </TabsContent>
+            </Tabs>
+          </Card>
         </main>
       </div>
     </GlobalPanelProvider>

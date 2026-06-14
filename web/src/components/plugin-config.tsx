@@ -190,9 +190,9 @@ export function PluginConfig({
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="app-page-stack">
       {/* Built-in Plugins */}
-      <section className="flex flex-col gap-4">
+      <section className="app-section">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-sm font-medium">内置插件</h3>
           <div className="flex items-center gap-2">
@@ -277,7 +277,7 @@ export function PluginConfig({
       </section>
 
       {/* Custom AI Plugins */}
-      <section className="flex flex-col gap-4">
+      <section className="app-section">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-sm font-medium">自定义插件</h3>
           <div className="flex flex-wrap gap-2">
@@ -394,7 +394,7 @@ export function PluginConfig({
       </section>
 
       {/* Third-party Plugins */}
-      <section className="flex flex-col gap-4">
+      <section className="app-section">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-sm font-medium">第三方插件</h3>
           <div className="flex items-center gap-2">

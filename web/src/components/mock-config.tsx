@@ -340,7 +340,7 @@ export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, dele
   }, [editForm.body])
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="app-page-stack">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium">规则列表</h3>
         <Button variant="outline" size="sm" onClick={openCreate}>
@@ -448,14 +448,14 @@ export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, dele
             <SheetTitle className="text-base">{editId != null ? '编辑 Mock 规则' : '新建 Mock 规则'}</SheetTitle>
           </SheetHeader>
           <Separator />
-          <div className="flex-1 overflow-auto px-4 py-3 space-y-4">
+          <div className="app-panel-content">
             {/* 名称 */}
-            <div className="space-y-1">
+            <div className="app-field-group">
               <label className="text-xs font-medium text-muted-foreground">规则名称</label>
               <Input value={editForm.name} onChange={(e) => updateField('name', e.target.value)} placeholder="如：模拟欠费状态" className="h-8" />
             </div>
             {/* URL 匹配 */}
-            <div className="space-y-1">
+            <div className="app-field-group">
               <label className="text-xs font-medium text-muted-foreground">URL 匹配（支持正则）</label>
               <Input
                 value={editForm.urlPattern}
@@ -466,7 +466,7 @@ export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, dele
             </div>
             {/* 方法和状态码 */}
             <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
+              <div className="app-field-group">
                 <label className="text-xs font-medium text-muted-foreground">HTTP 方法</label>
                 <select
                   value={editForm.method}
@@ -481,11 +481,11 @@ export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, dele
                   <option value="PATCH">PATCH</option>
                 </select>
               </div>
-              <div className="space-y-1">
+              <div className="app-field-group">
                 <label className="text-xs font-medium text-muted-foreground">响应状态码</label>
                 <Input type="number" value={editForm.statusCode} onChange={(e) => updateField('statusCode', parseInt(e.target.value) || 200)} className="h-8" />
               </div>
-              <div className="space-y-1">
+              <div className="app-field-group">
                 <label className="text-xs font-medium text-muted-foreground">响应延迟 (ms)</label>
                 <Input
                   type="number"
@@ -497,7 +497,7 @@ export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, dele
               </div>
             </div>
             {/* 响应 Body */}
-            <div className="space-y-1">
+            <div className="app-field-group">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-medium text-muted-foreground">响应内容 (Body)</label>
                 <div className="flex items-center gap-2">

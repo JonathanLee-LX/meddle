@@ -15,6 +15,7 @@
     "smoke:refactor": "node scripts/refactor-smoke.js",
     "drill:rollout": "node scripts/plugin-rollout-drill.js",
     "test": "vitest run",
+    "test:e2e": "npm run build:web && npm run build && node tests/e2e/interactions.e2e.cjs",
     "test:watch": "vitest",
     "test:refactor": "npm run build && node -c index.js && npm test",
     "prepublish": "npm run build && npm run test",

@@ -106,10 +106,10 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
   }, [timeSortOrder])
 
   return (
-    <div className="relative overflow-x-auto">
-      <div className="min-w-[900px]">
+    <div className="relative flex min-h-0 flex-1 overflow-x-auto">
+      <div className="flex min-h-0 min-w-[900px] flex-1 flex-col">
         {/* Header - Sticky */}
-        <div className="sticky top-0 z-10 flex border-b bg-muted/70 text-xs font-medium backdrop-blur supports-[backdrop-filter]:bg-muted/90">
+        <div className="z-10 flex shrink-0 border-b bg-muted/70 text-xs font-medium backdrop-blur supports-[backdrop-filter]:bg-muted/90">
           <div className="w-16 py-2 px-2">方法</div>
           <div className="w-14 py-2 px-2">状态</div>
           <div className="w-24 py-2 px-2">来源</div>
@@ -130,7 +130,7 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
             </Button>
           </div>
         </div>
-        <ScrollArea className="h-[calc(100vh-16rem)]" ref={scrollRef}>
+        <ScrollArea className="min-h-0 flex-1" ref={scrollRef}>
           <div className="min-w-full">
             {/* Virtual List */}
             {sortedRecords.length === 0 ? (

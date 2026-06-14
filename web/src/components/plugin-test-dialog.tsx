@@ -658,10 +658,10 @@ export function PluginTestDialog({
 
         <Separator />
 
-        <div className="flex-1 overflow-auto px-6 py-4 space-y-4">
+        <div className="app-panel-content">
           {/* 测试配置 */}
-          <div className="space-y-3">
-            <div className="space-y-2">
+          <div className="app-section">
+            <div className="app-field-group">
               <Label htmlFor="testUrl">请求 URL</Label>
               <Input
                 id="testUrl"
@@ -672,7 +672,7 @@ export function PluginTestDialog({
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="app-field-group">
               <Label>HTTP 方法</Label>
               <div className="flex gap-2">
                 {['GET', 'POST', 'PUT', 'DELETE'].map((method) => (
@@ -690,7 +690,7 @@ export function PluginTestDialog({
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="app-field-group">
               <Label>测试模式</Label>
               <div className="flex gap-2 flex-wrap">
                 <Button

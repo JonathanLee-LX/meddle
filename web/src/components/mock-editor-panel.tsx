@@ -183,7 +183,7 @@ export function MockEditorPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex-1 overflow-auto px-5 py-4 space-y-4">
+      <div className="app-panel-content">
         {error && (
           <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/20 dark:text-red-300">
             {error}
@@ -191,7 +191,7 @@ export function MockEditorPanel({
         )}
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
+          <div className="app-field-group">
             <Label>规则名称</Label>
             <Input
               value={form.name}
@@ -199,7 +199,7 @@ export function MockEditorPanel({
               placeholder="如：模拟欠费状态"
             />
           </div>
-          <div className="space-y-2">
+          <div className="app-field-group">
             <Label>HTTP 方法</Label>
             <select
               value={form.method}
@@ -216,7 +216,7 @@ export function MockEditorPanel({
           </div>
         </div>
 
-        <div className="space-y-2">
+        <div className="app-field-group">
           <Label>URL 匹配（支持正则）</Label>
           <Input
             value={form.urlPattern}
@@ -227,7 +227,7 @@ export function MockEditorPanel({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
+          <div className="app-field-group">
             <Label>响应状态码</Label>
             <Input
               type="number"
@@ -235,7 +235,7 @@ export function MockEditorPanel({
               onChange={(event) => updateField('statusCode', parseInt(event.target.value) || 200)}
             />
           </div>
-          <div className="space-y-2">
+          <div className="app-field-group">
             <Label>响应延迟 (ms)</Label>
             <Input
               type="number"
@@ -245,7 +245,7 @@ export function MockEditorPanel({
           </div>
         </div>
 
-        <div className="space-y-2">
+        <div className="app-field-group">
           <Label>响应头 JSON</Label>
           <Textarea
             value={headersText}
@@ -255,7 +255,7 @@ export function MockEditorPanel({
           />
         </div>
 
-        <div className="space-y-2">
+        <div className="app-field-group">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Label>响应内容</Label>
             <div className="flex flex-wrap items-center justify-end gap-2">

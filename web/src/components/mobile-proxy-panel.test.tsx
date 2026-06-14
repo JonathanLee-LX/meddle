@@ -42,6 +42,10 @@ describe('MobileProxyPanel', () => {
       .toHaveAttribute('href', 'http://192.168.1.10:8989/')
     expect(screen.getByRole('link', { name: '下载根证书' }))
       .toHaveAttribute('href', 'http://192.168.1.10:8989/_easy-proxy/ca.crt')
+    expect(screen.getByRole('button', { name: '复制手机配置地址' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '复制地址' })).not.toBeInTheDocument()
+    expect(screen.queryByText('手机配置地址')).not.toBeInTheDocument()
+    expect(screen.queryByText('http://192.168.1.10:8989/')).not.toBeInTheDocument()
   })
 
   it('shows the startup command when remote mode is disabled', async () => {
@@ -60,5 +64,17 @@ describe('MobileProxyPanel', () => {
 
     expect(await screen.findByText('远程代理尚未开启')).toBeInTheDocument()
     expect(screen.getByText('ep --remote')).toBeInTheDocument()
+  })
+
+  it('shows a recoverable error when the server does not expose remote access info', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('<!DOCTYPE html>Not Found', {
+      headers: { 'Content-Type': 'text/html' },
+      status: 404,
+    })))
+
+    render(<MobileProxyPanel />)
+
+    expect(await screen.findByText('加载失败')).toBeInTheDocument()
+    expect(screen.getByText('手机代理接口不可用，请重启 Easy Proxy 服务后重试')).toBeInTheDocument()
   })
 })

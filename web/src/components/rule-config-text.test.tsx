@@ -16,6 +16,7 @@ describe('RuleConfig text view', () => {
     const saveFileContent = vi.fn().mockResolvedValue(true)
     const createRuleFile = vi.fn().mockResolvedValue({ success: true })
     const toggleRuleFile = vi.fn().mockResolvedValue(true)
+    const renameRuleFile = vi.fn().mockResolvedValue({ success: true })
     const deleteRuleFile = vi.fn().mockResolvedValue(true)
 
     function Harness() {
@@ -34,6 +35,7 @@ describe('RuleConfig text view', () => {
           saveFileContent={saveFileContent}
           createRuleFile={createRuleFile}
           toggleRuleFile={toggleRuleFile}
+          renameRuleFile={renameRuleFile}
           deleteRuleFile={deleteRuleFile}
         />
       )

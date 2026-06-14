@@ -82,7 +82,7 @@ export function RoutePreview({ rules, activeFileName, embedded = false, onReveal
   }, [handlePreview])
 
   return (
-    <div className={embedded ? 'flex h-full min-h-0 flex-col space-y-4 p-6' : 'rounded-lg border bg-card p-4 space-y-3'}>
+    <div className={embedded ? 'app-panel-content h-full' : 'rounded-lg border bg-card p-4 space-y-3'}>
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2">

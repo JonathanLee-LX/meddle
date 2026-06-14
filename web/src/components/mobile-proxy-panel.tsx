@@ -25,6 +25,15 @@ interface RemoteAccessInfo {
   targets: RemoteAccessTarget[]
 }
 
+function isRemoteAccessInfo(value: unknown): value is RemoteAccessInfo {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<RemoteAccessInfo>
+  return typeof candidate.enabled === 'boolean'
+    && typeof candidate.interceptHttps === 'boolean'
+    && typeof candidate.authenticationRequired === 'boolean'
+    && Array.isArray(candidate.targets)
+}
+
 export function MobileProxyPanel() {
   const [info, setInfo] = useState<RemoteAccessInfo | null>(null)
   const [selectedAddress, setSelectedAddress] = useState('')
@@ -37,7 +46,10 @@ export function MobileProxyPanel() {
     setLoading(true)
     setError('')
     try {
-      const result = await apiGet<RemoteAccessInfo>('/api/remote-access')
+      const result = await apiGet<unknown>('/api/remote-access')
+      if (!isRemoteAccessInfo(result)) {
+        throw new Error('手机代理接口不可用，请重启 Easy Proxy 服务后重试')
+      }
       setInfo(result)
       setSelectedAddress((current) => (result.targets.some((target) => target.address === current) ? current : result.targets[0]?.address || ''))
     } catch (loadError) {
@@ -147,8 +159,8 @@ export function MobileProxyPanel() {
   }
 
   return (
-    <div className="h-full overflow-auto p-6">
-      <div className="mx-auto grid max-w-3xl gap-6 md:grid-cols-[340px_1fr]">
+    <div className="app-panel-content h-full">
+      <div className="mx-auto grid w-full max-w-3xl gap-6 md:grid-cols-[340px_1fr]">
         <Card className="gap-0 overflow-hidden py-0">
           <CardHeader className="border-b py-4">
             <CardTitle className="flex items-center gap-2">
@@ -179,10 +191,22 @@ export function MobileProxyPanel() {
           </CardHeader>
           <CardContent className="flex flex-col gap-5 p-5">
             <div className="flex flex-wrap gap-2">
-              <Badge variant="outline" className="gap-1.5">
-                <Wifi />
-                {selectedTarget.address}:{info.proxyPort}
-              </Badge>
+              <div className="inline-flex items-center gap-1">
+                <Badge variant="outline" className="gap-1.5">
+                  <Wifi />
+                  {selectedTarget.address}:{info.proxyPort}
+                </Badge>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => void copySetupUrl()}
+                  aria-label={copied ? '地址已复制' : '复制手机配置地址'}
+                  title={copied ? '已复制' : '复制地址'}
+                  className="size-6"
+                >
+                  {copied ? <Check /> : <Copy />}
+                </Button>
+              </div>
               <Badge variant={info.interceptHttps ? 'default' : 'secondary'} className="gap-1.5">
                 {info.interceptHttps ? <ShieldCheck /> : <ShieldOff />}
                 HTTPS {info.interceptHttps ? '解密开启' : '解密关闭'}
@@ -214,16 +238,7 @@ export function MobileProxyPanel() {
               </div>
             )}
 
-            <div className="rounded-lg border bg-muted/50 p-3">
-              <div className="mb-1 text-xs text-muted-foreground">手机配置地址</div>
-              <code className="break-all text-sm">{selectedTarget.setupUrl}</code>
-            </div>
-
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" onClick={() => void copySetupUrl()}>
-                {copied ? <Check data-icon="inline-start" /> : <Copy data-icon="inline-start" />}
-                {copied ? '已复制' : '复制地址'}
-              </Button>
               <Button variant="outline" size="sm" asChild>
                 <a href={selectedTarget.setupUrl} target="_blank" rel="noreferrer">
                   <ExternalLink data-icon="inline-start" />

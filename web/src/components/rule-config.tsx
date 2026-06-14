@@ -8,6 +8,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   ArrowUpToLine,
+  Check,
   ClipboardPaste,
   FileCode2,
   Filter,
@@ -45,6 +46,7 @@ interface RuleConfigProps {
   saveFileContent: (name: string, items: RuleItem[]) => Promise<boolean>
   createRuleFile: (name: string, content?: string) => Promise<{ success: boolean; error?: string }>
   toggleRuleFile: (name: string, enabled: boolean) => Promise<boolean>
+  renameRuleFile: (name: string, newName: string) => Promise<{ success: boolean; name?: string; error?: string }>
   deleteRuleFile: (name: string) => Promise<boolean>
 }
 
@@ -248,6 +250,7 @@ export function RuleConfig(props: RuleConfigProps) {
     saveFileContent,
     createRuleFile,
     toggleRuleFile,
+    renameRuleFile,
     deleteRuleFile,
   } = props
 
@@ -264,6 +267,10 @@ export function RuleConfig(props: RuleConfigProps) {
   const [isCreating, setIsCreating] = useState(false)
   const [newFileName, setNewFileName] = useState('默认规则')
   const [createError, setCreateError] = useState<string | null>(null)
+  const [renamingFileName, setRenamingFileName] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+  const [renameError, setRenameError] = useState<string | null>(null)
+  const renameInFlightRef = useRef(false)
 
   // 从文件加载
   const [isImporting, setIsImporting] = useState(false)
@@ -290,6 +297,17 @@ export function RuleConfig(props: RuleConfigProps) {
     setTextImportDraft('')
     setCreateError(null)
   }, [])
+
+  const beginCreateRuleFile = useCallback(() => {
+    setNewFileName(getAvailableRuleFileName(ruleFiles, '默认规则'))
+    setIsCreating(true)
+    setIsImporting(false)
+    setIsTextImporting(false)
+    setImportContent(null)
+    setImportName('')
+    setTextImportDraft('')
+    setCreateError(null)
+  }, [ruleFiles])
 
   // 初始化：加载文件列表并选中第一个
   useEffect(() => {
@@ -450,6 +468,46 @@ export function RuleConfig(props: RuleConfigProps) {
     [deleteRuleFile],
   )
 
+  const beginRename = useCallback((name: string) => {
+    setRenamingFileName(name)
+    setRenameDraft(name)
+    setRenameError(null)
+  }, [])
+
+  const cancelRename = useCallback(() => {
+    setRenamingFileName(null)
+    setRenameDraft('')
+    setRenameError(null)
+  }, [])
+
+  const commitRename = useCallback(async () => {
+    if (!renamingFileName || renameInFlightRef.current) return
+    const nextName = renameDraft.trim()
+    if (!nextName) {
+      setRenameError('规则文件名称不能为空')
+      return
+    }
+    if (nextName === renamingFileName) {
+      cancelRename()
+      return
+    }
+
+    renameInFlightRef.current = true
+    try {
+      const result = await renameRuleFile(renamingFileName, nextName)
+      if (result.success) {
+        setRenamingFileName(null)
+        setRenameDraft('')
+        setRenameError(null)
+        await fetchFileContent(result.name || nextName)
+      } else {
+        setRenameError(result.error || '重命名失败')
+      }
+    } finally {
+      renameInFlightRef.current = false
+    }
+  }, [cancelRename, fetchFileContent, renameDraft, renameRuleFile, renamingFileName])
+
   // 规则编辑操作
   const toggleRule = useCallback(
     (index: number) => {
@@ -596,103 +654,164 @@ export function RuleConfig(props: RuleConfigProps) {
   const createMoveToTopCallback = useCallback((index: number) => () => moveToTop(index), [moveToTop])
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="app-page-stack">
       {/* 规则文件 Tab 切换 */}
       <div className="min-w-0 overflow-x-auto">
         <Tabs
           className="min-w-max"
           value={activeFileName || ''}
-          onValueChange={(val) => {
-            if (val === '__create__') {
-              setIsCreating(true)
-              setIsImporting(false)
-              setIsTextImporting(false)
-              setImportContent(null)
-              setImportName('')
-              setTextImportDraft('')
-              setCreateError(null)
-            } else {
-              handleSelectFile(val)
-            }
-          }}
+          onValueChange={handleSelectFile}
         >
           <TabsList className="h-auto justify-start gap-1">
             {ruleFiles.map((rf) => (
               <TabsTrigger key={rf.name} value={rf.name} className="group relative flex-none gap-1.5">
-                <button
+                <span
+                  role="button"
+                  tabIndex={0}
                   className="shrink-0"
                   onClick={(e) => {
                     e.stopPropagation()
                     toggleRuleFile(rf.name, !rf.enabled)
                   }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      toggleRuleFile(rf.name, !rf.enabled)
+                    }
+                  }}
                   title={rf.enabled ? '点击禁用路由' : '点击启用路由'}
                 >
                   {rf.enabled ? <ToggleRight className="size-4 text-primary" /> : <ToggleLeft className="size-4 text-muted-foreground" />}
-                </button>
-                <span>{rf.name}</span>
+                </span>
+                {renamingFileName === rf.name ? (
+                  <input
+                    value={renameDraft}
+                    onChange={(event) => {
+                      setRenameDraft(event.target.value)
+                      setRenameError(null)
+                    }}
+                    onClick={(event) => event.stopPropagation()}
+                    onDoubleClick={(event) => event.stopPropagation()}
+                    onFocus={(event) => event.currentTarget.select()}
+                    onBlur={() => void commitRename()}
+                    onKeyDown={(event) => {
+                      event.stopPropagation()
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        void commitRename()
+                      } else if (event.key === 'Escape') {
+                        event.preventDefault()
+                        cancelRename()
+                      }
+                    }}
+                    className="h-6 w-28 rounded border bg-background px-1.5 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
+                    aria-label={`重命名规则文件 ${rf.name}`}
+                    autoFocus
+                  />
+                ) : (
+                  <span
+                    onDoubleClick={(event) => {
+                      event.stopPropagation()
+                      beginRename(rf.name)
+                    }}
+                    title="双击重命名"
+                  >
+                    {rf.name}
+                  </span>
+                )}
                 <Badge variant="secondary" className="text-[10px] px-1 py-0">
                   {rf.ruleCount}
                 </Badge>
                 {ruleFiles.length > 1 && (
-                  <button
+                  <span
+                    role="button"
+                    tabIndex={0}
                     className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
                     onClick={(e) => {
                       e.stopPropagation()
                       handleDelete(rf.name)
                     }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        handleDelete(rf.name)
+                      }
+                    }}
                     title="删除规则文件"
                   >
                     <X className="size-3" />
-                  </button>
+                  </span>
                 )}
               </TabsTrigger>
             ))}
-            <TabsTrigger value="__create__" className="flex-none">
-              <Plus />
-            </TabsTrigger>
+            {isCreating ? (
+              <div
+                role="group"
+                aria-label={isTextImporting ? '从文本导入为新规则' : isImporting ? '从文件导入为新规则' : '创建新规则文件'}
+                className="flex h-8 flex-none items-center gap-1 rounded-md border border-primary/30 bg-background px-1 shadow-sm"
+                title={isImporting && importName ? `导入自: ${importName}` : undefined}
+              >
+                <Input
+                  value={newFileName}
+                  onChange={(event) => {
+                    setNewFileName(event.target.value)
+                    setCreateError(null)
+                  }}
+                  placeholder="规则文件名称"
+                  className="h-6 w-36 border-0 bg-transparent px-1.5 shadow-none focus-visible:ring-0"
+                  aria-label="新规则文件名称"
+                  autoFocus
+                  onKeyDown={(event) => {
+                    event.stopPropagation()
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      void handleCreate()
+                    } else if (event.key === 'Escape') {
+                      event.preventDefault()
+                      resetCreateDialog()
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() => void handleCreate()}
+                  aria-label="确认创建规则文件"
+                  title="创建"
+                >
+                  <Check />
+                </Button>
+                <Button type="button" variant="ghost" size="icon-xs" onClick={resetCreateDialog} aria-label="取消创建规则文件" title="取消">
+                  <X />
+                </Button>
+              </div>
+            ) : (
+              <Button type="button" variant="ghost" size="icon-sm" onClick={beginCreateRuleFile} aria-label="创建规则文件" title="创建规则文件">
+                <Plus />
+              </Button>
+            )}
           </TabsList>
         </Tabs>
       </div>
+      {renameError && <p className="-mt-2 text-xs text-destructive">{renameError}</p>}
+      {createError && <p className="-mt-2 text-xs text-destructive">{createError}</p>}
 
-      {/* 创建/导入规则文件对话框 */}
-      {isCreating && (
+      {/* 文本导入需要额外的规则内容编辑区 */}
+      {isCreating && isTextImporting && (
         <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3">
-          <p className="text-sm font-medium">{isTextImporting ? '从文本导入为新规则' : isImporting ? '从文件导入为新规则' : '创建新规则文件'}</p>
-          {isImporting && importName && !isTextImporting && <p className="text-xs text-muted-foreground">导入自: {importName}</p>}
-          <div className="flex flex-wrap items-center gap-2">
-            <Input
-              value={newFileName}
-              onChange={(e) => {
-                setNewFileName(e.target.value)
-                setCreateError(null)
-              }}
-              placeholder="规则文件名称"
-              className="h-8 w-48"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCreate()
-                if (e.key === 'Escape') resetCreateDialog()
-              }}
-            />
-            <Button size="sm" onClick={handleCreate}>
-              创建
-            </Button>
-            <Button size="sm" variant="ghost" onClick={resetCreateDialog}>
-              取消
-            </Button>
-          </div>
-          {isTextImporting && (
-            <Textarea
-              value={textImportDraft}
-              onChange={(e) => {
-                setTextImportDraft(e.target.value)
-                setCreateError(null)
-              }}
-              placeholder={'127.0.0.1 example.com api.example.com\n::1 local.example.test'}
-              className="min-h-[160px] resize-y font-mono text-sm"
-            />
-          )}
-          {createError && <p className="text-xs text-destructive">{createError}</p>}
+          <Textarea
+            value={textImportDraft}
+            onChange={(e) => {
+              setTextImportDraft(e.target.value)
+              setCreateError(null)
+            }}
+            placeholder={'127.0.0.1 example.com api.example.com\n::1 local.example.test'}
+            className="min-h-[160px] resize-y font-mono text-sm"
+            aria-label="导入规则文本"
+          />
         </div>
       )}
 
