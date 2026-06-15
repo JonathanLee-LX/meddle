@@ -9,7 +9,13 @@ describe('RuleConfig text view', () => {
   it('edits raw rule text and saves it without reformatting', async () => {
     const initialText = '# local routes\nexample.com localhost:3000'
     const updatedText = '# local routes\nexample.com !/api localhost:4000'
-    const saveRuleFileRawContent = vi.fn().mockResolvedValue(true)
+    let resolveSave!: (value: boolean) => void
+    const saveRuleFileRawContent = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveSave = resolve
+        }),
+    )
     const fetchRuleFiles = vi.fn().mockResolvedValue([])
     const fetchFileContent = vi.fn().mockResolvedValue(undefined)
     const fetchRuleFileRawContent = vi.fn().mockResolvedValue(initialText)
@@ -51,9 +57,17 @@ describe('RuleConfig text view', () => {
     fireEvent.change(editor, { target: { value: updatedText } })
     expect(screen.getByText('已解析 1 条规则')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    const saveButton = screen.getByRole('button', { name: '保存' })
+    fireEvent.click(saveButton)
+    expect(saveButton).toBeDisabled()
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument()
+
+    resolveSave(true)
     await waitFor(() => {
       expect(saveRuleFileRawContent).toHaveBeenCalledWith('default', updatedText)
+      expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument()
     })
+    expect(screen.queryByText('已保存')).not.toBeInTheDocument()
+    expect(saveButton).toHaveAccessibleName('保存')
   })
 })

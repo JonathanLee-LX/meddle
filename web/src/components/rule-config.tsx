@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useMemo, useRef, useState, memo, useTransition, useDeferredValue } from 'react'
 import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -255,7 +256,7 @@ export function RuleConfig(props: RuleConfigProps) {
   } = props
 
   const [saving, setSaving] = useState(false)
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'error'>('idle')
   const [viewMode, setViewMode] = useState<'table' | 'text' | 'graph'>('table')
   const [textDraft, setTextDraft] = useState('')
   const [loadedTextFileName, setLoadedTextFileName] = useState<string | null>(null)
@@ -454,9 +455,12 @@ export function RuleConfig(props: RuleConfigProps) {
     setSaveStatus('idle')
     const ok = viewMode === 'text' ? await saveRuleFileRawContent(activeFileName, textDraft) : await saveFileContent(activeFileName, rules)
     setSaving(false)
-    setSaveStatus(ok ? 'success' : 'error')
-    setTimeout(() => setSaveStatus('idle'), 2000)
-    if (ok) fetchRuleFiles()
+    if (ok) {
+      fetchRuleFiles()
+    } else {
+      setSaveStatus('error')
+      setTimeout(() => setSaveStatus('idle'), 2000)
+    }
   }, [activeFileName, fetchRuleFiles, rules, saveFileContent, saveRuleFileRawContent, textDraft, viewMode])
 
   // 删除规则文件
@@ -873,10 +877,9 @@ export function RuleConfig(props: RuleConfigProps) {
           {activeFileName && (
             <>
               <Button size="sm" onClick={handleSave} disabled={saving || textLoading}>
-                <Save data-icon="inline-start" />
-                {saving ? '保存中...' : '保存'}
+                {saving ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
+                保存
               </Button>
-              {saveStatus === 'success' && <Badge variant="secondary">已保存</Badge>}
               {saveStatus === 'error' && <Badge variant="destructive">保存失败</Badge>}
             </>
           )}
