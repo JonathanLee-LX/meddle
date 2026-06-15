@@ -28,4 +28,21 @@ describe('application layout standard', () => {
   ])('%s uses %s', (path, className) => {
     expect(readSource(path)).toContain(className)
   })
+
+  it('keeps the log filters and table in one card', () => {
+    const app = readSource('../App.tsx')
+    const cardStart = app.indexOf('<Card data-testid="log-panel-card"')
+    const cardEnd = app.indexOf('</Card>', cardStart)
+
+    expect(cardStart).toBeGreaterThan(-1)
+    expect(cardEnd).toBeGreaterThan(cardStart)
+    expect(app.indexOf('<LogFilter', cardStart)).toBeLessThan(cardEnd)
+    expect(app.indexOf('<LogTable', cardStart)).toBeLessThan(cardEnd)
+  })
+
+  it('keeps secondary cards flat', () => {
+    expect(readSource('../App.tsx')).toContain('data-testid="log-panel-card" className="min-h-0 flex-1 gap-0 overflow-hidden py-0 shadow-none"')
+    expect(readSource('./rule-config.tsx')).toContain('className="min-h-0 flex-1 gap-0 overflow-hidden py-0 shadow-none')
+    expect(readSource('./mobile-proxy-panel.tsx').match(/<Card className="[^"]*shadow-none[^"]*">/g)).toHaveLength(2)
+  })
 })

@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { toast } from '@/components/ui/toast'
+import { copyText } from '@/utils/clipboard'
 import { MobileProxyPanel } from './mobile-proxy-panel'
 
 vi.mock('qrcode', () => ({
@@ -8,8 +11,21 @@ vi.mock('qrcode', () => ({
   },
 }))
 
+vi.mock('@/components/ui/toast', () => ({
+  toast: {
+    success: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+  },
+}))
+
+vi.mock('@/utils/clipboard', () => ({
+  copyText: vi.fn().mockResolvedValue(undefined),
+}))
+
 afterEach(() => {
   cleanup()
+  vi.clearAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -46,6 +62,63 @@ describe('MobileProxyPanel', () => {
     expect(screen.queryByRole('button', { name: '复制地址' })).not.toBeInTheDocument()
     expect(screen.queryByText('手机配置地址')).not.toBeInTheDocument()
     expect(screen.queryByText('http://192.168.1.10:8989/')).not.toBeInTheDocument()
+  })
+
+  it('copies the selected setup URL and confirms the action', async () => {
+    const response = {
+      enabled: true,
+      interceptHttps: true,
+      authenticationRequired: false,
+      proxyPort: 8989,
+      localSetupPath: '/_easy-proxy/setup',
+      targets: [{
+        address: '192.168.1.10',
+        proxyUrl: 'http://192.168.1.10:8989',
+        setupUrl: 'http://192.168.1.10:8989/',
+        certificateUrl: 'http://192.168.1.10:8989/_easy-proxy/ca.crt',
+      }],
+    }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(response), {
+      headers: { 'Content-Type': 'application/json' },
+    })))
+
+    render(<MobileProxyPanel />)
+    const copyButton = await screen.findByRole('button', { name: '复制手机配置地址' })
+    await userEvent.click(copyButton)
+
+    expect(copyText).toHaveBeenCalledWith('http://192.168.1.10:8989/')
+    expect(await screen.findByRole('button', { name: '地址已复制' })).toBeInTheDocument()
+    expect(toast.success).toHaveBeenCalledWith('手机配置地址已复制')
+  })
+
+  it('shows a selected manual-copy field when browser clipboard access is denied', async () => {
+    vi.mocked(copyText).mockRejectedValueOnce(new Error('clipboard denied'))
+    const response = {
+      enabled: true,
+      interceptHttps: true,
+      authenticationRequired: false,
+      proxyPort: 8989,
+      localSetupPath: '/_easy-proxy/setup',
+      targets: [{
+        address: '192.168.1.10',
+        proxyUrl: 'http://192.168.1.10:8989',
+        setupUrl: 'http://192.168.1.10:8989/',
+        certificateUrl: 'http://192.168.1.10:8989/_easy-proxy/ca.crt',
+      }],
+    }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(response), {
+      headers: { 'Content-Type': 'application/json' },
+    })))
+
+    render(<MobileProxyPanel />)
+    await userEvent.click(await screen.findByRole('button', { name: '复制手机配置地址' }))
+
+    const manualCopyInput = await screen.findByRole('textbox', { name: '手动复制手机配置地址' })
+    expect(manualCopyInput).toHaveValue('http://192.168.1.10:8989/')
+    expect(manualCopyInput).toHaveFocus()
+    expect(manualCopyInput).toHaveProperty('selectionStart', 0)
+    expect(manualCopyInput).toHaveProperty('selectionEnd', 'http://192.168.1.10:8989/'.length)
+    expect(toast.info).toHaveBeenCalledWith('浏览器禁止自动复制，地址已选中')
   })
 
   it('shows the startup command when remote mode is disabled', async () => {

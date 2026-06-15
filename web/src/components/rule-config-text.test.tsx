@@ -2,8 +2,16 @@ import { useState } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { toast } from '@/components/ui/toast'
 import type { RuleItem } from '@/types'
 import { RuleConfig } from './rule-config'
+
+vi.mock('@/components/ui/toast', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}))
 
 describe('RuleConfig text view', () => {
   it('edits raw rule text and saves it without reformatting', async () => {
@@ -49,9 +57,22 @@ describe('RuleConfig text view', () => {
 
     const user = userEvent.setup()
     render(<Harness />)
+    const viewSwitcher = screen.getByRole('group', { name: '规则视图' })
+    const contentCard = viewSwitcher.closest('[data-slot="card"]')
+    const stickyControls = contentCard?.querySelector('[data-slot="rule-config-sticky-controls"]')
+    const tableHeaderBar = contentCard?.querySelector('[data-slot="rule-table-header"]')
+    const tableHeader = contentCard?.querySelector('[data-slot="table-header"]')
+    expect(contentCard).toContainElement(screen.getByRole('tablist'))
+    expect(screen.getAllByRole('table').length).toBeGreaterThanOrEqual(1)
+    expect(stickyControls).toHaveClass('shrink-0')
+    expect(tableHeaderBar).toHaveClass('shrink-0')
+    expect(tableHeader).not.toBeNull()
+    expect(tableHeaderBar).toContainElement(tableHeader as HTMLElement)
+
     await user.click(screen.getByRole('radio', { name: '文本' }))
 
     const editor = await screen.findByLabelText('规则文本')
+    expect(contentCard).toContainElement(editor)
     await waitFor(() => expect(editor).toHaveValue(initialText))
 
     fireEvent.change(editor, { target: { value: updatedText } })
@@ -69,5 +90,6 @@ describe('RuleConfig text view', () => {
     })
     expect(screen.queryByText('已保存')).not.toBeInTheDocument()
     expect(saveButton).toHaveAccessibleName('保存')
+    expect(toast.success).toHaveBeenCalledWith('规则保存成功')
   })
 })

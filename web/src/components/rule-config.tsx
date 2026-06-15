@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useMemo, useRef, useState, memo, useTransition, useDeferredValue } from 'react'
 import { Button } from '@/components/ui/button'
+import { toast } from '@/components/ui/toast'
 import { Spinner } from '@/components/ui/spinner'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -26,6 +27,8 @@ import {
 } from 'lucide-react'
 import type { RuleItem, RuleFile } from '@/types'
 import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -238,6 +241,44 @@ const FilteredRuleRow = memo(
   (prevProps, nextProps) => prevProps.item === nextProps.item && prevProps.highlighted === nextProps.highlighted,
 )
 
+function RuleTableColGroup({ showDragColumn }: { showDragColumn: boolean }) {
+  if (showDragColumn) {
+    return (
+      <colgroup>
+        <col style={{ width: '2rem' }} />
+        <col style={{ width: '3rem' }} />
+        <col />
+        <col />
+        <col />
+        <col style={{ width: '6rem' }} />
+      </colgroup>
+    )
+  }
+
+  return (
+    <colgroup>
+      <col style={{ width: '3rem' }} />
+      <col />
+      <col />
+      <col />
+      <col style={{ width: '6rem' }} />
+    </colgroup>
+  )
+}
+
+function RuleTableHeaderCells({ showDragColumn }: { showDragColumn: boolean }) {
+  return (
+    <TableRow>
+      {showDragColumn && <TableHead className="w-8" />}
+      <TableHead className="w-12">启用</TableHead>
+      <TableHead>规则</TableHead>
+      <TableHead>排除</TableHead>
+      <TableHead>目标</TableHead>
+      <TableHead className="w-24">操作</TableHead>
+    </TableRow>
+  )
+}
+
 export function RuleConfig(props: RuleConfigProps) {
   const {
     rules,
@@ -256,7 +297,6 @@ export function RuleConfig(props: RuleConfigProps) {
   } = props
 
   const [saving, setSaving] = useState(false)
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'error'>('idle')
   const [viewMode, setViewMode] = useState<'table' | 'text' | 'graph'>('table')
   const [textDraft, setTextDraft] = useState('')
   const [loadedTextFileName, setLoadedTextFileName] = useState<string | null>(null)
@@ -452,14 +492,13 @@ export function RuleConfig(props: RuleConfigProps) {
   const handleSave = useCallback(async () => {
     if (!activeFileName) return
     setSaving(true)
-    setSaveStatus('idle')
     const ok = viewMode === 'text' ? await saveRuleFileRawContent(activeFileName, textDraft) : await saveFileContent(activeFileName, rules)
     setSaving(false)
     if (ok) {
       fetchRuleFiles()
+      toast.success('规则保存成功')
     } else {
-      setSaveStatus('error')
-      setTimeout(() => setSaveStatus('idle'), 2000)
+      toast.error('规则保存失败')
     }
   }, [activeFileName, fetchRuleFiles, rules, saveFileContent, saveRuleFileRawContent, textDraft, viewMode])
 
@@ -648,6 +687,7 @@ export function RuleConfig(props: RuleConfigProps) {
   const displayedTextDraft = activeFileName ? textDraft : ''
   const textLoading = Boolean(activeFileName && loadedTextFileName !== activeFileName)
   const textDiagnostics = useMemo(() => getEprcTextDiagnostics(displayedTextDraft), [displayedTextDraft])
+  const showDragColumn = !ruleFilter && !targetFilter
 
   const createToggleRuleCallback = useCallback((index: number) => () => toggleRule(index), [toggleRule])
   const createUpdateRuleCallback = useCallback(
@@ -659,271 +699,332 @@ export function RuleConfig(props: RuleConfigProps) {
 
   return (
     <div className="app-page-stack">
-      {/* 规则文件 Tab 切换 */}
-      <div className="min-w-0 overflow-x-auto">
-        <Tabs
-          className="min-w-max"
-          value={activeFileName || ''}
-          onValueChange={handleSelectFile}
+      <Card
+        data-testid="rule-panel-card"
+        className="min-h-0 flex-1 gap-0 overflow-hidden py-0 shadow-none"
+      >
+        <div
+          data-slot="rule-config-sticky-controls"
+          className="shrink-0 rounded-t-xl bg-card"
         >
-          <TabsList className="h-auto justify-start gap-1">
-            {ruleFiles.map((rf) => (
-              <TabsTrigger key={rf.name} value={rf.name} className="group relative flex-none gap-1.5">
-                <span
-                  role="button"
-                  tabIndex={0}
-                  className="shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    toggleRuleFile(rf.name, !rf.enabled)
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      event.stopPropagation()
-                      toggleRuleFile(rf.name, !rf.enabled)
-                    }
-                  }}
-                  title={rf.enabled ? '点击禁用路由' : '点击启用路由'}
+          <CardHeader className="block border-b bg-muted/30 p-0 [.border-b]:pb-0">
+            <CardTitle className="sr-only">规则内容</CardTitle>
+            <div className="flex min-w-0 items-center px-3 py-2">
+              <div data-slot="rule-file-tabs-scroll" className="min-w-0 flex-1 overflow-x-auto">
+                <Tabs
+                  className="min-w-max"
+                  value={activeFileName || ''}
+                  onValueChange={handleSelectFile}
                 >
-                  {rf.enabled ? <ToggleRight className="size-4 text-primary" /> : <ToggleLeft className="size-4 text-muted-foreground" />}
-                </span>
-                {renamingFileName === rf.name ? (
-                  <input
-                    value={renameDraft}
-                    onChange={(event) => {
-                      setRenameDraft(event.target.value)
-                      setRenameError(null)
-                    }}
-                    onClick={(event) => event.stopPropagation()}
-                    onDoubleClick={(event) => event.stopPropagation()}
-                    onFocus={(event) => event.currentTarget.select()}
-                    onBlur={() => void commitRename()}
-                    onKeyDown={(event) => {
-                      event.stopPropagation()
-                      if (event.key === 'Enter') {
-                        event.preventDefault()
-                        void commitRename()
-                      } else if (event.key === 'Escape') {
-                        event.preventDefault()
-                        cancelRename()
-                      }
-                    }}
-                    className="h-6 w-28 rounded border bg-background px-1.5 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
-                    aria-label={`重命名规则文件 ${rf.name}`}
-                    autoFocus
-                  />
-                ) : (
-                  <span
-                    onDoubleClick={(event) => {
-                      event.stopPropagation()
-                      beginRename(rf.name)
-                    }}
-                    title="双击重命名"
-                  >
-                    {rf.name}
-                  </span>
-                )}
-                <Badge variant="secondary" className="text-[10px] px-1 py-0">
-                  {rf.ruleCount}
-                </Badge>
-                {ruleFiles.length > 1 && (
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleDelete(rf.name)
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        event.stopPropagation()
-                        handleDelete(rf.name)
-                      }
-                    }}
-                    title="删除规则文件"
-                  >
-                    <X className="size-3" />
-                  </span>
-                )}
-              </TabsTrigger>
-            ))}
-            {isCreating ? (
-              <div
-                role="group"
-                aria-label={isTextImporting ? '从文本导入为新规则' : isImporting ? '从文件导入为新规则' : '创建新规则文件'}
-                className="flex h-8 flex-none items-center gap-1 rounded-md border border-primary/30 bg-background px-1 shadow-sm"
-                title={isImporting && importName ? `导入自: ${importName}` : undefined}
-              >
-                <Input
-                  value={newFileName}
-                  onChange={(event) => {
-                    setNewFileName(event.target.value)
-                    setCreateError(null)
-                  }}
-                  placeholder="规则文件名称"
-                  className="h-6 w-36 border-0 bg-transparent px-1.5 shadow-none focus-visible:ring-0"
-                  aria-label="新规则文件名称"
-                  autoFocus
-                  onKeyDown={(event) => {
-                    event.stopPropagation()
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      void handleCreate()
-                    } else if (event.key === 'Escape') {
-                      event.preventDefault()
-                      resetCreateDialog()
-                    }
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={() => void handleCreate()}
-                  aria-label="确认创建规则文件"
-                  title="创建"
-                >
-                  <Check />
-                </Button>
-                <Button type="button" variant="ghost" size="icon-xs" onClick={resetCreateDialog} aria-label="取消创建规则文件" title="取消">
-                  <X />
-                </Button>
+                  <TabsList className="h-auto min-w-max justify-start gap-1 rounded-none bg-transparent p-0">
+                    {ruleFiles.map((rf) => (
+                      <TabsTrigger key={rf.name} value={rf.name} className="group relative flex-none gap-1.5">
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          className="shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            toggleRuleFile(rf.name, !rf.enabled)
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              toggleRuleFile(rf.name, !rf.enabled)
+                            }
+                          }}
+                          title={rf.enabled ? '点击禁用路由' : '点击启用路由'}
+                        >
+                          {rf.enabled ? <ToggleRight className="size-4 text-primary" /> : <ToggleLeft className="size-4 text-muted-foreground" />}
+                        </span>
+                        {renamingFileName === rf.name ? (
+                          <input
+                            value={renameDraft}
+                            onChange={(event) => {
+                              setRenameDraft(event.target.value)
+                              setRenameError(null)
+                            }}
+                            onClick={(event) => event.stopPropagation()}
+                            onDoubleClick={(event) => event.stopPropagation()}
+                            onFocus={(event) => event.currentTarget.select()}
+                            onBlur={() => void commitRename()}
+                            onKeyDown={(event) => {
+                              event.stopPropagation()
+                              if (event.key === 'Enter') {
+                                event.preventDefault()
+                                void commitRename()
+                              } else if (event.key === 'Escape') {
+                                event.preventDefault()
+                                cancelRename()
+                              }
+                            }}
+                            className="h-6 w-28 rounded border bg-background px-1.5 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
+                            aria-label={`重命名规则文件 ${rf.name}`}
+                            autoFocus
+                          />
+                        ) : (
+                          <span
+                            onDoubleClick={(event) => {
+                              event.stopPropagation()
+                              beginRename(rf.name)
+                            }}
+                            title="双击重命名"
+                          >
+                            {rf.name}
+                          </span>
+                        )}
+                        <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                          {rf.ruleCount}
+                        </Badge>
+                        {ruleFiles.length > 1 && (
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDelete(rf.name)
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault()
+                                event.stopPropagation()
+                                handleDelete(rf.name)
+                              }
+                            }}
+                            title="删除规则文件"
+                          >
+                            <X className="size-3" />
+                          </span>
+                        )}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
               </div>
-            ) : (
-              <Button type="button" variant="ghost" size="icon-sm" onClick={beginCreateRuleFile} aria-label="创建规则文件" title="创建规则文件">
-                <Plus />
-              </Button>
-            )}
-          </TabsList>
-        </Tabs>
-      </div>
-      {renameError && <p className="-mt-2 text-xs text-destructive">{renameError}</p>}
-      {createError && <p className="-mt-2 text-xs text-destructive">{createError}</p>}
+              <div data-slot="rule-file-actions" className="ml-2 flex shrink-0 items-center border-l pl-2">
+                {isCreating ? (
+                  <div
+                    role="group"
+                    aria-label={isTextImporting ? '从文本导入为新规则' : isImporting ? '从文件导入为新规则' : '创建新规则文件'}
+                    className="flex h-8 items-center gap-1 rounded-md border border-primary/30 bg-background px-1 shadow-sm"
+                    title={isImporting && importName ? `导入自: ${importName}` : undefined}
+                  >
+                    <Input
+                      value={newFileName}
+                      onChange={(event) => {
+                        setNewFileName(event.target.value)
+                        setCreateError(null)
+                      }}
+                      placeholder="规则文件名称"
+                      className="h-6 w-36 border-0 bg-transparent px-1.5 shadow-none focus-visible:ring-0"
+                      aria-label="新规则文件名称"
+                      autoFocus
+                      onKeyDown={(event) => {
+                        event.stopPropagation()
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          void handleCreate()
+                        } else if (event.key === 'Escape') {
+                          event.preventDefault()
+                          resetCreateDialog()
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => void handleCreate()}
+                      aria-label="确认创建规则文件"
+                      title="创建"
+                    >
+                      <Check />
+                    </Button>
+                    <Button type="button" variant="ghost" size="icon-xs" onClick={resetCreateDialog} aria-label="取消创建规则文件" title="取消">
+                      <X />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button type="button" variant="ghost" size="icon-sm" onClick={beginCreateRuleFile} aria-label="创建规则文件" title="创建规则文件">
+                    <Plus />
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardHeader>
 
-      {/* 文本导入需要额外的规则内容编辑区 */}
-      {isCreating && isTextImporting && (
-        <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3">
-          <Textarea
-            value={textImportDraft}
-            onChange={(e) => {
-              setTextImportDraft(e.target.value)
-              setCreateError(null)
-            }}
-            placeholder={'127.0.0.1 example.com api.example.com\n::1 local.example.test'}
-            className="min-h-[160px] resize-y font-mono text-sm"
-            aria-label="导入规则文本"
-          />
-        </div>
-      )}
-
-      {/* 操作栏 */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-col gap-2">
-          {isPending && <div className="text-xs text-muted-foreground">(更新中...)</div>}
-          <ToggleGroup
-            type="single"
-            value={viewMode}
-            onValueChange={(value) => {
-              if (value) setViewMode(value as 'table' | 'text' | 'graph')
-            }}
-            variant="outline"
-            size="sm"
-            spacing={0}
-            aria-label="规则视图"
-          >
-            <ToggleGroupItem value="table">
-              <Table2 />
-              表格
-            </ToggleGroupItem>
-            <ToggleGroupItem value="text">
-              <FileCode2 />
-              文本
-            </ToggleGroupItem>
-            {FEATURE_FLAGS.ruleGraphView && (
-              <ToggleGroupItem value="graph">
-                <GitBranch />
-                图表
-              </ToggleGroupItem>
-            )}
-          </ToggleGroup>
-        </div>
-        <div className="flex items-center gap-2">
-          {viewMode !== 'text' && (
-            <Button variant={showFilters ? 'selected' : 'outline'} size="sm" onClick={() => setShowFilters((v) => !v)} title="显示/隐藏筛选器">
-              <Filter data-icon="inline-start" />
-              筛选
-            </Button>
-          )}
-          {viewMode === 'table' && (
-            <>
-              <Button variant="outline" size="sm" onClick={addRule} disabled={!activeFileName}>
-                <Plus data-icon="inline-start" />
-                添加规则
-              </Button>
-              <input ref={importFileRef} type="file" accept=".txt,.rules" className="hidden" onChange={handleImportInputChange} />
-              <Button variant="outline" size="sm" onClick={handleImportFile}>
-                <FolderOpen data-icon="inline-start" />
-                从文件加载
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleImportText}>
-                <ClipboardPaste data-icon="inline-start" />
-                文本导入
-              </Button>
-            </>
-          )}
-          {activeFileName && (
-            <>
-              <Button size="sm" onClick={handleSave} disabled={saving || textLoading}>
-                {saving ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
-                保存
-              </Button>
-              {saveStatus === 'error' && <Badge variant="destructive">保存失败</Badge>}
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* 筛选器 */}
-      {showFilters && viewMode !== 'text' && (
-        <div className="flex flex-col gap-3 rounded-lg bg-muted/50 p-4 md:flex-row md:items-end">
-          <div className="flex-1 space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">筛选规则</label>
-            <div className="relative">
-              <Input value={ruleFilter} onChange={(e) => setRuleFilter(e.target.value)} placeholder="输入规则名称进行筛选..." className="h-9" />
-              {ruleFilter && (
-                <Button variant="ghost" size="sm" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0" onClick={() => setRuleFilter('')}>
-                  <X className="h-3 w-3" />
+          <div className="flex flex-row flex-wrap items-center justify-between gap-3 border-b px-3 py-2">
+            <div className="flex items-center gap-2">
+              <ToggleGroup
+                type="single"
+                value={viewMode}
+                onValueChange={(value) => {
+                  if (value) setViewMode(value as 'table' | 'text' | 'graph')
+                }}
+                variant="outline"
+                size="sm"
+                spacing={0}
+                className="bg-background"
+                aria-label="规则视图"
+              >
+                <ToggleGroupItem value="table">
+                  <Table2 />
+                  表格
+                </ToggleGroupItem>
+                <ToggleGroupItem value="text">
+                  <FileCode2 />
+                  文本
+                </ToggleGroupItem>
+                {FEATURE_FLAGS.ruleGraphView && (
+                  <ToggleGroupItem value="graph">
+                    <GitBranch />
+                    图表
+                  </ToggleGroupItem>
+                )}
+              </ToggleGroup>
+              {isPending && (
+                <span className="text-xs text-muted-foreground">更新中...</span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {viewMode !== 'text' && (
+                <Button
+                  variant={showFilters ? 'selected' : 'outline'}
+                  size="sm"
+                  onClick={() => setShowFilters((v) => !v)}
+                  title="显示/隐藏筛选器"
+                >
+                  <Filter data-icon="inline-start" />
+                  筛选
+                </Button>
+              )}
+              {viewMode === 'table' && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={addRule}
+                    disabled={!activeFileName}
+                  >
+                    <Plus data-icon="inline-start" />
+                    添加规则
+                  </Button>
+                  <input
+                    ref={importFileRef}
+                    type="file"
+                    accept=".txt,.rules"
+                    className="hidden"
+                    onChange={handleImportInputChange}
+                  />
+                  <Button variant="outline" size="sm" onClick={handleImportFile}>
+                    <FolderOpen data-icon="inline-start" />
+                    从文件加载
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleImportText}>
+                    <ClipboardPaste data-icon="inline-start" />
+                    文本导入
+                  </Button>
+                </>
+              )}
+              {activeFileName && (
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={saving || textLoading}
+                >
+                  {saving ? (
+                    <Spinner data-icon="inline-start" />
+                  ) : (
+                    <Save data-icon="inline-start" />
+                  )}
+                  保存
                 </Button>
               )}
             </div>
           </div>
-          <div className="flex-1 space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">筛选目标</label>
-            <div className="relative">
-              <Input
-                value={targetFilter}
-                onChange={(e) => setTargetFilter(e.target.value)}
-                placeholder="输入目标地址进行筛选..."
-                className="h-9"
-                list="target-list"
-              />
-              <datalist id="target-list">
-                {uniqueTargets.map((t) => (
-                  <option key={t} value={t} />
-                ))}
-              </datalist>
-              {targetFilter && (
-                <Button variant="ghost" size="sm" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0" onClick={() => setTargetFilter('')}>
-                  <X className="h-3 w-3" />
-                </Button>
-              )}
-            </div>
+        </div>
+
+        {(renameError || createError) && (
+          <div className="flex shrink-0 flex-col gap-1 border-b px-3 py-2 text-xs text-destructive">
+            {renameError && <p>{renameError}</p>}
+            {createError && <p>{createError}</p>}
           </div>
-          {(ruleFilter || targetFilter) && (
-            <div className="self-end">
+        )}
+
+        {/* 文本导入需要额外的规则内容编辑区 */}
+        {isCreating && isTextImporting && (
+          <div className="flex shrink-0 flex-col gap-2 border-b bg-muted/20 p-3">
+            <Textarea
+              value={textImportDraft}
+              onChange={(e) => {
+                setTextImportDraft(e.target.value)
+                setCreateError(null)
+              }}
+              placeholder={'127.0.0.1 example.com api.example.com\n::1 local.example.test'}
+              className="min-h-[160px] resize-y font-mono text-sm"
+              aria-label="导入规则文本"
+            />
+          </div>
+        )}
+
+
+        {showFilters && viewMode !== 'text' && (
+          <div className="flex shrink-0 flex-col gap-3 border-b bg-muted/20 p-3 md:flex-row md:items-end">
+            <div className="flex flex-1 flex-col gap-1">
+              <label className="text-xs font-medium text-muted-foreground">
+                筛选规则
+              </label>
+              <div className="relative">
+                <Input
+                  value={ruleFilter}
+                  onChange={(e) => setRuleFilter(e.target.value)}
+                  placeholder="输入规则名称进行筛选..."
+                  className="h-9"
+                />
+                {ruleFilter && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 p-0"
+                    onClick={() => setRuleFilter('')}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-1 flex-col gap-1">
+              <label className="text-xs font-medium text-muted-foreground">
+                筛选目标
+              </label>
+              <div className="relative">
+                <Input
+                  value={targetFilter}
+                  onChange={(e) => setTargetFilter(e.target.value)}
+                  placeholder="输入目标地址进行筛选..."
+                  className="h-9"
+                  list="target-list"
+                />
+                <datalist id="target-list">
+                  {uniqueTargets.map((t) => (
+                    <option key={t} value={t} />
+                  ))}
+                </datalist>
+                {targetFilter && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 p-0"
+                    onClick={() => setTargetFilter('')}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+            </div>
+            {(ruleFilter || targetFilter) && (
               <Button
                 variant="outline"
                 size="sm"
@@ -935,88 +1036,92 @@ export function RuleConfig(props: RuleConfigProps) {
               >
                 清除筛选
               </Button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {viewMode === 'text' ? (
-        <div className="flex flex-col gap-2">
-          <Textarea
-            aria-label="规则文本"
-            value={displayedTextDraft}
-            onChange={(event) => handleTextChange(event.target.value)}
-            disabled={!activeFileName || textLoading}
-            placeholder={activeFileName ? 'example.com !/api localhost:3000' : '请先选择或创建一个规则文件'}
-            className="min-h-[480px] resize-y font-mono text-sm leading-6"
-            spellCheck={false}
-          />
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-            <span>{textLoading ? '正在加载规则文本...' : `已解析 ${rules.length} 条规则`}</span>
-            {textDiagnostics.length > 0 && (
-              <Badge variant="outline">
-                {textDiagnostics.length} 行未识别：
-                {textDiagnostics
-                  .slice(0, 3)
-                  .map((item) => item.line)
-                  .join('、')}
-                {textDiagnostics.length > 3 ? '…' : ''}
-              </Badge>
             )}
           </div>
-        </div>
-      ) : viewMode === 'table' || !FEATURE_FLAGS.ruleGraphView ? (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {!ruleFilter && !targetFilter && <TableHead className="w-8"></TableHead>}
-                <TableHead className="w-12">启用</TableHead>
-                <TableHead>规则</TableHead>
-                <TableHead>排除</TableHead>
-                <TableHead>目标</TableHead>
-                <TableHead className="w-24">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {!activeFileName ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    请选择或创建一个规则文件
-                  </TableCell>
-                </TableRow>
-              ) : rules.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    暂无规则，点击"添加规则"开始配置
-                  </TableCell>
-                </TableRow>
-              ) : filteredRules.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    没有匹配的规则，请调整筛选条件
-                  </TableCell>
-                </TableRow>
-              ) : ruleFilter || targetFilter ? (
-                filteredRules.map(({ item, index }) => (
-                  <FilteredRuleRow
-                    key={index}
-                    item={item}
-                    highlighted={highlightIndex === index}
-                    highlightRef={highlightRowRef}
-                    onToggle={createToggleRuleCallback(index)}
-                    onUpdateRule={createUpdateRuleCallback(index)}
-                    onDelete={createDeleteRuleCallback(index)}
-                    onMoveToTop={createMoveToTopCallback(index)}
-                  />
-                ))
-              ) : (
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                  <SortableContext items={rules.map((_, i) => `rule-${i}`)} strategy={verticalListSortingStrategy}>
-                    {rules.map((item, index) => (
-                      <SortableRuleRow
-                        key={`rule-${index}`}
-                        id={`rule-${index}`}
+        )}
+
+        <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
+          {viewMode === 'text' ? (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <Textarea
+                aria-label="规则文本"
+                value={displayedTextDraft}
+                onChange={(event) => handleTextChange(event.target.value)}
+                disabled={!activeFileName || textLoading}
+                placeholder={
+                  activeFileName
+                    ? 'example.com !/api localhost:3000'
+                    : '请先选择或创建一个规则文件'
+                }
+                className="min-h-0 flex-1 resize-none overflow-auto rounded-none border-0 bg-transparent px-4 py-3 font-mono text-sm leading-6 shadow-none focus-visible:ring-0"
+                spellCheck={false}
+              />
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-xs text-muted-foreground">
+                <span>
+                  {textLoading
+                    ? '正在加载规则文本...'
+                    : `已解析 ${rules.length} 条规则`}
+                </span>
+                {textDiagnostics.length > 0 && (
+                  <Badge variant="outline">
+                    {textDiagnostics.length} 行未识别：
+                    {textDiagnostics
+                      .slice(0, 3)
+                      .map((item) => item.line)
+                      .join('、')}
+                    {textDiagnostics.length > 3 ? '…' : ''}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          ) : viewMode === 'table' || !FEATURE_FLAGS.ruleGraphView ? (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div
+                data-slot="rule-table-header"
+                className="z-10 shrink-0 overflow-x-auto bg-card"
+              >
+                <Table className="table-fixed">
+                  <RuleTableColGroup showDragColumn={showDragColumn} />
+                  <TableHeader>
+                    <RuleTableHeaderCells showDragColumn={showDragColumn} />
+                  </TableHeader>
+                </Table>
+              </div>
+              <ScrollArea className="min-h-0 flex-1">
+                <Table className="table-fixed">
+                  <RuleTableColGroup showDragColumn={showDragColumn} />
+                  <TableBody>
+                  {!activeFileName ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="text-center text-muted-foreground py-8"
+                      >
+                        请选择或创建一个规则文件
+                      </TableCell>
+                    </TableRow>
+                  ) : rules.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="text-center text-muted-foreground py-8"
+                      >
+                        暂无规则，点击"添加规则"开始配置
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredRules.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="text-center text-muted-foreground py-8"
+                      >
+                        没有匹配的规则，请调整筛选条件
+                      </TableCell>
+                    </TableRow>
+                  ) : ruleFilter || targetFilter ? (
+                    filteredRules.map(({ item, index }) => (
+                      <FilteredRuleRow
+                        key={index}
                         item={item}
                         highlighted={highlightIndex === index}
                         highlightRef={highlightRowRef}
@@ -1025,32 +1130,66 @@ export function RuleConfig(props: RuleConfigProps) {
                         onDelete={createDeleteRuleCallback(index)}
                         onMoveToTop={createMoveToTopCallback(index)}
                       />
-                    ))}
-                  </SortableContext>
-                </DndContext>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {!activeFileName ? (
-            <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">请选择或创建一个规则文件后查看图表</div>
-          ) : rules.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">暂无规则，点击“添加规则”后这里会自动生成路由流向图</div>
-          ) : filteredRules.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">没有匹配的规则，请调整筛选条件后再查看图表</div>
+                    ))
+                  ) : (
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleDragEnd}
+                    >
+                      <SortableContext
+                        items={rules.map((_, i) => `rule-${i}`)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        {rules.map((item, index) => (
+                          <SortableRuleRow
+                            key={`rule-${index}`}
+                            id={`rule-${index}`}
+                            item={item}
+                            highlighted={highlightIndex === index}
+                            highlightRef={highlightRowRef}
+                            onToggle={createToggleRuleCallback(index)}
+                            onUpdateRule={createUpdateRuleCallback(index)}
+                            onDelete={createDeleteRuleCallback(index)}
+                            onMoveToTop={createMoveToTopCallback(index)}
+                          />
+                        ))}
+                      </SortableContext>
+                    </DndContext>
+                  )}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+            </div>
           ) : (
-            <RouteCanvas graphData={graphData} />
+            <ScrollArea className="min-h-0 flex-1">
+              <div className="flex flex-col gap-4 p-4">
+              {!activeFileName ? (
+                <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
+                  请选择或创建一个规则文件后查看图表
+                </div>
+              ) : rules.length === 0 ? (
+                <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
+                  暂无规则，点击“添加规则”后这里会自动生成路由流向图
+                </div>
+              ) : filteredRules.length === 0 ? (
+                <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
+                  没有匹配的规则，请调整筛选条件后再查看图表
+                </div>
+              ) : (
+                <RouteCanvas graphData={graphData} />
+              )}
+              </div>
+            </ScrollArea>
           )}
-        </div>
-      )}
+        </CardContent>
 
-      {(ruleFilter || targetFilter) && filteredRules.length > 0 && (
-        <div className="text-sm text-muted-foreground">
-          显示 {filteredRules.length} / {rules.length} 条规则
-        </div>
-      )}
+        {(ruleFilter || targetFilter) && filteredRules.length > 0 && (
+          <CardFooter className="shrink-0 border-t px-4 py-2 text-sm text-muted-foreground [.border-t]:pt-2">
+            显示 {filteredRules.length} / {rules.length} 条规则
+          </CardFooter>
+        )}
+      </Card>
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { RuleConfig } from './rule-config'
@@ -33,10 +33,16 @@ describe('RuleConfig file creation', () => {
     const user = userEvent.setup()
     const { createRuleFile, fetchFileContent } = renderRuleConfig()
 
-    await user.click(screen.getByRole('button', { name: '创建规则文件' }))
+    const createButton = screen.getByRole('button', { name: '创建规则文件' })
+    const actionSlot = createButton.closest('[data-slot="rule-file-actions"]')
+    const tabScroller = screen.getByRole('tablist').closest('[data-slot="rule-file-tabs-scroll"]')
+    expect(actionSlot).toContainElement(createButton)
+    expect(tabScroller).not.toContainElement(createButton)
 
-    const tabList = screen.getByRole('tablist')
-    const input = within(tabList).getByRole('textbox', { name: '新规则文件名称' })
+    await user.click(createButton)
+
+    const input = screen.getByRole('textbox', { name: '新规则文件名称' })
+    expect(actionSlot).toContainElement(input)
     expect(input).toHaveValue('默认规则-2')
     expect(screen.queryByText('创建新规则文件')).not.toBeInTheDocument()
 

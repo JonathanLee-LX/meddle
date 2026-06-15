@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { Check, Copy, Download, ExternalLink, Loader2, QrCode, RefreshCw, ShieldCheck, ShieldOff, Smartphone, Wifi } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { toast } from '@/components/ui/toast'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { apiGet } from '@/utils/api-client'
+import { copyText } from '@/utils/clipboard'
 
 interface RemoteAccessTarget {
   address: string
@@ -41,6 +44,8 @@ export function MobileProxyPanel() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [manualCopyUrl, setManualCopyUrl] = useState('')
+  const manualCopyInputRef = useRef<HTMLInputElement>(null)
 
   const loadInfo = async () => {
     setLoading(true)
@@ -62,6 +67,12 @@ export function MobileProxyPanel() {
   useEffect(() => {
     void loadInfo()
   }, [])
+
+  useEffect(() => {
+    if (!manualCopyUrl) return
+    manualCopyInputRef.current?.focus()
+    manualCopyInputRef.current?.select()
+  }, [manualCopyUrl])
 
   const selectedTarget = useMemo(() => info?.targets.find((target) => target.address === selectedAddress) || info?.targets[0] || null, [info, selectedAddress])
 
@@ -95,9 +106,16 @@ export function MobileProxyPanel() {
 
   const copySetupUrl = async () => {
     if (!selectedTarget) return
-    await navigator.clipboard.writeText(selectedTarget.setupUrl)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1500)
+    try {
+      await copyText(selectedTarget.setupUrl)
+      setCopied(true)
+      setManualCopyUrl('')
+      toast.success('手机配置地址已复制')
+      window.setTimeout(() => setCopied(false), 1500)
+    } catch {
+      setManualCopyUrl(selectedTarget.setupUrl)
+      toast.info('浏览器禁止自动复制，地址已选中')
+    }
   }
 
   if (loading) {
@@ -161,7 +179,7 @@ export function MobileProxyPanel() {
   return (
     <div className="app-panel-content h-full">
       <div className="mx-auto grid w-full max-w-3xl gap-6 md:grid-cols-[340px_1fr]">
-        <Card className="gap-0 overflow-hidden py-0">
+        <Card className="gap-0 overflow-hidden py-0 shadow-none">
           <CardHeader className="border-b py-4">
             <CardTitle className="flex items-center gap-2">
               <QrCode />
@@ -181,7 +199,7 @@ export function MobileProxyPanel() {
           </CardContent>
         </Card>
 
-        <Card className="gap-0 py-0">
+        <Card className="gap-0 py-0 shadow-none">
           <CardHeader className="border-b py-4">
             <CardTitle className="flex items-center gap-2">
               <Smartphone />
@@ -214,6 +232,20 @@ export function MobileProxyPanel() {
               {info.authenticationRequired && <Badge variant="secondary">需要代理认证</Badge>}
             </div>
 
+            {manualCopyUrl && (
+              <div className="flex flex-col gap-2 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground" role="status">
+                <span>浏览器禁止自动访问剪贴板，请按 Ctrl/Cmd+C 复制：</span>
+                <Input
+                  ref={manualCopyInputRef}
+                  value={manualCopyUrl}
+                  readOnly
+                  aria-label="手动复制手机配置地址"
+                  onFocus={(event) => event.currentTarget.select()}
+                  onClick={(event) => event.currentTarget.select()}
+                />
+              </div>
+            )}
+
             {info.targets.length > 1 && (
               <div className="flex flex-col gap-2">
                 <div className="text-xs font-medium text-muted-foreground">选择局域网地址</div>
@@ -221,7 +253,10 @@ export function MobileProxyPanel() {
                   type="single"
                   value={selectedTarget.address}
                   onValueChange={(value) => {
-                    if (value) setSelectedAddress(value)
+                    if (value) {
+                      setSelectedAddress(value)
+                      setManualCopyUrl('')
+                    }
                   }}
                   variant="outline"
                   size="sm"

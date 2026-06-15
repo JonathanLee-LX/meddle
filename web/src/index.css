@@ -63,10 +63,21 @@
   }
 }
 
+@keyframes system-toast-progress {
+  from {
+    background-size: 100% 3px;
+  }
+  to {
+    background-size: 0 3px;
+  }
+}
+
 @layer components {
   .app-workspace-content {
     display: flex;
     min-width: 0;
+    min-height: 0;
+    flex: 1 1 0%;
     flex-direction: column;
     gap: var(--ui-content-gap);
     padding: var(--ui-page-padding);
@@ -75,6 +86,8 @@
   .app-page-stack {
     display: flex;
     min-width: 0;
+    min-height: 0;
+    flex: 1 1 0%;
     flex-direction: column;
     gap: var(--ui-content-gap);
   }
@@ -194,6 +207,132 @@
   .global-panel-content[data-state='closed'] {
     animation: global-panel-content-out 150ms cubic-bezier(0.4, 0, 1, 1) both;
   }
+
+  .system-toast {
+    --system-toast-tone: var(--primary);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 3.5rem;
+    overflow: hidden;
+    border: 1px solid color-mix(in oklab, var(--system-toast-tone) 28%, var(--border));
+    border-radius: calc(var(--radius) + 2px);
+    padding: 0.75rem 0.875rem;
+    color: var(--popover-foreground);
+    background-color: color-mix(in oklab, var(--popover) 94%, var(--system-toast-tone) 6%);
+    background-image: linear-gradient(var(--system-toast-tone), var(--system-toast-tone));
+    background-position: left bottom;
+    background-repeat: no-repeat;
+    background-size: 100% 3px;
+    box-shadow:
+      0 14px 36px color-mix(in oklab, var(--foreground) 14%, transparent),
+      0 1px 0 color-mix(in oklab, white 32%, transparent) inset;
+    animation: system-toast-progress var(--system-toast-duration, 3000ms) linear forwards;
+    -webkit-backdrop-filter: blur(18px) saturate(1.2);
+    backdrop-filter: blur(18px) saturate(1.2);
+  }
+
+  .system-toast:hover,
+  .system-toast:focus-within {
+    animation-play-state: paused;
+  }
+
+  .system-toast-success {
+    --system-toast-tone: var(--system-success);
+  }
+
+  .system-toast-info,
+  .system-toast-default,
+  .system-toast-loading {
+    --system-toast-tone: var(--primary);
+  }
+
+  .system-toast-warning {
+    --system-toast-tone: var(--system-warning);
+  }
+
+  .system-toast-error {
+    --system-toast-tone: var(--destructive);
+  }
+
+  .system-toast-content {
+    order: 1;
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
+  .system-toast-title {
+    color: var(--popover-foreground);
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.25rem;
+  }
+
+  .system-toast-description {
+    color: var(--muted-foreground);
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+
+  .system-toast-icon {
+    order: 0;
+    display: flex;
+    color: var(--system-toast-tone);
+  }
+
+  .system-toast-close,
+  .system-toast-action,
+  .system-toast-cancel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    transition:
+      color 150ms ease,
+      background-color 150ms ease,
+      border-color 150ms ease;
+  }
+
+  .system-toast-close {
+    order: 3;
+    align-self: center;
+    border: 0;
+    padding: 0.25rem;
+    color: var(--muted-foreground);
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .system-toast-close:hover {
+    color: var(--popover-foreground);
+    background: var(--muted);
+  }
+
+  .system-toast-action,
+  .system-toast-cancel {
+    order: 2;
+    min-height: 1.75rem;
+    border: 1px solid var(--border);
+    padding: 0.25rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .system-toast-action {
+    border-color: color-mix(in oklab, var(--system-toast-tone) 38%, var(--border));
+    color: var(--popover-foreground);
+    background: color-mix(in oklab, var(--system-toast-tone) 12%, var(--popover));
+  }
+
+  .system-toast-cancel {
+    color: var(--muted-foreground);
+    background: var(--background);
+  }
 }
 
 @media (max-width: 640px) {
@@ -247,6 +386,8 @@
 
 :root {
   --radius: 0.625rem;
+  --system-success: oklch(0.527 0.154 150.069);
+  --system-warning: oklch(0.646 0.184 70.08);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -281,6 +422,8 @@
 }
 
 .dark {
+  --system-success: oklch(0.723 0.219 149.579);
+  --system-warning: oklch(0.769 0.188 70.08);
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -312,6 +455,12 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .system-toast {
+    animation: none;
+  }
 }
 
 :root[data-accent='auto'],

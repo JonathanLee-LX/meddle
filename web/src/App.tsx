@@ -28,7 +28,7 @@ import {
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { LogFilter } from '@/components/log-filter'
 import { LogTable } from '@/components/log-table'
@@ -873,29 +873,33 @@ function App() {
                 )}
               </div>
 
-              <TabsContent value="logs" className="mt-0 flex min-h-0 flex-col">
-                <CardContent className="px-4 py-3">
-                  <LogFilter
-                    filterText={filterText}
-                    setFilterText={setFilterText}
-                    resourceTypeFilter={resourceTypeFilter}
-                    setResourceTypeFilter={setResourceTypeFilter}
-                    clientSourceFilter={clientSourceFilter}
-                    setClientSourceFilter={setClientSourceFilter}
-                    totalCount={store.records.length}
-                    filteredCount={filteredRecords.length}
-                    onClear={store.clearRecords}
-                    recording={recording}
-                    onToggleRecording={() => setRecording((r) => !r)}
-                  />
-                </CardContent>
-                <LogTable records={displayRecords} selectedRecordId={store.selectedRecordId} onSelect={handleSelectRecord} autoScroll={autoScroll} />
+              <TabsContent value="logs" className="mt-0 flex min-h-0 flex-col p-[var(--ui-page-padding)]">
+                <Card data-testid="log-panel-card" className="min-h-0 flex-1 gap-0 overflow-hidden py-0 shadow-none">
+                  <CardHeader className="block shrink-0 border-b px-3 py-3 [.border-b]:pb-3">
+                    <CardTitle className="sr-only">请求日志</CardTitle>
+                    <LogFilter
+                      filterText={filterText}
+                      setFilterText={setFilterText}
+                      resourceTypeFilter={resourceTypeFilter}
+                      setResourceTypeFilter={setResourceTypeFilter}
+                      clientSourceFilter={clientSourceFilter}
+                      setClientSourceFilter={setClientSourceFilter}
+                      totalCount={store.records.length}
+                      filteredCount={filteredRecords.length}
+                      onClear={store.clearRecords}
+                      recording={recording}
+                      onToggleRecording={() => setRecording((r) => !r)}
+                    />
+                  </CardHeader>
+                  <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+                    <LogTable records={displayRecords} selectedRecordId={store.selectedRecordId} onSelect={handleSelectRecord} autoScroll={autoScroll} />
+                  </CardContent>
+                </Card>
               </TabsContent>
 
-              <TabsContent value="config" className="mt-0 min-h-0 overflow-y-auto">
-                <CardContent className="app-workspace-content">
-                  <Suspense fallback={<LoadingPlaceholder />}>
-                    <RuleConfig
+              <TabsContent value="config" className="mt-0 flex min-h-0 flex-1 flex-col p-[var(--ui-page-padding)]">
+                <Suspense fallback={<LoadingPlaceholder />}>
+                  <RuleConfig
                       rules={store.rules}
                       setRules={store.setRules}
                       ruleFiles={store.ruleFiles}
@@ -910,8 +914,7 @@ function App() {
                       renameRuleFile={store.renameRuleFile}
                       deleteRuleFile={store.deleteRuleFile}
                     />
-                  </Suspense>
-                </CardContent>
+                </Suspense>
               </TabsContent>
 
               <TabsContent value="mock" className="mt-0 min-h-0 overflow-y-auto">
