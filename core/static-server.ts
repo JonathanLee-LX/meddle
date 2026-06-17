@@ -59,7 +59,15 @@ export function handleLocalRequest(req: any, res: any, opts: HandleLocalRequestO
                 res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
             }
             res.writeHead(200)
-            fs.createReadStream(fullPath).pipe(res)
+            const stream = fs.createReadStream(fullPath)
+            stream.on('error', (err: Error) => {
+                try {
+                    if (!res.headersSent) res.writeHead(500)
+                    res.end()
+                } catch (_) { /* ignore */ }
+                console.error('Static file stream error:', err.message)
+            })
+            stream.pipe(res)
         } else {
             setNoCacheHeaders('text/html')
             res.writeHead(200)

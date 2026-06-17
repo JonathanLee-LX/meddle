@@ -78,4 +78,49 @@ describe('CONNECT tunnel bridge', () => {
         expect(isExpectedSocketError({ code: 'ECONNREFUSED' })).toBe(false)
         expect(isExpectedSocketError(new Error('failed'))).toBe(false)
     })
+
+    it('destroys the upstream socket when the client side closes', async () => {
+        let upstreamSocket: Socket | undefined
+        let bridgedUpstream: Socket | undefined
+        const upstream = createServer(socket => {
+            upstreamSocket = socket
+            sockets.add(socket)
+        })
+        servers.push(upstream)
+        upstream.listen(0, '127.0.0.1')
+        await once(upstream, 'listening')
+
+        const proxy = createServer(client => {
+            sockets.add(client)
+            const target = connect(upstream.address() as { port: number; address: string })
+            bridgedUpstream = target
+            sockets.add(target)
+            target.once('connect', () => {
+                establishConnectTunnel(client, target, Buffer.alloc(0))
+            })
+        })
+        servers.push(proxy)
+        proxy.listen(0, '127.0.0.1')
+        await once(proxy, 'listening')
+
+        const client = connect(proxy.address() as { port: number; address: string })
+        sockets.add(client)
+        await once(client, 'connect')
+        await once(client, 'data')
+
+        client.destroy()
+
+        await new Promise<void>((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('upstream socket was not closed')), 1000)
+            const poll = (): void => {
+                if (bridgedUpstream?.destroyed && upstreamSocket?.destroyed) {
+                    clearTimeout(timeout)
+                    resolve()
+                    return
+                }
+                setTimeout(poll, 5)
+            }
+            poll()
+        })
+    })
 })

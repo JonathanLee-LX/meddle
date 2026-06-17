@@ -22,6 +22,7 @@ describe('application layout standard', () => {
     ['./mock-editor-panel.tsx', 'app-panel-content'],
     ['./rule-ai-assistant-panel.tsx', 'app-panel-content'],
     ['./mobile-proxy-panel.tsx', 'app-panel-content'],
+    ['./health-panel.tsx', 'app-workspace-content'],
     ['./plugin-config.tsx', 'app-page-stack'],
     ['./rule-config.tsx', 'app-page-stack'],
     ['./mock-config.tsx', 'app-page-stack'],

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, lazy, Suspense } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
+  Activity,
   Bot,
   Brush,
   ClipboardList,
@@ -100,6 +101,11 @@ const MobileProxyPanel = lazy(() =>
     default: module.MobileProxyPanel,
   })),
 )
+const HealthPanel = lazy(() =>
+  import('@/components/health-panel').then((module) => ({
+    default: module.HealthPanel,
+  })),
+)
 
 function LoadingPlaceholder() {
   return (
@@ -130,6 +136,7 @@ function App() {
       '/config': 'config',
       '/mock': 'mock',
       '/plugins': 'plugins',
+      '/health': 'health',
     }
     return tabMap[pathname] || 'logs'
   }
@@ -142,6 +149,7 @@ function App() {
       config: '/config',
       mock: '/mock',
       plugins: '/plugins',
+      health: '/health',
     }
     navigate(pathMap[tab] || '/')
   }
@@ -240,6 +248,14 @@ function App() {
           icon: Plug,
           keywords: ['plugin', 'plugins'],
           run: () => navigate('/plugins'),
+        },
+        {
+          id: 'nav.health',
+          title: '打开运行健康',
+          section: '导航',
+          icon: Activity,
+          keywords: ['health', '健康', 'watchdog', '运行状态'],
+          run: () => navigate('/health'),
         },
         {
           id: 'panel.settings',
@@ -864,6 +880,10 @@ function App() {
                     <Plug />
                     扩展插件
                   </TabsTrigger>
+                  <TabsTrigger value="health" className="h-8 flex-none px-3" title="查看进程健康、连接、守护策略和日志限流状态">
+                    <Activity />
+                    健康
+                  </TabsTrigger>
                 </TabsList>
                 {activeTab === 'logs' && (
                   <Badge variant={recording ? 'default' : 'secondary'} className="ml-auto shrink-0">
@@ -952,6 +972,12 @@ function App() {
                     />
                   </Suspense>
                 </CardContent>
+              </TabsContent>
+
+              <TabsContent value="health" className="mt-0 min-h-0 overflow-y-auto">
+                <Suspense fallback={<LoadingPlaceholder />}>
+                  <HealthPanel />
+                </Suspense>
               </TabsContent>
             </Tabs>
           </Card>

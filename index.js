@@ -34,10 +34,69 @@ const chalk = require('chalk')
 const _debug = require('debug')
 
 const proxyDebug = _debug('proxy')
+const UPSTREAM_REQUEST_TIMEOUT_MS = 60000
+const MITM_SERVER_IDLE_TTL_MS = 10 * 60 * 1000
+const MITM_SERVER_SWEEP_INTERVAL_MS = 60 * 1000
+const MAX_WS_BUFFERED_MESSAGES = 1000
+
+function getErrorMessage(err) {
+    return err && err.message ? err.message : String(err)
+}
+
+function getErrorKey(err) {
+    return err && err.code ? err.code : getErrorMessage(err)
+}
+
+function finishResponseWithProxyError(res, statusCode = 502) {
+    try {
+        if (res.destroyed || res.writableEnded) return
+        if (!res.headersSent) {
+            res.writeHead(statusCode)
+            res.end()
+            return
+        }
+        if (typeof res.destroy === 'function') {
+            res.destroy()
+        } else {
+            res.end()
+        }
+    } catch (_) {}
+}
+
+function markMitmServerUsed(server) {
+    server._epLastUsedAt = Date.now()
+}
+
+function closeIdleMitmServer(originHost, server) {
+    if (ctx.httpsServerMap.get(originHost) !== server) return
+
+    ctx.httpsServerMap.delete(originHost)
+    try { server._epWSServer?.close() } catch (_) {}
+    try {
+        server.close((err) => {
+            if (err) proxyDebug('MITM server close error', originHost, err.message)
+        })
+    } catch (err) {
+        proxyDebug('MITM server close failed', originHost, getErrorMessage(err))
+    }
+}
+
+function sweepIdleMitmServers() {
+    const now = Date.now()
+    for (const [originHost, server] of ctx.httpsServerMap.entries()) {
+        const lastUsedAt = server._epLastUsedAt || now
+        const activeSockets = server._epActiveSockets?.size || 0
+        if (activeSockets === 0 && now - lastUsedAt >= MITM_SERVER_IDLE_TTL_MS) {
+            closeIdleMitmServer(originHost, server)
+        }
+    }
+}
 
 // ===== 共享上下文 =====
 const { createProxyContext } = require('./dist/core/proxy-context')
 const ctx = createProxyContext()
+const mitmServerSweepTimer = setInterval(sweepIdleMitmServers, MITM_SERVER_SWEEP_INTERVAL_MS)
+mitmServerSweepTimer.unref?.()
 
 // ===== 模块初始化 =====
 const { cleanHeadersForH2, makeProxyRequest } = require('./dist/core/h2-pool')
@@ -50,14 +109,77 @@ const { openBrowserWithProxy } = require('./dist/core/browser')
 const { handleLocalRequest } = require('./dist/core/static-server')
 const { createConfigDiagnostics } = require('./dist/core/config-diagnostics')
 const { appendProxyRecord } = require('./dist/core/proxy-record')
+const { createRuntimeHealthMonitor, parseWatchdogConfig } = require('./dist/core/runtime-health')
+const { createRateLimitedLogger } = require('./dist/core/log-rate-limit')
 
 const remoteAccess = buildRemoteAccessConfig()
 const lanAddresses = getLanIPv4Addresses()
 const clientIdentityResolver = createClientIdentityResolver(ctx.settingsPath)
+const activeProxySockets = new Set()
+const rateLimitedLogger = createRateLimitedLogger(console, {
+    windowMs: Number(process.env.EP_LOG_RATE_LIMIT_WINDOW_MS) || 60000,
+    maxPerWindow: Number(process.env.EP_LOG_RATE_LIMIT_MAX) || 20,
+})
 
 const mockHandler = createMockHandler(ctx)
 const pluginIntercept = createPluginIntercept(ctx)
 const pluginBoot = createPluginBootstrapRunner(ctx, mockHandler)
+const runtimeHealth = createRuntimeHealthMonitor({
+    getSnapshotInput: () => {
+        const mitmServers = Array.from(ctx.httpsServerMap.entries()).map(([host, server]) => {
+            const address = server.address && server.address()
+            const port = address && typeof address === 'object' ? address.port : null
+            const activeSockets = server._epActiveSockets?.size || 0
+            const webSockets = server._epWSServer?.clients?.size || 0
+            const lastUsedAt = server._epLastUsedAt || null
+
+            return {
+                host,
+                port,
+                activeSockets,
+                webSockets,
+                lastUsedAt,
+                idleForMs: lastUsedAt ? Date.now() - lastUsedAt : null,
+            }
+        })
+        const mitmTlsSockets = mitmServers.reduce((sum, item) => sum + item.activeSockets, 0)
+        const webSockets = (ctx.localWSServer?.clients?.size || 0)
+            + mitmServers.reduce((sum, item) => sum + item.webSockets, 0)
+        const connections = {
+            proxySockets: activeProxySockets.size,
+            mitmTlsSockets,
+            webSockets,
+            total: activeProxySockets.size + mitmTlsSockets + webSockets,
+        }
+
+        return {
+            connections,
+            mitmServers,
+            logRateLimit: rateLimitedLogger.getStats(),
+        }
+    },
+    config: parseWatchdogConfig(process.env),
+})
+
+function logRuntimeError(key, ...args) {
+    rateLimitedLogger.error(key, ...args)
+}
+
+function startRuntimeWatchdog() {
+    if (!runtimeHealth.config.enabled) return
+
+    const timer = setInterval(() => {
+        const evaluation = runtimeHealth.evaluate()
+        if (!evaluation.shouldWarn) return
+
+        const message = `watchdog ${evaluation.status}: ${evaluation.reasons.join('; ')} (${evaluation.consecutiveFailures}/${runtimeHealth.config.failureThreshold})`
+        rateLimitedLogger.warn('watchdog:runtime-health', message)
+        if (evaluation.shouldExit) {
+            handleFatalError('watchdog', new Error(message))
+        }
+    }, runtimeHealth.config.intervalMs)
+    timer.unref?.()
+}
 
 // ===== Express API 服务 =====
 const { createApp } = require('./dist/server/index')
@@ -119,6 +241,7 @@ const serverContext = {
         const port = address && typeof address === 'object' ? address.port : null
         return createRemoteAccessInfo(remoteAccess, lanAddresses, port)
     },
+    getRuntimeHealth: () => runtimeHealth.snapshot(),
 }
 
 configDiag = createConfigDiagnostics(ctx, serverContext, mockHandler)
@@ -150,7 +273,12 @@ const proxyServer = http.createServer((req, res) => {
                 'Content-Disposition': 'attachment; filename="easy-proxy-ca.crt"',
                 'Cache-Control': 'no-store',
             })
-            fs.createReadStream(rootCAPath).pipe(res)
+            const certStream = fs.createReadStream(rootCAPath)
+            certStream.on('error', (err) => {
+                logRuntimeError('stream:ca-cert', 'CA certificate stream error:', getErrorMessage(err))
+                finishResponseWithProxyError(res, 500)
+            })
+            certStream.pipe(res)
             return
         }
 
@@ -221,7 +349,12 @@ const proxyServer = http.createServer((req, res) => {
 
     const reqChunks = []
     req.on('data', chunk => reqChunks.push(chunk))
+    req.on('error', (err) => {
+        logRuntimeError(`http:client-request:${getErrorKey(err)}`, 'HTTP client request error:', getErrorMessage(err))
+        finishResponseWithProxyError(res, 400)
+    })
     req.on('end', async () => {
+        try {
         const reqBody = Buffer.concat(reqChunks)
         const legacyResolvedTarget = resolveTargetUrl(source, ctx.routeRules)
         if (legacyResolvedTarget && legacyResolvedTarget.startsWith('file://')) {
@@ -245,10 +378,26 @@ const proxyServer = http.createServer((req, res) => {
 
         const proxyReq = http.request(url, { method: req.method, headers: stripProxyHeaders(req.headers) }, (proxyRes) => {
             const resChunks = []
+            let proxyResponseSettled = false
+            const handleProxyResponseError = (err) => {
+                if (proxyResponseSettled) return
+                proxyResponseSettled = true
+                pluginIntercept.emitLegacyErrorToPlugins('onBeforeResponse', err)
+                logRuntimeError(`http:proxy-response:${getErrorKey(err)}`, 'HTTP proxy response error:', getErrorMessage(err))
+                finishResponseWithProxyError(res)
+            }
             if (routeChanged) proxyRes.headers['x-real-url'] = url.href
             if (!intercepting) res.writeHead(proxyRes.statusCode, proxyRes.headers)
             proxyRes.on('data', chunk => { resChunks.push(chunk); if (!intercepting) res.write(chunk) })
+            proxyRes.on('error', handleProxyResponseError)
+            proxyRes.on('aborted', () => handleProxyResponseError(new Error('HTTP proxy response aborted')))
+            proxyRes.on('close', () => {
+                if (!proxyResponseSettled) handleProxyResponseError(new Error('HTTP proxy response closed before end'))
+            })
             proxyRes.on('end', async () => {
+                if (proxyResponseSettled) return
+                proxyResponseSettled = true
+                try {
                 const resBody = Buffer.concat(resChunks)
                 let intercepted = false
                 if (intercepting) {
@@ -288,17 +437,34 @@ const proxyServer = http.createServer((req, res) => {
                     } : undefined,
                 }
                 appendProxyRecord(ctx, logData, detail)
+                } catch (err) {
+                    pluginIntercept.emitLegacyErrorToPlugins('onBeforeResponse', err)
+                    logRuntimeError(`http:response-handler:${getErrorKey(err)}`, 'HTTP proxy response handling error:', getErrorMessage(err))
+                    finishResponseWithProxyError(res)
+                }
             })
+        })
+        proxyReq.setTimeout(UPSTREAM_REQUEST_TIMEOUT_MS, () => {
+            proxyReq.destroy(new Error('HTTP upstream request timeout'))
         })
         proxyReq.on('error', (err) => {
             pluginIntercept.emitLegacyErrorToPlugins('onBeforeResponse', err)
-            console.error('HTTP proxy error:', err.message)
-            if (!res.headersSent) res.writeHead(502)
-            res.end()
+            logRuntimeError(`http:proxy-request:${getErrorKey(err)}`, 'HTTP proxy error:', getErrorMessage(err))
+            finishResponseWithProxyError(res)
         })
         proxyReq.write(reqBody)
         proxyReq.end()
+        } catch (err) {
+            pluginIntercept.emitLegacyErrorToPlugins('onBeforeResponse', err)
+            logRuntimeError(`http:request-handler:${getErrorKey(err)}`, 'HTTP proxy request failed:', getErrorMessage(err))
+            finishResponseWithProxyError(res)
+        }
     })
+})
+
+proxyServer.on('connection', (socket) => {
+    activeProxySockets.add(socket)
+    socket.once('close', () => { activeProxySockets.delete(socket) })
 })
 
 // ===== WebSocket 服务（日志推送）=====
@@ -414,7 +580,12 @@ proxyServer.on('connect', async (req, socket, head) => {
 
                     const reqChunks = []
                     req.on('data', chunk => reqChunks.push(chunk))
+                    req.on('error', (err) => {
+                        logRuntimeError(`https:client-request:${getErrorKey(err)}`, 'HTTPS client request error:', getErrorMessage(err))
+                        finishResponseWithProxyError(res, 400)
+                    })
                     req.on('end', async () => {
+                        try {
                         const reqBody = Buffer.concat(reqChunks)
                         const legacyResolvedTarget = resolveTargetUrl(source, ctx.routeRules)
                         if (legacyResolvedTarget && legacyResolvedTarget.startsWith('file://')) {
@@ -437,11 +608,27 @@ proxyServer.on('connect', async (req, socket, head) => {
                         try {
                             const proxyRes = await makeProxyRequest(target, req.method, stripProxyHeaders(req.headers), reqBody)
                             const resChunks = []
+                            let proxyResponseSettled = false
+                            const handleProxyResponseError = (err) => {
+                                if (proxyResponseSettled) return
+                                proxyResponseSettled = true
+                                pluginIntercept.emitLegacyErrorToPlugins('onBeforeResponse', err)
+                                logRuntimeError(`https:upstream-stream:${originHost}:${getErrorKey(err)}`, '[proxy] upstream stream %s: %s', originHost + req.url, getErrorMessage(err))
+                                finishResponseWithProxyError(res)
+                            }
                             if (routeChanged) proxyRes.headers['x-real-url'] = target
                             if (!intercepting) res.writeHead(proxyRes.statusCode, cleanHeadersForH2(proxyRes.headers))
 
                             proxyRes.stream.on('data', chunk => { resChunks.push(chunk); if (!intercepting) res.write(chunk) })
+                            proxyRes.stream.on('error', handleProxyResponseError)
+                            proxyRes.stream.on('aborted', () => handleProxyResponseError(new Error('upstream stream aborted')))
+                            proxyRes.stream.on('close', () => {
+                                if (!proxyResponseSettled) handleProxyResponseError(new Error('upstream stream closed before end'))
+                            })
                             proxyRes.stream.on('end', async () => {
+                                if (proxyResponseSettled) return
+                                proxyResponseSettled = true
+                                try {
                                 const resBody = Buffer.concat(resChunks)
                                 let intercepted = false
                                 if (intercepting) {
@@ -481,32 +668,51 @@ proxyServer.on('connect', async (req, socket, head) => {
                                     } : undefined,
                                 }
                                 appendProxyRecord(ctx, logData, detail)
+                                } catch (err) {
+                                    pluginIntercept.emitLegacyErrorToPlugins('onBeforeResponse', err)
+                                    logRuntimeError(`https:response-handler:${originHost}:${getErrorKey(err)}`, '[proxy] upstream response handling %s: %s', originHost + req.url, getErrorMessage(err))
+                                    finishResponseWithProxyError(res)
+                                }
                             })
                         } catch (err) {
                             const code = err.code || ''
                             const isConnReset = code === 'ECONNRESET' || code === 'ETIMEDOUT' || code === 'ECONNREFUSED'
                             if (isConnReset) {
-                                console.error('[proxy] upstream %s %s: %s', originHost + req.url, code, err.message)
+                                logRuntimeError(`https:upstream:${originHost}:${code}`, '[proxy] upstream %s %s: %s', originHost + req.url, code, err.message)
                             } else {
-                                console.error('[error debug]', originHost + req.url, err)
+                                logRuntimeError(`https:upstream:${originHost}:${getErrorKey(err)}`, '[error debug]', originHost + req.url, err)
                             }
                             pluginIntercept.emitLegacyErrorToPlugins('onBeforeResponse', err)
-                            if (!res.headersSent) { try { res.writeHead(502) } catch (_) {} }
-                            try { res.end() } catch (_) {}
+                            finishResponseWithProxyError(res)
+                        }
+                        } catch (err) {
+                            pluginIntercept.emitLegacyErrorToPlugins('onBeforeResponse', err)
+                            logRuntimeError(`https:request-handler:${originHost}:${getErrorKey(err)}`, '[proxy] HTTPS request handling %s: %s', originHost + req.url, getErrorMessage(err))
+                            finishResponseWithProxyError(res)
                         }
                     })
                 })
+                markMitmServerUsed(server)
+                server._epActiveSockets = new Set()
 
                 server._epRegisterClientIdentity = (remotePort, identity) => {
                     clientIdentityRegistry.register(remotePort, identity)
                 }
                 server.on('secureConnection', tlsSocket => {
+                    markMitmServerUsed(server)
+                    server._epActiveSockets.add(tlsSocket)
+                    tlsSocket.once('close', () => {
+                        server._epActiveSockets.delete(tlsSocket)
+                        markMitmServerUsed(server)
+                    })
                     clientIdentityRegistry.attach(tlsSocket)
                 })
 
                 // WebSocket 代理（MITM HTTPS 服务器）- 使用 noServer 模式，统一在此处理并强制上游→客户端为文本
                 const wss = new WebSocketServer({ noServer: true })
+                server._epWSServer = wss
                 server.on('upgrade', (req, socket, head) => {
+                    markMitmServerUsed(server)
                     socket.on('error', (err) => {
                         if (err.code !== 'ECONNRESET') proxyDebug('[ws] mitm upgrade socket error:', err.message)
                     })
@@ -529,12 +735,19 @@ proxyServer.on('connect', async (req, socket, head) => {
                             headers: outHeaders
                         })
                         const OPEN = 1
+                        const CONNECTING = 0
                         let closed = false
+                        const clientBuffer = []
                         const safeClose = (sock, code, reason) => {
-                            if (closed) return
                             try {
-                                if (sock.readyState === OPEN || sock.readyState === 0) sock.close(code, reason)
+                                if (sock.readyState === OPEN || sock.readyState === CONNECTING) sock.close(code, reason)
                             } catch (_) {}
+                        }
+                        const closePeer = (sock, code, reason) => {
+                            if (closed) return
+                            closed = true
+                            clientBuffer.length = 0
+                            safeClose(sock, code, reason)
                         }
                         const safeSend = (sock, data, label, isBinary) => {
                             if (sock.readyState !== OPEN) return
@@ -551,7 +764,6 @@ proxyServer.on('connect', async (req, socket, head) => {
                                 if (e.message !== 'WebSocket is not open') proxyDebug(`[ws] ${label} send: ${e.message}`)
                             }
                         }
-                        const clientBuffer = []
                         const flushClientBuffer = () => {
                             while (clientBuffer.length) {
                                 const item = clientBuffer.shift()
@@ -569,7 +781,12 @@ proxyServer.on('connect', async (req, socket, head) => {
                             proxyDebug(`[ws] client -> upstream: ${type} ${preview}`)
                             if (proxyWs.readyState === OPEN) {
                                 safeSend(proxyWs, data, 'upstream', isBinary)
-                            } else if (proxyWs.readyState === 0) {
+                            } else if (proxyWs.readyState === CONNECTING) {
+                                if (clientBuffer.length >= MAX_WS_BUFFERED_MESSAGES) {
+                                    closePeer(ws, 1011, 'upstream not ready')
+                                    safeClose(proxyWs, 1011, 'upstream not ready')
+                                    return
+                                }
                                 clientBuffer.push({ data, isBinary })
                             }
                         })
@@ -589,18 +806,15 @@ proxyServer.on('connect', async (req, socket, head) => {
                         })
                         proxyWs.on('error', (e) => {
                             proxyDebug(`[ws] upstream ${targetUrl} error: ${e.message}`)
-                            closed = true
-                            safeClose(ws, 1011, 'upstream error')
+                            closePeer(ws, 1011, 'upstream error')
                         })
                         proxyWs.on('close', (code, reason) => {
-                            closed = true
-                            safeClose(ws, code, reason)
+                            closePeer(ws, code, reason)
                         })
                         ws.on('error', (e) => { proxyDebug(`[ws] client error: ${e.message}`) })
                         ws.on('close', (code, reason) => {
                             _debug('log')('ws close', code, reason)
-                            closed = true
-                            safeClose(proxyWs, code, reason)
+                            closePeer(proxyWs, code, reason)
                         })
                     })
                 })
@@ -617,6 +831,8 @@ proxyServer.on('connect', async (req, socket, head) => {
             server = await createHttpsServerByCert()
             server.listen(port, '127.0.0.1', () => { proxyDebug('listening on ' + port) })
             ctx.httpsServerMap.set(originHost, server)
+        } else {
+            markMitmServerUsed(server)
         }
 
         if (server.listening) {
@@ -632,6 +848,7 @@ proxyServer.on('connect', async (req, socket, head) => {
     }
 
     function connectToLocalHttpsServer(server) {
+        markMitmServerUsed(server)
         const connection = connect({
             host: '127.0.0.1',
             port: server.address().port,
@@ -665,6 +882,49 @@ proxyServer.on('upgrade', (req, socket, head) => {
     socket.destroy()
 })
 
-process.on('uncaughtException', function (err) {
-    console.error(err.stack)
+let fatalErrorInProgress = false
+const MAX_FATAL_LOG_CHARS = 20000
+
+function formatFatalError(reason) {
+    if (reason && reason.stack) return String(reason.stack)
+    if (reason instanceof Error) return `${reason.name}: ${reason.message}`
+    if (typeof reason === 'string') return reason
+
+    try {
+        return JSON.stringify(reason)
+    } catch (_) {
+        return String(reason)
+    }
+}
+
+function writeFatalError(type, reason) {
+    let message = `[fatal] ${type}\n${formatFatalError(reason)}\n`
+    if (message.length > MAX_FATAL_LOG_CHARS) {
+        message = message.slice(0, MAX_FATAL_LOG_CHARS) + '\n[fatal] stack truncated\n'
+    }
+
+    try {
+        fs.writeSync(2, message)
+    } catch (_) {
+        // If stderr itself fails, exit anyway; the process is in an undefined state.
+    }
+}
+
+function handleFatalError(type, reason) {
+    if (!fatalErrorInProgress) {
+        fatalErrorInProgress = true
+        writeFatalError(type, reason)
+    }
+
+    process.exit(1)
+}
+
+process.on('uncaughtException', (err) => {
+    handleFatalError('uncaughtException', err)
 })
+
+process.on('unhandledRejection', (reason) => {
+    handleFatalError('unhandledRejection', reason)
+})
+
+startRuntimeWatchdog()

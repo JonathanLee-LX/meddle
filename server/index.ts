@@ -9,6 +9,7 @@ import { registerPipelineRoutes } from './pipeline'
 import { registerRefactorRoutes } from './refactor'
 import { registerRuleFilesRoutes } from './rule-files'
 import { registerAgentRoutes } from './agent/routes'
+import { registerHealthRoutes } from './health'
 
 // RuleMap and ExcludeMap types from helpers
 export type RuleMap = Record<string, string>;
@@ -143,6 +144,22 @@ export interface ServerContext {
             certificateUrl: string
         }>
     }
+    /** 获取当前进程运行时健康状态 */
+    getRuntimeHealth: () => {
+        generatedAt: number
+        status: 'ok' | 'degraded' | 'critical'
+        pid: number
+        uptimeSec: number
+        memory: NodeJS.MemoryUsage
+        cpu: { percent: number; cores: number; loadAverage: number[] }
+        eventLoop: { meanMs: number; maxMs: number }
+        process: { fdCount: number | null; activeHandles: number | null; activeRequests: number | null }
+        connections: { proxySockets: number; mitmTlsSockets: number; webSockets: number; total: number }
+        mitmServers: { count: number; activeSockets: number; items: Array<Record<string, unknown>> }
+        logs: unknown
+        watchdog: unknown
+        checks: Array<{ name: string; status: string; value: number; limit: number; unit: string }>
+    }
 }
 
 /**
@@ -164,6 +181,7 @@ export function createApp(serverContext: ServerContext): Application {
     registerLogsRoutes(app, serverContext)
     registerMocksRoutes(app, serverContext)
     registerPipelineRoutes(app, serverContext)
+    registerHealthRoutes(app, serverContext)
     registerRefactorRoutes(app, serverContext)
     registerRuleFilesRoutes(app, serverContext)
     registerAgentRoutes(app, serverContext)
