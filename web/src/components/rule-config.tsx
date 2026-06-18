@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 import { Spinner } from '@/components/ui/spinner'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -29,7 +28,7 @@ import type { RuleItem, RuleFile } from '@/types'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent } from '@dnd-kit/core'
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { buildRuleGraph } from '@/utils/rule-graph'
@@ -37,6 +36,15 @@ import { RouteCanvas } from '@/components/route-canvas'
 import { supportsOpenFilePicker } from '@/types/file-system-access'
 import { FEATURE_FLAGS } from '@/lib/feature-flags'
 import { getEprcTextDiagnostics, normalizeImportedRuleText, parseEprcRules, rulesToEprc } from '@/utils/eprc-parser'
+import { EprcTextarea } from '@/components/eprc-textarea'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 interface RuleConfigProps {
   rules: RuleItem[]
@@ -73,6 +81,35 @@ interface SortableRuleRowProps {
 interface ExclusionsInputProps {
   exclusions: string[]
   onCommit: (value: string[]) => void
+}
+
+const RULE_ROW_HIGHLIGHT_CLASS = 'bg-primary/10 shadow-[inset_3px_0_0_var(--primary)] transition-[background-color,box-shadow]'
+
+function sameRowOrder(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((item, index) => item === b[index])
+}
+
+export function getRuleRowOrder(rowIds: string[], activeId: string | number, overId: string | number | null | undefined): string[] {
+  if (overId == null) return rowIds
+
+  const activeKey = String(activeId)
+  const overKey = String(overId)
+  if (activeKey === overKey) return rowIds
+
+  const oldIndex = rowIds.indexOf(activeKey)
+  const newIndex = rowIds.indexOf(overKey)
+  if (oldIndex < 0 || newIndex < 0) return rowIds
+
+  return arrayMove(rowIds, oldIndex, newIndex)
+}
+
+export function reorderItemsByRowIds<T>(items: T[], rowIds: string[], orderedRowIds: string[]): T[] {
+  if (items.length !== rowIds.length || rowIds.length !== orderedRowIds.length) return items
+
+  const itemById = new Map(rowIds.map((id, index) => [id, items[index]]))
+  if (orderedRowIds.some((id) => !itemById.has(id))) return items
+
+  return orderedRowIds.map((id) => itemById.get(id) as T)
 }
 
 function parseExclusionsInput(value: string): string[] {
@@ -117,10 +154,12 @@ const SortableRuleRow = memo(
   function SortableRuleRow({ id, item, highlighted, highlightRef, onToggle, onUpdateRule, onDelete, onMoveToTop }: SortableRuleRowProps) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
 
-    const style = {
+    const style: React.CSSProperties = {
       transform: CSS.Transform.toString(transform),
       transition,
-      opacity: isDragging ? 0.5 : 1,
+      opacity: isDragging ? 0.85 : 1,
+      position: 'relative',
+      zIndex: isDragging ? 1 : undefined,
     }
 
     const handleToggle = useCallback(() => onToggle(), [onToggle])
@@ -148,7 +187,7 @@ const SortableRuleRow = memo(
           }
         }}
         style={style}
-        className={highlighted ? 'bg-amber-100/60 dark:bg-amber-500/20 transition-colors' : undefined}
+        className={highlighted ? RULE_ROW_HIGHLIGHT_CLASS : undefined}
       >
         <TableCell className="w-8 cursor-grab active:cursor-grabbing" {...attributes} {...listeners}>
           <GripVertical className="h-4 w-4 text-muted-foreground" />
@@ -212,7 +251,7 @@ const FilteredRuleRow = memo(
     const handleMoveToTop = useCallback(() => onMoveToTop(), [onMoveToTop])
 
     return (
-      <TableRow ref={highlighted ? highlightRef : undefined} className={highlighted ? 'bg-amber-100/60 dark:bg-amber-500/20 transition-colors' : undefined}>
+      <TableRow ref={highlighted ? highlightRef : undefined} className={highlighted ? RULE_ROW_HIGHLIGHT_CLASS : undefined}>
         <TableCell>
           <Checkbox checked={item.enabled} onCheckedChange={handleToggle} />
         </TableCell>
@@ -303,6 +342,10 @@ export function RuleConfig(props: RuleConfigProps) {
   const textDraftRef = useRef('')
   const [highlightIndex, setHighlightIndex] = useState<number | null>(null)
   const highlightRowRef = useRef<HTMLTableRowElement | null>(null)
+  const nextRuleRowIdRef = useRef(0)
+  const createRuleRowId = useCallback(() => `rule-${nextRuleRowIdRef.current++}`, [])
+  const [ruleRowIds, setRuleRowIds] = useState<string[]>(() => rules.map(() => createRuleRowId()))
+  const [dragPreviewRowIds, setDragPreviewRowIds] = useState<string[] | null>(null)
 
   // 创建规则文件
   const [isCreating, setIsCreating] = useState(false)
@@ -315,11 +358,16 @@ export function RuleConfig(props: RuleConfigProps) {
 
   // 从文件加载
   const [isImporting, setIsImporting] = useState(false)
-  const [isTextImporting, setIsTextImporting] = useState(false)
   const [importName, setImportName] = useState('')
   const [importContent, setImportContent] = useState<string | null>(null)
-  const [textImportDraft, setTextImportDraft] = useState('')
   const importFileRef = useRef<HTMLInputElement>(null)
+
+  // 文本导入弹窗（独立于内联创建流程）
+  const [textImportOpen, setTextImportOpen] = useState(false)
+  const [textImportName, setTextImportName] = useState('')
+  const [textImportDraft, setTextImportDraft] = useState('')
+  const [textImportError, setTextImportError] = useState<string | null>(null)
+  const [textImportCreating, setTextImportCreating] = useState(false)
 
   // 筛选
   const [showFilters, setShowFilters] = useState(false)
@@ -332,10 +380,8 @@ export function RuleConfig(props: RuleConfigProps) {
   const resetCreateDialog = useCallback(() => {
     setIsCreating(false)
     setIsImporting(false)
-    setIsTextImporting(false)
     setImportContent(null)
     setImportName('')
-    setTextImportDraft('')
     setCreateError(null)
   }, [])
 
@@ -343,10 +389,8 @@ export function RuleConfig(props: RuleConfigProps) {
     setNewFileName(getAvailableRuleFileName(ruleFiles, '默认规则'))
     setIsCreating(true)
     setIsImporting(false)
-    setIsTextImporting(false)
     setImportContent(null)
     setImportName('')
-    setTextImportDraft('')
     setCreateError(null)
   }, [ruleFiles])
 
@@ -409,15 +453,23 @@ export function RuleConfig(props: RuleConfigProps) {
     setTextDraft(serializedRules)
   }, [activeFileName, rules, viewMode])
 
-  // 创建新规则文件
+  useEffect(() => {
+    setRuleRowIds((prev) => {
+      if (prev.length === rules.length) return prev
+      if (prev.length > rules.length) return prev.slice(0, rules.length)
+      return [
+        ...prev,
+        ...Array.from({ length: rules.length - prev.length }, () => createRuleRowId()),
+      ]
+    })
+    setDragPreviewRowIds(null)
+  }, [createRuleRowId, rules.length])
+
+  // 创建新规则文件（文件导入 / Plus 创建走此内联流程）
   const handleCreate = useCallback(async () => {
     if (!newFileName.trim()) return
     setCreateError(null)
-    const content = isTextImporting ? normalizeImportedRuleText(textImportDraft) : importContent || ''
-    if (isTextImporting && !content.trim()) {
-      setCreateError('请输入规则文本')
-      return
-    }
+    const content = importContent || ''
     const result = await createRuleFile(newFileName.trim(), content)
     if (result.success) {
       resetCreateDialog()
@@ -426,7 +478,7 @@ export function RuleConfig(props: RuleConfigProps) {
     } else {
       setCreateError(result.error || '创建失败')
     }
-  }, [createRuleFile, newFileName, isTextImporting, textImportDraft, importContent, resetCreateDialog, fetchFileContent])
+  }, [createRuleFile, newFileName, importContent, resetCreateDialog, fetchFileContent])
 
   // 从文件导入 → 创建新规则文件
   const handleImportFile = useCallback(async () => {
@@ -448,8 +500,6 @@ export function RuleConfig(props: RuleConfigProps) {
         setImportName(baseName)
         setNewFileName(baseName)
         setIsImporting(true)
-        setIsTextImporting(false)
-        setTextImportDraft('')
         setIsCreating(true)
         return
       } catch {
@@ -468,29 +518,64 @@ export function RuleConfig(props: RuleConfigProps) {
         setImportName(baseName)
         setNewFileName(baseName)
         setIsImporting(true)
-        setIsTextImporting(false)
-        setTextImportDraft('')
         setIsCreating(true)
       })
     }
     e.target.value = ''
   }, [])
 
+  // 文本导入：打开弹窗
   const handleImportText = useCallback(() => {
-    const name = getAvailableRuleFileName(ruleFiles, '文本导入')
-    setNewFileName(name)
-    setImportContent(null)
-    setImportName('文本导入')
+    setTextImportName(getAvailableRuleFileName(ruleFiles, '文本导入'))
     setTextImportDraft('')
-    setIsImporting(true)
-    setIsTextImporting(true)
-    setIsCreating(true)
-    setCreateError(null)
+    setTextImportError(null)
+    setTextImportCreating(false)
+    setTextImportOpen(true)
   }, [ruleFiles])
+
+  // 文本导入弹窗：解析预览
+  const textImportParsedRules = useMemo(
+    () => parseEprcRules(normalizeImportedRuleText(textImportDraft)),
+    [textImportDraft],
+  )
+  const textImportDiagnostics = useMemo(
+    () => getEprcTextDiagnostics(normalizeImportedRuleText(textImportDraft)),
+    [textImportDraft],
+  )
+
+  // 文本导入弹窗：确认创建
+  const handleConfirmTextImport = useCallback(async () => {
+    const name = textImportName.trim()
+    if (!name) {
+      setTextImportError('规则文件名称不能为空')
+      return
+    }
+    const content = normalizeImportedRuleText(textImportDraft)
+    if (!content.trim()) {
+      setTextImportError('请输入规则文本')
+      return
+    }
+    // 存在未识别行时阻断创建（与文本编辑保存校验一致）
+    if (getEprcTextDiagnostics(content).length > 0) {
+      setTextImportError('规则文本存在无法识别的行，请先修正')
+      return
+    }
+    setTextImportCreating(true)
+    const result = await createRuleFile(name, content)
+    setTextImportCreating(false)
+    if (result.success) {
+      setTextImportOpen(false)
+      await fetchFileContent(name)
+    } else {
+      setTextImportError(result.error || '创建失败')
+    }
+  }, [createRuleFile, fetchFileContent, textImportDraft, textImportName])
 
   // 保存当前文件
   const handleSave = useCallback(async () => {
     if (!activeFileName) return
+    // 文本模式下若有未识别行，阻止保存（按钮已禁用，此处为防御性兜底）
+    if (viewMode === 'text' && getEprcTextDiagnostics(textDraft).length > 0) return
     setSaving(true)
     const ok = viewMode === 'text' ? await saveRuleFileRawContent(activeFileName, textDraft) : await saveFileContent(activeFileName, rules)
     setSaving(false)
@@ -568,18 +653,21 @@ export function RuleConfig(props: RuleConfigProps) {
 
   const deleteRule = useCallback(
     (index: number) => {
+      setRuleRowIds((prev) => prev.filter((_, i) => i !== index))
       startTransition(() => setRules((prev) => prev.filter((_, i) => i !== index)))
     },
     [setRules],
   )
 
   const addRule = useCallback(() => {
+    setRuleRowIds((prev) => [createRuleRowId(), ...prev])
     startTransition(() => setRules((prev) => [{ enabled: true, rule: '', target: '', exclusions: [] }, ...prev]))
     setHighlightIndex(0)
-  }, [setRules])
+  }, [createRuleRowId, setRules])
 
   const moveToTop = useCallback(
     (index: number) => {
+      setRuleRowIds((prev) => arrayMove(prev, index, 0))
       startTransition(() =>
         setRules((prev) => {
           const n = [...prev]
@@ -605,16 +693,44 @@ export function RuleConfig(props: RuleConfigProps) {
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event
-      if (over && active.id !== over.id) {
+      const nextRowIds = over ? (dragPreviewRowIds ?? getRuleRowOrder(ruleRowIds, active.id, over.id)) : ruleRowIds
+      setDragPreviewRowIds(null)
+
+      if (!sameRowOrder(nextRowIds, ruleRowIds)) {
+        setRuleRowIds(nextRowIds)
         setRules((prev) => {
-          const oldIndex = prev.findIndex((_, i) => `rule-${i}` === active.id)
-          const newIndex = prev.findIndex((_, i) => `rule-${i}` === over.id)
-          return arrayMove(prev, oldIndex, newIndex)
+          return reorderItemsByRowIds(prev, ruleRowIds, nextRowIds)
         })
       }
     },
-    [setRules],
+    [dragPreviewRowIds, ruleRowIds, setRules],
   )
+
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      if (!ruleRowIds.includes(String(event.active.id))) return
+      setDragPreviewRowIds(null)
+    },
+    [ruleRowIds],
+  )
+
+  const handleDragOver = useCallback(
+    (event: DragOverEvent) => {
+      const { active, over } = event
+      if (!over) return
+
+      setDragPreviewRowIds((current) => {
+        const nextOrder = getRuleRowOrder(ruleRowIds, active.id, over.id)
+        if (sameRowOrder(ruleRowIds, nextOrder)) return null
+        return current && sameRowOrder(current, nextOrder) ? current : nextOrder
+      })
+    },
+    [ruleRowIds],
+  )
+
+  const handleDragCancel = useCallback(() => {
+    setDragPreviewRowIds(null)
+  }, [])
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -669,6 +785,18 @@ export function RuleConfig(props: RuleConfigProps) {
       })
   }, [rules, deferredRuleFilter, deferredTargetFilter])
 
+  const sortableRuleRows = useMemo(() => {
+    const rows = rules
+      .map((item, index) => ({ item, index, id: ruleRowIds[index] }))
+      .filter((row): row is { item: RuleItem; index: number; id: string } => Boolean(row.id))
+    const rowById = new Map(rows.map((row) => [row.id, row]))
+    const orderedIds = dragPreviewRowIds ?? ruleRowIds
+
+    return orderedIds
+      .map((id) => rowById.get(id))
+      .filter((row): row is { item: RuleItem; index: number; id: string } => Boolean(row))
+  }, [dragPreviewRowIds, ruleRowIds, rules])
+
   const uniqueTargets = useMemo(() => {
     const targets = new Set<string>()
     rules.forEach((item) => {
@@ -687,7 +815,23 @@ export function RuleConfig(props: RuleConfigProps) {
   const displayedTextDraft = activeFileName ? textDraft : ''
   const textLoading = Boolean(activeFileName && loadedTextFileName !== activeFileName)
   const textDiagnostics = useMemo(() => getEprcTextDiagnostics(displayedTextDraft), [displayedTextDraft])
+  const textHasErrors = viewMode === 'text' && textDiagnostics.length > 0
   const showDragColumn = !ruleFilter && !targetFilter
+
+  // Ctrl/Cmd+S 快捷保存（与保存按钮的禁用条件保持一致）
+  const canSave = Boolean(activeFileName) && !saving && !textLoading && !textHasErrors
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const isSaveShortcut = (event.ctrlKey || event.metaKey) && (event.key === 's' || event.key === 'S')
+      if (!isSaveShortcut) return
+      // 文本导入弹窗打开时不拦截，避免影响弹窗内输入
+      if (textImportOpen) return
+      event.preventDefault()
+      if (canSave) void handleSave()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [canSave, handleSave, textImportOpen])
 
   const createToggleRuleCallback = useCallback((index: number) => () => toggleRule(index), [toggleRule])
   const createUpdateRuleCallback = useCallback(
@@ -807,7 +951,7 @@ export function RuleConfig(props: RuleConfigProps) {
                 {isCreating ? (
                   <div
                     role="group"
-                    aria-label={isTextImporting ? '从文本导入为新规则' : isImporting ? '从文件导入为新规则' : '创建新规则文件'}
+                    aria-label={isImporting ? '从文件导入为新规则' : '创建新规则文件'}
                     className="flex h-8 items-center gap-1 rounded-md border border-primary/30 bg-background px-1 shadow-sm"
                     title={isImporting && importName ? `导入自: ${importName}` : undefined}
                   >
@@ -932,7 +1076,12 @@ export function RuleConfig(props: RuleConfigProps) {
                 <Button
                   size="sm"
                   onClick={handleSave}
-                  disabled={saving || textLoading}
+                  disabled={saving || textLoading || textHasErrors}
+                  title={
+                    textHasErrors
+                      ? `${textDiagnostics.length} 行内容无法识别，请先修正`
+                      : '保存 (Ctrl/Cmd+S)'
+                  }
                 >
                   {saving ? (
                     <Spinner data-icon="inline-start" />
@@ -950,22 +1099,6 @@ export function RuleConfig(props: RuleConfigProps) {
           <div className="flex shrink-0 flex-col gap-1 border-b px-3 py-2 text-xs text-destructive">
             {renameError && <p>{renameError}</p>}
             {createError && <p>{createError}</p>}
-          </div>
-        )}
-
-        {/* 文本导入需要额外的规则内容编辑区 */}
-        {isCreating && isTextImporting && (
-          <div className="flex shrink-0 flex-col gap-2 border-b bg-muted/20 p-3">
-            <Textarea
-              value={textImportDraft}
-              onChange={(e) => {
-                setTextImportDraft(e.target.value)
-                setCreateError(null)
-              }}
-              placeholder={'127.0.0.1 example.com api.example.com\n::1 local.example.test'}
-              className="min-h-[160px] resize-y font-mono text-sm"
-              aria-label="导入规则文本"
-            />
           </div>
         )}
 
@@ -1043,18 +1176,16 @@ export function RuleConfig(props: RuleConfigProps) {
         <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
           {viewMode === 'text' ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <Textarea
-                aria-label="规则文本"
+              <EprcTextarea
+                ariaLabel="规则文本"
                 value={displayedTextDraft}
-                onChange={(event) => handleTextChange(event.target.value)}
+                onChange={handleTextChange}
                 disabled={!activeFileName || textLoading}
                 placeholder={
                   activeFileName
                     ? 'example.com !/api localhost:3000'
                     : '请先选择或创建一个规则文件'
                 }
-                className="min-h-0 flex-1 resize-none overflow-auto rounded-none border-0 bg-transparent px-4 py-3 font-mono text-sm leading-6 shadow-none focus-visible:ring-0"
-                spellCheck={false}
               />
               <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-xs text-muted-foreground">
                 <span>
@@ -1063,7 +1194,7 @@ export function RuleConfig(props: RuleConfigProps) {
                     : `已解析 ${rules.length} 条规则`}
                 </span>
                 {textDiagnostics.length > 0 && (
-                  <Badge variant="outline">
+                  <Badge variant="destructive" title="存在无法识别的行，保存已禁用">
                     {textDiagnostics.length} 行未识别：
                     {textDiagnostics
                       .slice(0, 3)
@@ -1135,16 +1266,19 @@ export function RuleConfig(props: RuleConfigProps) {
                     <DndContext
                       sensors={sensors}
                       collisionDetection={closestCenter}
+                      onDragStart={handleDragStart}
+                      onDragOver={handleDragOver}
                       onDragEnd={handleDragEnd}
+                      onDragCancel={handleDragCancel}
                     >
                       <SortableContext
-                        items={rules.map((_, i) => `rule-${i}`)}
+                        items={sortableRuleRows.map((row) => row.id)}
                         strategy={verticalListSortingStrategy}
                       >
-                        {rules.map((item, index) => (
+                        {sortableRuleRows.map(({ item, index, id }) => (
                           <SortableRuleRow
-                            key={`rule-${index}`}
-                            id={`rule-${index}`}
+                            key={id}
+                            id={id}
                             item={item}
                             highlighted={highlightIndex === index}
                             highlightRef={highlightRowRef}
@@ -1190,6 +1324,72 @@ export function RuleConfig(props: RuleConfigProps) {
           </CardFooter>
         )}
       </Card>
+
+      {/* 文本导入弹窗 */}
+      <Dialog open={textImportOpen} onOpenChange={setTextImportOpen}>
+        <DialogContent className="flex max-h-[90vh] flex-col gap-4 sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>文本导入</DialogTitle>
+            <DialogDescription>
+              粘贴或编辑规则文本，支持 hosts 文件格式自动转换。每行一条规则，格式：<code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">规则 [排除项] 目标</code>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-medium text-muted-foreground" htmlFor="text-import-name">
+              规则文件名称
+            </label>
+            <Input
+              id="text-import-name"
+              value={textImportName}
+              onChange={(e) => {
+                setTextImportName(e.target.value)
+                setTextImportError(null)
+              }}
+              placeholder="规则文件名称"
+              className="font-mono"
+            />
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+            <label className="text-xs font-medium text-muted-foreground" htmlFor="text-import-content">
+              规则文本
+            </label>
+            <div className="min-h-[220px] flex-1 overflow-hidden rounded-md border">
+              <EprcTextarea
+                ariaLabel="导入规则文本"
+                value={textImportDraft}
+                onChange={setTextImportDraft}
+                placeholder={'127.0.0.1 example.com api.example.com\n::1 local.example.test'}
+              />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>已解析 {textImportParsedRules.length} 条规则</span>
+              {textImportDiagnostics.length > 0 && (
+                <Badge variant="destructive">
+                  {textImportDiagnostics.length} 行未识别：
+                  {textImportDiagnostics.slice(0, 3).map((item) => item.line).join('、')}
+                  {textImportDiagnostics.length > 3 ? '…' : ''}
+                </Badge>
+              )}
+            </div>
+          </div>
+
+          {textImportError && (
+            <p className="text-xs text-destructive">{textImportError}</p>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTextImportOpen(false)} disabled={textImportCreating}>
+              取消
+            </Button>
+            <Button onClick={handleConfirmTextImport} disabled={textImportCreating}>
+              {textImportCreating ? <Spinner data-icon="inline-start" /> : <Check data-icon="inline-start" />}
+              确认创建
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

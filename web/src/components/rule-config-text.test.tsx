@@ -92,4 +92,67 @@ describe('RuleConfig text view', () => {
     expect(saveButton).toHaveAccessibleName('保存')
     expect(toast.success).toHaveBeenCalledWith('规则保存成功')
   })
+
+  it('存在未识别行时禁用保存按钮并提示', async () => {
+    const validText = '# local routes\nexample.com localhost:3000'
+    const invalidText = '# local routes\nexample.com\nonlytoken'
+    const saveRuleFileRawContent = vi.fn().mockResolvedValue(true)
+    const fetchRuleFiles = vi.fn().mockResolvedValue([])
+    const fetchFileContent = vi.fn().mockResolvedValue(undefined)
+    const fetchRuleFileRawContent = vi.fn().mockResolvedValue(validText)
+    const saveFileContent = vi.fn().mockResolvedValue(true)
+    const createRuleFile = vi.fn().mockResolvedValue({ success: true })
+    const toggleRuleFile = vi.fn().mockResolvedValue(true)
+    const renameRuleFile = vi.fn().mockResolvedValue({ success: true })
+    const deleteRuleFile = vi.fn().mockResolvedValue(true)
+
+    function Harness() {
+      const [rules, setRules] = useState<RuleItem[]>([])
+      return (
+        <RuleConfig
+          rules={rules}
+          setRules={setRules}
+          ruleFiles={[]}
+          activeFileName="default"
+          fetchRuleFiles={fetchRuleFiles}
+          fetchFileContent={fetchFileContent}
+          fetchRuleFileRawContent={fetchRuleFileRawContent}
+          saveRuleFileRawContent={saveRuleFileRawContent}
+          saveFileContent={saveFileContent}
+          createRuleFile={createRuleFile}
+          toggleRuleFile={toggleRuleFile}
+          renameRuleFile={renameRuleFile}
+          deleteRuleFile={deleteRuleFile}
+        />
+      )
+    }
+
+    const user = userEvent.setup()
+    render(<Harness />)
+
+    await user.click(screen.getByRole('radio', { name: '文本' }))
+    const editor = await screen.findByLabelText('规则文本')
+    await waitFor(() => expect(editor).toHaveValue(validText))
+
+    // 初始合法：保存按钮可用
+    const saveButton = screen.getByRole('button', { name: '保存' })
+    expect(saveButton).toBeEnabled()
+
+    // 输入仅含单 token 的无法识别行
+    fireEvent.change(editor, { target: { value: invalidText } })
+
+    // 出现未识别行 Badge，保存按钮被禁用
+    expect(await screen.findByText(/未识别/)).toBeInTheDocument()
+    expect(saveButton).toBeDisabled()
+
+    // 修正为合法内容后，保存按钮恢复
+    fireEvent.change(editor, { target: { value: validText } })
+    await waitFor(() => expect(saveButton).toBeEnabled())
+
+    // 此时保存应正常调用
+    fireEvent.click(saveButton)
+    await waitFor(() =>
+      expect(saveRuleFileRawContent).toHaveBeenCalledWith('default', validText),
+    )
+  })
 })
