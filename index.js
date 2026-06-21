@@ -16,9 +16,11 @@ const {
 const {
     createClientIdentityResolver,
     createMitmClientIdentityRegistry,
+    enrichClientIdentityWithApplication,
     getRequestClientIdentity,
     pluginClientIdentity,
 } = require('./dist/core/client-identity')
+const { createApplicationIdentityResolver } = require('./dist/core/application-identity')
 const {
     authorizeProxyClient,
     buildRemoteAccessConfig,
@@ -115,6 +117,7 @@ const { createRateLimitedLogger } = require('./dist/core/log-rate-limit')
 const remoteAccess = buildRemoteAccessConfig()
 const lanAddresses = getLanIPv4Addresses()
 const clientIdentityResolver = createClientIdentityResolver(ctx.settingsPath)
+const applicationIdentityResolver = createApplicationIdentityResolver()
 const activeProxySockets = new Set()
 const rateLimitedLogger = createRateLimitedLogger(console, {
     windowMs: Number(process.env.EP_LOG_RATE_LIMIT_WINDOW_MS) || 60000,
@@ -260,7 +263,7 @@ const plugins = [{
 }]
 
 // ===== HTTP 代理服务器 =====
-const proxyServer = http.createServer((req, res) => {
+const proxyServer = http.createServer(async (req, res) => {
     const serverPort = proxyServer.address().port
     const requestUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
     const requestTargetsProxy = isProxyHost(req.headers.host, serverPort, lanAddresses)
@@ -335,7 +338,12 @@ const proxyServer = http.createServer((req, res) => {
         return
     }
 
-    const clientIdentity = clientIdentityResolver.resolve(req.socket.remoteAddress)
+    const baseClientIdentity = clientIdentityResolver.resolve(req.socket.remoteAddress)
+    const clientIdentity = await enrichClientIdentityWithApplication(
+        baseClientIdentity,
+        applicationIdentityResolver,
+        { socket: req.socket, headers: req.headers },
+    )
     req._epClientIdentity = clientIdentity
     req.socket._epClientIdentity = clientIdentity
 
@@ -540,7 +548,12 @@ proxyServer.on('connect', async (req, socket, head) => {
         return
     }
     const originHost = authority.host
-    const clientIdentity = clientIdentityResolver.resolve(socket.remoteAddress)
+    const baseClientIdentity = clientIdentityResolver.resolve(socket.remoteAddress)
+    const clientIdentity = await enrichClientIdentityWithApplication(
+        baseClientIdentity,
+        applicationIdentityResolver,
+        { socket },
+    )
     const needDecrypt = remoteAccess.interceptHttps
         || !!resolveTargetUrl(`https://${req.url}/`, ctx.routeRules)
     proxyDebug('received connect request....', needDecrypt ? '(decrypt)' : '(tunnel)')
@@ -569,8 +582,15 @@ proxyServer.on('connect', async (req, socket, head) => {
             crtMgr.getCertificate(originHost, (error, key, crt) => {
                 if (error) return reject(error)
                 const clientIdentityRegistry = createMitmClientIdentityRegistry()
-                const server = http2.createSecureServer({ cert: crt, key, allowHTTP1: true }, (req, res) => {
-                    const requestClientIdentity = getRequestClientIdentity(req)
+                const server = http2.createSecureServer({ cert: crt, key, allowHTTP1: true }, async (req, res) => {
+                    const inheritedClientIdentity = getRequestClientIdentity(req)
+                    const requestClientIdentity = await enrichClientIdentityWithApplication(
+                        inheritedClientIdentity,
+                        applicationIdentityResolver,
+                        { headers: req.headers },
+                    )
+                    req._epClientIdentity = requestClientIdentity
+                    req.socket._epClientIdentity = requestClientIdentity
                     const source = 'https://' + (req.headers.host || req.authority || originHost) + req.url
 
                     const mockRule = mockHandler.matchMockRule(source, req.method)

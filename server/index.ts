@@ -32,6 +32,13 @@ export interface ServerContext {
         clientType?: 'local' | 'remote' | 'plugin'
         clientIp?: string
         clientName?: string
+        applicationName?: string
+        applicationProcess?: string
+        applicationPid?: number
+        applicationPath?: string
+        applicationBundleId?: string
+        applicationIdentitySource?: 'local-process' | 'user-agent' | 'client-reported'
+        applicationIdentityConfidence?: 'high' | 'medium' | 'low'
     }>
     proxyRecordDetailMap: Map<number, {
         requestHeaders: Record<string, string>
@@ -108,7 +115,25 @@ export interface ServerContext {
     reloadAllRuleFiles: () => void
     broadcastToAllClients: (data: unknown) => void
     appendProxyRecordFromPluginTest: (
-        logData: { method: string; source: string; target: string; time: string; statusCode?: number; duration?: number; clientType?: 'local' | 'remote' | 'plugin'; clientIp?: string; clientName?: string; _fromPluginTest?: boolean },
+        logData: {
+            method: string
+            source: string
+            target: string
+            time: string
+            statusCode?: number
+            duration?: number
+            clientType?: 'local' | 'remote' | 'plugin'
+            clientIp?: string
+            clientName?: string
+            applicationName?: string
+            applicationProcess?: string
+            applicationPid?: number
+            applicationPath?: string
+            applicationBundleId?: string
+            applicationIdentitySource?: 'local-process' | 'user-agent' | 'client-reported'
+            applicationIdentityConfidence?: 'high' | 'medium' | 'low'
+            _fromPluginTest?: boolean
+        },
         detail?: { requestHeaders: Record<string, string>; requestBody?: string; responseHeaders: Record<string, string>; responseBody?: string; statusCode: number; statusMessage?: string; method: string; url: string }
     ) => void
     getMockFilePath: () => string

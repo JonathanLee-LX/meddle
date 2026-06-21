@@ -1,10 +1,11 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
     createClientIdentityResolver,
     createMitmClientIdentityRegistry,
+    enrichClientIdentityWithApplication,
     getRequestClientIdentity,
     pluginClientIdentity,
 } from '../core/client-identity'
@@ -73,5 +74,49 @@ describe('client identity', () => {
         expect(registry.attach(socket)).toEqual(identity)
         expect(socket._epClientIdentity).toEqual(identity)
         expect(registry.attach({ remotePort: 52100 })).toBeUndefined()
+    })
+
+    it('enriches remote identities from request headers', async () => {
+        const identity = { clientType: 'remote' as const, clientIp: '192.168.1.20' }
+        const resolver = {
+            resolve: vi.fn(async () => ({
+                applicationName: 'Safari',
+                applicationIdentitySource: 'user-agent' as const,
+                applicationIdentityConfidence: 'medium' as const,
+            })),
+        }
+
+        await expect(enrichClientIdentityWithApplication(identity, resolver, {
+            headers: { 'user-agent': 'Safari test UA' },
+        })).resolves.toEqual({
+            ...identity,
+            applicationName: 'Safari',
+            applicationIdentitySource: 'user-agent',
+            applicationIdentityConfidence: 'medium',
+        })
+        expect(resolver.resolve).toHaveBeenCalledWith({
+            clientType: 'remote',
+            socket: undefined,
+            headers: { 'user-agent': 'Safari test UA' },
+            existingIdentity: identity,
+        })
+    })
+
+    it('preserves inherited process identity for decrypted HTTPS requests', async () => {
+        const identity = {
+            clientType: 'local' as const,
+            applicationName: 'Google Chrome',
+            applicationProcess: 'Google Chrome Helper',
+            applicationPid: 2642,
+            applicationIdentitySource: 'local-process' as const,
+            applicationIdentityConfidence: 'high' as const,
+        }
+        const resolver = {
+            resolve: vi.fn(async ({ existingIdentity }: any) => existingIdentity),
+        }
+
+        await expect(enrichClientIdentityWithApplication(identity, resolver, {
+            headers: { 'user-agent': 'Mozilla/5.0 Safari/605.1.15' },
+        })).resolves.toEqual(identity)
     })
 })

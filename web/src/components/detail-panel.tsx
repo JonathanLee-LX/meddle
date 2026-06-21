@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Loader2, Wand2, RotateCw, Activity, XCircle, ArrowRight, ArrowDown, Clock, CornerDownRight, Flag, Route, ShieldCheck, ChevronDown, ChevronRight, Monitor, Server } from 'lucide-react'
 import { diffLines } from 'diff'
 import { highlightCode } from '@/lib/syntax-highlight'
+import { ApplicationIcon } from '@/components/application-icon'
 import type { RecordDetail, ProxyRecord, InspectionStage } from '@/types'
 import { BodyDiffView } from './body-diff-view'
 
@@ -718,6 +719,34 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
                       ? '插件测试'
                       : '远程设备')}
                 {selectedRecord.clientIp ? ` · ${selectedRecord.clientIp}` : ''}
+              </Badge>
+            )}
+            {selectedRecord?.applicationName && (
+              <Badge
+                variant="outline"
+                className="max-w-56 gap-1.5 text-[10px]"
+                title={[
+                  selectedRecord.applicationIdentitySource === 'local-process'
+                    ? '识别方式: 本机进程'
+                    : selectedRecord.applicationIdentitySource === 'user-agent'
+                      ? '识别方式: User-Agent 推断'
+                      : selectedRecord.applicationIdentitySource === 'client-reported'
+                        ? '识别方式: 客户端上报'
+                        : undefined,
+                  selectedRecord.applicationIdentityConfidence
+                    ? `可信度: ${selectedRecord.applicationIdentityConfidence === 'high' ? '高' : selectedRecord.applicationIdentityConfidence === 'medium' ? '中' : '低'}`
+                    : undefined,
+                  selectedRecord.applicationProcess,
+                  selectedRecord.applicationPid ? `PID ${selectedRecord.applicationPid}` : undefined,
+                  selectedRecord.applicationBundleId,
+                  selectedRecord.applicationPath,
+                ].filter(Boolean).join(' · ')}
+              >
+                <ApplicationIcon record={selectedRecord} compact />
+                <span className="truncate">{selectedRecord.applicationName}</span>
+                {selectedRecord.applicationIdentitySource === 'user-agent' && (
+                  <span className="shrink-0 text-[9px] text-muted-foreground">推断</span>
+                )}
               </Badge>
             )}
             <div className="flex items-center gap-1.5 ml-auto">

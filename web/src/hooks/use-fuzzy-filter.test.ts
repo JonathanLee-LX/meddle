@@ -5,8 +5,35 @@ import type { ProxyRecord } from '@/types'
 
 describe('useFuzzyFilter', () => {
   const mockRecords: ProxyRecord[] = [
-    { id: 1, method: 'GET', source: 'http://example.com/api/users', target: 'localhost:3000', time: '12:00:00', clientType: 'local', clientIp: '127.0.0.1', clientName: '本机' },
-    { id: 2, method: 'POST', source: 'http://example.com/api/login', target: 'localhost:3000', time: '12:00:01', clientType: 'remote', clientIp: '10.13.232.187', clientName: 'iPhone' },
+    {
+      id: 1,
+      method: 'GET',
+      source: 'http://example.com/api/users',
+      target: 'localhost:3000',
+      time: '12:00:00',
+      clientType: 'local',
+      clientIp: '127.0.0.1',
+      clientName: '本机',
+      applicationName: 'Google Chrome',
+      applicationProcess: 'Google Chrome Helper',
+      applicationPid: 2642,
+      applicationBundleId: 'com.google.Chrome',
+      applicationIdentitySource: 'local-process',
+      applicationIdentityConfidence: 'high',
+    },
+    {
+      id: 2,
+      method: 'POST',
+      source: 'http://example.com/api/login',
+      target: 'localhost:3000',
+      time: '12:00:01',
+      clientType: 'remote',
+      clientIp: '10.13.232.187',
+      clientName: 'iPhone',
+      applicationName: 'Safari',
+      applicationIdentitySource: 'user-agent',
+      applicationIdentityConfidence: 'medium',
+    },
     { id: 3, method: 'GET', source: 'http://example.com/style.css', target: 'localhost:3000', time: '12:00:02' },
     { id: 4, method: 'GET', source: 'http://example.com/app.js', target: 'localhost:3000', time: '12:00:03' },
     { id: 5, method: 'GET', source: 'http://example.com/logo.png', target: 'localhost:3000', time: '12:00:04' },
@@ -187,6 +214,26 @@ describe('useFuzzyFilter', () => {
       act(() => result.current.setFilterText('ip:10.13.232.187'))
       expect(result.current.filteredRecords).toHaveLength(1)
       expect(result.current.filteredRecords[0].id).toBe(2)
+    })
+
+    it('should filter by application name, process, bundle ID, and PID', () => {
+      const { result } = renderHook(() => useFuzzyFilter(mockRecords))
+
+      for (const filter of ['app:Chrome', 'app:Helper', 'app:com.google.Chrome', 'app:2642']) {
+        act(() => result.current.setFilterText(filter))
+        expect(result.current.filteredRecords).toHaveLength(1)
+        expect(result.current.filteredRecords[0].id).toBe(1)
+      }
+    })
+
+    it('should filter inferred remote applications and identity metadata', () => {
+      const { result } = renderHook(() => useFuzzyFilter(mockRecords))
+
+      for (const filter of ['app:Safari', 'app:user-agent', 'app:medium']) {
+        act(() => result.current.setFilterText(filter))
+        expect(result.current.filteredRecords).toHaveLength(1)
+        expect(result.current.filteredRecords[0].id).toBe(2)
+      }
     })
 
     it('should support negative filters with -keyword', () => {

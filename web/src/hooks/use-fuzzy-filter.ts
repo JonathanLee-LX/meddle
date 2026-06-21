@@ -42,6 +42,12 @@ export function useFuzzyFilter(records: ProxyRecord[]) {
       const clientType = record.clientType || ''
       const clientIp = record.clientIp || ''
       const clientName = record.clientName || ''
+      const applicationName = record.applicationName || ''
+      const applicationProcess = record.applicationProcess || ''
+      const applicationBundleId = record.applicationBundleId || ''
+      const applicationPid = record.applicationPid?.toString() || ''
+      const applicationIdentitySource = record.applicationIdentitySource || ''
+      const applicationIdentityConfidence = record.applicationIdentityConfidence || ''
 
       return terms.every((term) => {
         const isNegative = term.startsWith('-') && term.length > 1
@@ -85,10 +91,17 @@ export function useFuzzyFilter(records: ProxyRecord[]) {
         else if (cleanTerm.startsWith('ip:')) {
           matches = clientIp.toLowerCase().includes(cleanTerm.slice(3).toLowerCase())
         }
+        // app: filter (application name, process, bundle ID, or PID)
+        else if (cleanTerm.startsWith('app:')) {
+          const expected = cleanTerm.slice(4).toLowerCase()
+          matches = `${applicationName} ${applicationProcess} ${applicationBundleId} ${applicationPid} ${applicationIdentitySource} ${applicationIdentityConfidence}`
+            .toLowerCase()
+            .includes(expected)
+        }
         // Plain text fuzzy match against source, target, method
         else {
           const lower = cleanTerm.toLowerCase()
-          const haystack = `${method} ${source} ${target} ${time} ${clientType} ${clientIp} ${clientName}`.toLowerCase()
+          const haystack = `${method} ${source} ${target} ${time} ${clientType} ${clientIp} ${clientName} ${applicationName} ${applicationProcess} ${applicationBundleId} ${applicationPid} ${applicationIdentitySource} ${applicationIdentityConfidence}`.toLowerCase()
           // Fuzzy: check if all characters appear in order
           matches = fuzzyMatch(lower, haystack)
         }

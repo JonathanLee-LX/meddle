@@ -62,7 +62,7 @@ export function LogFilter({
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             id="proxy-log-filter"
-            placeholder="过滤请求... (支持 method:GET domain:xxx client:iPhone ip:10.0.0.2)"
+            placeholder="过滤请求... (支持 method:GET domain:xxx client:iPhone app:Chrome)"
             value={filterText}
             onChange={(e) => setFilterText(e.target.value)}
             className="pl-9 font-mono"

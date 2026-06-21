@@ -25,6 +25,13 @@ export interface ProxyRecord {
   clientType?: 'local' | 'remote' | 'plugin'
   clientIp?: string
   clientName?: string
+  applicationName?: string
+  applicationProcess?: string
+  applicationPid?: number
+  applicationPath?: string
+  applicationBundleId?: string
+  applicationIdentitySource?: 'local-process' | 'user-agent' | 'client-reported'
+  applicationIdentityConfidence?: 'high' | 'medium' | 'low'
   statusCode?: number
   duration?: number // milliseconds
   /** 来自「插件测试」的请求，会在日志页显示「插件测试」标识 */

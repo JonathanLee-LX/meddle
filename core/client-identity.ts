@@ -1,9 +1,15 @@
 import * as fs from 'fs'
 import { isLoopbackAddress, normalizeIpAddress } from './remote-access'
+import type {
+    ApplicationIdentity,
+    ApplicationIdentityResolver,
+    ApplicationRequestHeaders,
+    ConnectionSocket,
+} from './application-identity'
 
 export type ClientType = 'local' | 'remote' | 'plugin'
 
-export interface ClientIdentity {
+export interface ClientIdentity extends Partial<ApplicationIdentity> {
     clientType: ClientType
     clientIp?: string
     clientName?: string
@@ -73,6 +79,26 @@ export function getRequestClientIdentity(req: any): ClientIdentity {
         return { clientType: 'local', clientIp: clientIp || undefined, clientName: '本机' }
     }
     return { clientType: 'remote', clientIp }
+}
+
+export async function enrichClientIdentityWithApplication(
+    identity: ClientIdentity,
+    resolver: ApplicationIdentityResolver,
+    context: {
+        socket?: ConnectionSocket
+        headers?: ApplicationRequestHeaders
+    },
+): Promise<ClientIdentity> {
+    const applicationIdentity = await resolver.resolve({
+        clientType: identity.clientType,
+        socket: context.socket,
+        headers: context.headers,
+        existingIdentity: identity,
+    })
+    return {
+        ...identity,
+        ...applicationIdentity,
+    }
 }
 
 export function pluginClientIdentity(): ClientIdentity {

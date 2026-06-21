@@ -20,6 +20,14 @@
   - 系统设置
   - SSL 证书
 
+### 日志与来源识别
+
+- **[请求来源应用识别](./APPLICATION_IDENTITY.md)**
+  - macOS 本机进程反查
+  - 远程设备 User-Agent 推断
+  - 可信度、日志字段与 HTTPS 限制
+  - 自动化功能测试
+
 ## API 和 CLI 文档
 
 - **[API Reference](./API_REFERENCE.md)** ⭐ HTTP API 完整文档
@@ -163,6 +171,9 @@
 
 - **如何使用 Easy Proxy？**
   → 查看 [README.md](../README.md)
+
+- **日志中的应用来源如何识别？**
+  → 查看 [请求来源应用识别](./APPLICATION_IDENTITY.md)
 
 - **插件运行时是如何工作的？**
   → 查看 [core/plugin-runtime.ts](../core/plugin-runtime.ts) 源码
