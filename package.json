@@ -19,6 +19,7 @@
     "test:e2e": "npm run build:web && npm run build && node tests/e2e/interactions.e2e.cjs",
     "test:watch": "vitest",
     "test:refactor": "npm run build && node -c index.js && npm test",
+    "bench:logs": "node scripts/log-performance-benchmark.js",
     "prepublish": "npm run build && npm run test",
     "start:open": "npm run build && node index.js --open",
     "doctor": "node bin/doctor.js",

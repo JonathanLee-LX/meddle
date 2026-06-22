@@ -3,12 +3,13 @@ import { useLogs } from './use-logs'
 import { useRules } from './use-rules'
 import { useMocks } from './use-mocks'
 import { usePlugins } from './use-plugins'
+import { DEFAULT_MAX_LOG_RECORDS } from '@/lib/log-records'
 
 /**
  * Composed store hook that combines all domain-specific hooks
  */
 export function useProxyStore() {
-  const [maxRecords, setMaxRecords] = useState(1000)
+  const [maxRecords, setMaxRecords] = useState(DEFAULT_MAX_LOG_RECORDS)
 
   const logs = useLogs(maxRecords)
   const rules = useRules()

@@ -1,4 +1,4 @@
-import { useRef, useEffect, useMemo, useState } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,8 @@ type TimeSortOrder = 'asc' | 'desc'
 
 const tableBadgeClassName = 'h-[18px] px-[5px] py-0 font-mono text-[10px] leading-none'
 const headerCellClassName = 'flex h-9 shrink-0 items-center px-2 leading-none'
+const LOG_ROW_HEIGHT = 36
+const LIVE_EDGE_THRESHOLD_PX = LOG_ROW_HEIGHT
 
 interface LogTableProps {
   records: ProxyRecord[]
@@ -88,50 +90,54 @@ function isInferredApplication(record: ProxyRecord) {
 export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: LogTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const lastCountRef = useRef(records.length)
+  const followLiveEdgeRef = useRef(true)
   const [timeSortOrder, setTimeSortOrder] = useState<TimeSortOrder>('desc')
 
-  const sortedRecords = useMemo(() => {
-    return [...records].sort((a, b) => {
-      const idA = a.id ?? 0
-      const idB = b.id ?? 0
-      return timeSortOrder === 'desc' ? idB - idA : idA - idB
-    })
-  }, [records, timeSortOrder])
-
-  const rowHeight = 36
-
   const virtualizer = useVirtualizer({
-    count: sortedRecords.length,
+    count: records.length,
     getScrollElement: () => {
       const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]')
       return viewport as HTMLElement | null
     },
-    estimateSize: () => rowHeight,
+    estimateSize: () => LOG_ROW_HEIGHT,
     overscan: 10,
   })
 
   const virtualItems = virtualizer.getVirtualItems()
 
+  const toggleTimeSortOrder = () => {
+    const nextOrder = timeSortOrder === 'desc' ? 'asc' : 'desc'
+    followLiveEdgeRef.current = nextOrder === 'desc'
+    setTimeSortOrder(nextOrder)
+    virtualizer.scrollToOffset(0)
+  }
+
   useEffect(() => {
-    if (autoScroll && sortedRecords.length > lastCountRef.current) {
+    const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]')
+    if (!(viewport instanceof HTMLElement)) return
+
+    const updateFollowState = () => {
+      followLiveEdgeRef.current = timeSortOrder === 'desc'
+        ? viewport.scrollTop <= LIVE_EDGE_THRESHOLD_PX
+        : viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= LIVE_EDGE_THRESHOLD_PX
+    }
+
+    updateFollowState()
+    viewport.addEventListener('scroll', updateFollowState, { passive: true })
+    return () => viewport.removeEventListener('scroll', updateFollowState)
+  }, [timeSortOrder])
+
+  useEffect(() => {
+    if (autoScroll && followLiveEdgeRef.current && records.length > lastCountRef.current) {
       const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]')
       if (viewport) {
         requestAnimationFrame(() => {
-          viewport.scrollTop = 0
+          viewport.scrollTop = timeSortOrder === 'desc' ? 0 : viewport.scrollHeight
         })
       }
     }
-    lastCountRef.current = sortedRecords.length
-  }, [sortedRecords.length, autoScroll])
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement
-      if (viewport && virtualItems.length > 0) {
-        virtualizer.scrollToOffset(0)
-      }
-    }
-  }, [timeSortOrder])
+    lastCountRef.current = records.length
+  }, [records.length, autoScroll, timeSortOrder])
 
   return (
     <div className="relative flex min-h-0 flex-1 overflow-x-auto">
@@ -150,7 +156,7 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
             <Button
               variant="ghost"
               size="xs"
-              onClick={() => setTimeSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'))}
+              onClick={toggleTimeSortOrder}
               className="-ml-2 h-7"
               title={timeSortOrder === 'desc' ? '倒序（新→旧），点击切换为正序' : '正序（旧→新），点击切换为倒序'}
             >
@@ -162,7 +168,7 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
         <ScrollArea className="min-h-0 flex-1" ref={scrollRef}>
           <div className="min-w-full">
             {/* Virtual List */}
-            {sortedRecords.length === 0 ? (
+            {records.length === 0 ? (
               <Empty className="min-h-72 border-0">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
@@ -180,7 +186,10 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
                 }}
               >
                 {virtualItems.map((virtualRow) => {
-                  const record = sortedRecords[virtualRow.index]
+                  const recordIndex = timeSortOrder === 'desc'
+                    ? virtualRow.index
+                    : records.length - 1 - virtualRow.index
+                  const record = records[recordIndex]
                   const isSelected = selectedRecordId === record.id
                   return (
                     <div

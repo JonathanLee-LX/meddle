@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { ProxyRecord, RecordDetail } from '@/types'
+import {
+  DEFAULT_MAX_LOG_RECORDS,
+  LOG_BATCH_INTERVAL_MS,
+  mergeLogHistory,
+  prependLogBatch,
+} from '@/lib/log-records'
 
 function isProxyRecordMessage(data: unknown): data is ProxyRecord {
   if (!data || typeof data !== 'object') return false
@@ -15,30 +21,57 @@ function isProxyRecordMessage(data: unknown): data is ProxyRecord {
  * Hook for managing proxy logs and details
  * Handles WebSocket connection, log records, and detail fetching
  */
-export function useLogs(maxRecords: number = 1000) {
+export function useLogs(maxRecords: number = DEFAULT_MAX_LOG_RECORDS) {
   const [records, setRecords] = useState<ProxyRecord[]>([])
   const [selectedRecordId, setSelectedRecordId] = useState<number | null>(null)
   const [recordDetail, setRecordDetail] = useState<RecordDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState<string | null>(null)
   const maxRecordsRef = useRef(maxRecords)
-  maxRecordsRef.current = maxRecords
   const wsRef = useRef<WebSocket | null>(null)
+  const pendingRecordsRef = useRef<ProxyRecord[]>([])
+
+  useEffect(() => {
+    maxRecordsRef.current = maxRecords
+  }, [maxRecords])
 
   // Load initial logs
   useEffect(() => {
-    fetch('/api/logs')
+    const controller = new AbortController()
+    fetch('/api/logs', { signal: controller.signal })
       .then((res) => res.json())
-      .then((json: ProxyRecord[]) => setRecords(json))
-      .catch(console.error)
+      .then((json: ProxyRecord[]) => {
+        setRecords((current) => mergeLogHistory(current, json, maxRecordsRef.current))
+      })
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) {
+          console.error(error)
+        }
+      })
+
+    return () => controller.abort()
   }, [])
 
   // WebSocket for real-time updates with reconnection
   useEffect(() => {
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
+    let flushTimeout: ReturnType<typeof setTimeout> | null = null
     let reconnectAttempts = 0
     const MAX_RECONNECT_ATTEMPTS = 10
     const BASE_RECONNECT_DELAY = 1000
+
+    const flushPendingRecords = () => {
+      flushTimeout = null
+      const pending = pendingRecordsRef.current
+      if (pending.length === 0) return
+      pendingRecordsRef.current = []
+      setRecords((current) => prependLogBatch(current, pending, maxRecordsRef.current))
+    }
+
+    const schedulePendingFlush = () => {
+      if (flushTimeout) return
+      flushTimeout = setTimeout(flushPendingRecords, LOG_BATCH_INTERVAL_MS)
+    }
 
     const connectWebSocket = () => {
       const protocol = location.protocol === 'https:' ? 'wss://' : 'ws://'
@@ -52,10 +85,8 @@ export function useLogs(maxRecords: number = 1000) {
             return
           }
           if (!isProxyRecordMessage(data)) return
-          setRecords((prev) => {
-            const newRecords = [data, ...prev]
-            return newRecords.slice(0, maxRecordsRef.current)
-          })
+          pendingRecordsRef.current.push(data)
+          schedulePendingFlush()
         } catch (e) {
           console.error('Failed to parse WebSocket message:', e)
         }
@@ -96,6 +127,10 @@ export function useLogs(maxRecords: number = 1000) {
       if (reconnectTimeout) {
         clearTimeout(reconnectTimeout)
       }
+      if (flushTimeout) {
+        clearTimeout(flushTimeout)
+      }
+      pendingRecordsRef.current = []
       if (wsRef.current) {
         wsRef.current.close()
         wsRef.current = null
@@ -130,6 +165,7 @@ export function useLogs(maxRecords: number = 1000) {
   }, [])
 
   const clearRecords = useCallback(() => {
+    pendingRecordsRef.current = []
     setRecords([])
   }, [])
 
