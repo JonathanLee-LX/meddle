@@ -15,7 +15,7 @@
 
 - **[CONFIG_STRUCTURE.md](../CONFIG_STRUCTURE.md)** - 配置文件结构说明
   - 目录结构
-  - 路由规则配置 (.eprc)
+  - 多文件路由规则配置
   - Mock 规则配置
   - 系统设置
   - SSL 证书
@@ -41,7 +41,7 @@
   - Refactor API
 
 - **[CLI Reference](./CLI_REFERENCE.md)** ⭐ CLI 命令完整文档
-  - Proxy Commands（启动、环境配置）
+  - Proxy Commands（启动、远程访问）
   - Diagnostic Commands（doctor、status）
   - Mock Commands（list/add/update/delete）
   - Route Commands（list/show/active/add/update/delete）

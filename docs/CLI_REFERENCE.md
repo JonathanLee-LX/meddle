@@ -17,7 +17,7 @@ This creates the `ep` command.
 | Command | Description |
 |---------|-------------|
 | `ep` | Start proxy server (default) |
-| `ep start [--env <name>]` | Start proxy with environment |
+| `ep start [options]` | Start proxy server |
 | `ep doctor` | Check configuration health |
 | `ep url` | Get proxy URL |
 | `ep status [--json]` | View proxy status |
@@ -42,18 +42,20 @@ ep --open         # 启动并自动打开浏览器
 
 ### ep start
 
-Start proxy server with environment configuration.
+Start proxy server.
 
 ```bash
-ep start                    # 启动代理服务器
-ep start --env beta         # 使用 beta 环境配置
-ep start --env eprc.beta    # 使用 .epconfig/.eprc.beta 配置
-ep start --open             # 启动并打开浏览器
+ep start          # 启动代理服务器
+ep start --open   # 启动并打开浏览器
+ep start --remote # 允许局域网设备连接
 ```
 
 **Options:**
-- `--env <name>` - Environment name (corresponds to `.epconfig/.{name}` configuration)
 - `--open` - Launch browser with proxy
+- `--remote` - Allow private LAN devices to use the proxy
+- `--remote-token <token>` - Require Basic proxy authentication
+- `--intercept-https` - Decrypt all HTTPS traffic
+- `--no-intercept-https` - Disable HTTPS decryption in remote mode
 
 ---
 
@@ -81,7 +83,7 @@ Configuration Health Check
 
 ✓ 配置目录 ~/.ep 存在
 ✓ 系统设置文件 ~/.ep/settings.json 格式正确
-✓ 路由规则文件 ~/.ep/.eprc 有效
+✓ 路由规则目录 ~/.ep/route-rules 包含 2 个有效文件
 ✓ Mock 规则文件 ~/.ep/mocks.json 有效
 ✓ SSL 证书文件存在
 ✓ 文件权限正常
@@ -350,7 +352,6 @@ ep route delete default "api.example.com"
 
 | Variable | Description |
 |----------|-------------|
-| `EP_ENV` | Environment name (used by `--env`) |
 | `EP_PLUGIN_MODE` | Plugin mode (off/shadow/on) |
 | `EP_PLUGIN_ON_HOSTS` | On mode host whitelist |
 | `EP_OPEN` | Open browser flag (`1` to enable) |
@@ -396,17 +397,14 @@ The startup output contains a setup URL such as `http://192.168.1.10:8989/`. Ope
 
 Remote clients can access only the setup page, CA certificate, and proxy service. The Web UI and `/api` routes remain loopback-only. Certificate-pinned apps and Android apps that reject user-installed CAs cannot be decrypted.
 
-### Environment Configuration
+### Multiple Route Configurations
 
 ```bash
-# 创建 beta 环境配置文件
-mkdir -p ~/.epconfig
-cat > ~/.epconfig/.eprc.beta << 'EOF'
+# 创建并启用一组 beta 路由规则
+ep route create beta-rules --content '
 beta.api.com localhost:4000
-EOF
-
-# 使用 beta 配置启动
-ep start --env beta
+'
+ep route active set beta-rules
 ```
 
 ### JSON Output for Scripting

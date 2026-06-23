@@ -16,9 +16,6 @@ ep
 # 启动并自动打开浏览器
 ep --open
 
-# 指定环境启动
-ep start --env beta
-
 # 检查配置文件健康状况
 ep doctor
 
@@ -37,20 +34,20 @@ ep --help
 
 ```
 ~/.ep/
-├── .eprc              # 路由规则配置
+├── route-rules/       # 路由规则文本文件
 ├── mocks.json         # Mock 规则配置
 ├── settings.json      # 系统设置（主题、字体、AI配置）
 └── ca/                # SSL 证书目录
 ```
 
 **路由规则配置**:
-- 项目目录配置（优先）：`.eprc`、`ep.config.json`、`ep.config.js`
-- 用户默认配置：`~/.ep/.eprc`
-- 支持 EPRC、JSON、JS 三种格式
-- EPRC 路由匹配规则、通配符、排除和 marker 重写说明见 [配置文件结构说明](./CONFIG_STRUCTURE.md)
+- 每个规则文件存储为 `~/.ep/route-rules/<名称>.txt`
+- 可同时启用多个规则文件，启用顺序记录在 `settings.json` 的 `activeRuleFiles`
+- 支持顺序匹配、通配符、正则、排除规则和 marker 路径重写
+- 可通过 Web 界面或 `ep route *` 命令管理
 
 **Web 界面管理**:
-- 启动后访问 http://localhost:8899
+- 启动后访问 http://localhost:8989
 - 通过界面管理路由规则、Mock 规则和系统设置
 
 详见 [配置文件结构说明](./CONFIG_STRUCTURE.md)
@@ -111,9 +108,6 @@ ep --remote --no-intercept-https
 ### MCP Server
 
 提供 MCP 工具 `start_proxy`：启动代理服务器并返回代理地址。
-
-- `env`：环境名（如 `beta`、`eprc.beta`），对应 `.epconfig/.{env}` 配置
-- `openBrowser: true`：启动浏览器并设置代理
 
 **Cursor 配置**：在 Cursor 设置中添加 MCP 服务器：
 

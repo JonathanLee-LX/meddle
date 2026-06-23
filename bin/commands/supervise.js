@@ -12,7 +12,6 @@ const daemonFlag = rawArgs.includes('--daemon')
 const restartCleanExit = rawArgs.includes('--restart-clean')
 const maxRestarts = readNumberOption('--max-restarts', 0)
 const restartDelayMs = readNumberOption('--restart-delay', 1000)
-const envName = readStringOption('--env')
 
 if (daemonFlag) {
   startDaemon()
@@ -24,7 +23,6 @@ function supervise() {
   const indexPath = path.join(__dirname, '..', '..', 'index.js')
   const proxyArgs = stripSupervisorArgs(rawArgs)
   const childEnv = { ...process.env, DEBUG: process.env.DEBUG || '', EP_SUPERVISED: '1' }
-  if (envName) childEnv.EP_ENV = envName
 
   let child = null
   let stopping = false
@@ -89,11 +87,11 @@ function stripSupervisorArgs(args) {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
     if (arg === '--daemon' || arg === '--restart-clean') continue
-    if (arg === '--max-restarts' || arg === '--restart-delay' || arg === '--env') {
+    if (arg === '--max-restarts' || arg === '--restart-delay') {
       i += 1
       continue
     }
-    if (arg.startsWith('--max-restarts=') || arg.startsWith('--restart-delay=') || arg.startsWith('--env=')) continue
+    if (arg.startsWith('--max-restarts=') || arg.startsWith('--restart-delay=')) continue
     result.push(arg)
   }
   return result
@@ -105,11 +103,4 @@ function readNumberOption(name, fallback) {
   const value = inline ? inline.slice(name.length + 1) : (index >= 0 ? rawArgs[index + 1] : undefined)
   const parsed = Number(value)
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
-}
-
-function readStringOption(name) {
-  const inline = rawArgs.find(arg => arg.startsWith(name + '='))
-  if (inline) return inline.slice(name.length + 1)
-  const index = rawArgs.indexOf(name)
-  return index >= 0 ? rawArgs[index + 1] : undefined
 }

@@ -41,7 +41,7 @@ Easy Proxy - 开发代理工具
 
 用法:
   ep                          启动代理服务器 (默认)
-  ep start [--env <name>]     启动代理服务器 (指定环境)
+  ep start [options]          启动代理服务器
   ep supervise [options]      以前台守护模式启动并自动重启
   ep --remote                 启动局域网手机代理并解密 HTTPS
   ep doctor                   检查配置文件健康状况

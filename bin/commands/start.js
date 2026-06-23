@@ -12,18 +12,9 @@ const remoteFlag = args.includes('--remote')
 const interceptHttpsFlag = args.includes('--intercept-https')
 const noInterceptHttpsFlag = args.includes('--no-intercept-https')
 
-let env = null
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === '--env') {
-    env = args[++i]
-    break
-  }
-}
-
 // Start proxy
 const indexPath = path.join(__dirname, '..', 'index.js')
 const spawnEnv = { ...process.env, DEBUG: process.env.DEBUG || '' }
-if (env) spawnEnv.EP_ENV = env
 if (openFlag) spawnEnv.EP_OPEN = '1'
 if (remoteFlag) spawnEnv.EP_REMOTE = '1'
 if (interceptHttpsFlag) spawnEnv.EP_INTERCEPT_HTTPS = '1'

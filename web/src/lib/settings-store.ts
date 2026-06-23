@@ -1,6 +1,6 @@
 /**
  * 系统设置存储服务
- * 使用文件系统保存设置到 ~/.ep/.epconfig/settings.json
+ * 使用文件系统保存设置到 ~/.ep/settings.json
  */
 
 import { saveAIConfig } from './ai-config-store'
