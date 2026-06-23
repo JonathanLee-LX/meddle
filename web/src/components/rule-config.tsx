@@ -1050,7 +1050,7 @@ export function RuleConfig(props: RuleConfigProps) {
                   title={
                     textHasErrors
                       ? `${textDiagnostics.length} 行内容无法识别，请先修正`
-                      : '保存 (Ctrl/Cmd+S)'
+                      : '保存 (⌘+S / Ctrl+S)'
                   }
                 >
                   {saving ? (
