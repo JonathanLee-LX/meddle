@@ -28,7 +28,7 @@ import type { RuleItem, RuleFile } from '@/types'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent } from '@dnd-kit/core'
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { buildRuleGraph } from '@/utils/rule-graph'
@@ -177,15 +177,19 @@ const SortableRuleRow = memo(
     )
     const handleDelete = useCallback(() => onDelete(), [onDelete])
     const handleMoveToTop = useCallback(() => onMoveToTop(), [onMoveToTop])
+    const setRowRef = useCallback(
+      (node: HTMLTableRowElement | null) => {
+        setNodeRef(node)
+        if (highlighted && highlightRef) {
+          highlightRef.current = node
+        }
+      },
+      [highlightRef, highlighted, setNodeRef],
+    )
 
     return (
       <TableRow
-        ref={(node) => {
-          setNodeRef(node)
-          if (highlighted && highlightRef) {
-            highlightRef.current = node
-          }
-        }}
+        ref={setRowRef}
         style={style}
         className={highlighted ? RULE_ROW_HIGHLIGHT_CLASS : undefined}
       >
@@ -345,7 +349,6 @@ export function RuleConfig(props: RuleConfigProps) {
   const nextRuleRowIdRef = useRef(0)
   const createRuleRowId = useCallback(() => `rule-${nextRuleRowIdRef.current++}`, [])
   const [ruleRowIds, setRuleRowIds] = useState<string[]>(() => rules.map(() => createRuleRowId()))
-  const [dragPreviewRowIds, setDragPreviewRowIds] = useState<string[] | null>(null)
 
   // 创建规则文件
   const [isCreating, setIsCreating] = useState(false)
@@ -462,7 +465,6 @@ export function RuleConfig(props: RuleConfigProps) {
         ...Array.from({ length: rules.length - prev.length }, () => createRuleRowId()),
       ]
     })
-    setDragPreviewRowIds(null)
   }, [createRuleRowId, rules.length])
 
   // 创建新规则文件（文件导入 / Plus 创建走此内联流程）
@@ -693,8 +695,7 @@ export function RuleConfig(props: RuleConfigProps) {
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event
-      const nextRowIds = over ? (dragPreviewRowIds ?? getRuleRowOrder(ruleRowIds, active.id, over.id)) : ruleRowIds
-      setDragPreviewRowIds(null)
+      const nextRowIds = over ? getRuleRowOrder(ruleRowIds, active.id, over.id) : ruleRowIds
 
       if (!sameRowOrder(nextRowIds, ruleRowIds)) {
         setRuleRowIds(nextRowIds)
@@ -703,34 +704,8 @@ export function RuleConfig(props: RuleConfigProps) {
         })
       }
     },
-    [dragPreviewRowIds, ruleRowIds, setRules],
+    [ruleRowIds, setRules],
   )
-
-  const handleDragStart = useCallback(
-    (event: DragStartEvent) => {
-      if (!ruleRowIds.includes(String(event.active.id))) return
-      setDragPreviewRowIds(null)
-    },
-    [ruleRowIds],
-  )
-
-  const handleDragOver = useCallback(
-    (event: DragOverEvent) => {
-      const { active, over } = event
-      if (!over) return
-
-      setDragPreviewRowIds((current) => {
-        const nextOrder = getRuleRowOrder(ruleRowIds, active.id, over.id)
-        if (sameRowOrder(ruleRowIds, nextOrder)) return null
-        return current && sameRowOrder(current, nextOrder) ? current : nextOrder
-      })
-    },
-    [ruleRowIds],
-  )
-
-  const handleDragCancel = useCallback(() => {
-    setDragPreviewRowIds(null)
-  }, [])
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -790,12 +765,11 @@ export function RuleConfig(props: RuleConfigProps) {
       .map((item, index) => ({ item, index, id: ruleRowIds[index] }))
       .filter((row): row is { item: RuleItem; index: number; id: string } => Boolean(row.id))
     const rowById = new Map(rows.map((row) => [row.id, row]))
-    const orderedIds = dragPreviewRowIds ?? ruleRowIds
 
-    return orderedIds
+    return ruleRowIds
       .map((id) => rowById.get(id))
       .filter((row): row is { item: RuleItem; index: number; id: string } => Boolean(row))
-  }, [dragPreviewRowIds, ruleRowIds, rules])
+  }, [ruleRowIds, rules])
 
   const uniqueTargets = useMemo(() => {
     const targets = new Set<string>()
@@ -1266,10 +1240,7 @@ export function RuleConfig(props: RuleConfigProps) {
                     <DndContext
                       sensors={sensors}
                       collisionDetection={closestCenter}
-                      onDragStart={handleDragStart}
-                      onDragOver={handleDragOver}
                       onDragEnd={handleDragEnd}
-                      onDragCancel={handleDragCancel}
                     >
                       <SortableContext
                         items={sortableRuleRows.map((row) => row.id)}

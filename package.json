@@ -17,6 +17,7 @@
     "test": "vitest run",
     "test:identity": "pnpm run build && node scripts/application-identity-smoke.js",
     "test:e2e": "npm run build:web && npm run build && node tests/e2e/interactions.e2e.cjs",
+    "test:e2e:rule-drag": "npm run build:web && npm run build && node tests/e2e/rule-drag.e2e.cjs",
     "test:watch": "vitest",
     "test:refactor": "npm run build && node -c index.js && npm test",
     "bench:logs": "node scripts/log-performance-benchmark.js",
