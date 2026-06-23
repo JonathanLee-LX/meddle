@@ -14,6 +14,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { MonacoEditor } from './monaco-editor'
 import { getAIConfig, getActiveModel, isAIConfigValid } from '@/lib/ai-config-store'
 import { Code2, Save, Loader2, Zap, RotateCcw, PencilLine } from 'lucide-react'
+import { SaveButton } from '@/components/save-shortcut/save-button'
+import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
+import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
+import { toast } from '@/components/ui/toast'
 
 interface PluginCodeEditorProps {
   open?: boolean
@@ -99,8 +103,11 @@ export function PluginCodeEditor({
       setOriginalCode(code)
       window.dispatchEvent(new CustomEvent('plugins-custom-updated'))
       onSaved?.()
+      toast.success('插件代码保存成功')
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存失败')
+      const message = err instanceof Error ? err.message : '保存失败'
+      setError(message)
+      toast.error(message)
     } finally {
       setSaving(false)
     }
@@ -128,13 +135,23 @@ export function PluginCodeEditor({
       }
       onSaved?.()
       window.dispatchEvent(new CustomEvent('plugins-custom-updated'))
+      toast.success('插件代码已保存并完成热加载')
     } catch (err) {
-      setError(err instanceof Error ? err.message : '操作失败')
+      const message = err instanceof Error ? err.message : '操作失败'
+      setError(message)
+      toast.error(message)
     } finally {
       setSaving(false)
       setReloading(false)
     }
   }
+
+  useSaveShortcut({
+    active: open || embedded,
+    enabled: isDirty && !saving && !revising,
+    priority: SAVE_SHORTCUT_PRIORITY.panel,
+    onSave: handleSave,
+  })
 
   const handleRevert = () => {
     setCode(originalCode)
@@ -374,15 +391,15 @@ export function PluginCodeEditor({
             >
               关闭
             </Button>
-            <Button
+            <SaveButton
               variant="outline"
               size="sm"
               onClick={handleSave}
               disabled={!isDirty || saving || revising}
             >
-              {saving && !reloading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+              {saving && !reloading ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <Save data-icon="inline-start" />}
               保存
-            </Button>
+            </SaveButton>
             <Button
               size="sm"
               onClick={handleSaveAndReload}

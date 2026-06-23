@@ -15,6 +15,10 @@ import { fixCode } from '@/lib/code-fixer'
 import { getAIConfig, isAIConfigValid } from '@/lib/ai-config-store'
 import type { MockRule } from '@/types'
 import { supportsOpenFilePicker } from '@/types/file-system-access'
+import { SaveButton } from '@/components/save-shortcut/save-button'
+import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
+import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
+import { toast } from '@/components/ui/toast'
 
 // 判断是否为 Base64 图片
 function isBase64Image(content: string): boolean {
@@ -263,20 +267,35 @@ export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, dele
     if (editForm.bodyType === 'inline' && editForm.body.trim()) {
       const result = validateContent(editForm.body)
       if (!result.valid) {
-        setValidationError(result.error || '内容格式错误')
+        const message = result.error || '内容格式错误'
+        setValidationError(message)
+        toast.error(message)
         return
       }
     }
 
     setSaving(true)
-    if (editId != null) {
-      await updateMock(editId, editForm)
-    } else {
-      await createMock(editForm)
+    try {
+      const saved = editId != null
+        ? await updateMock(editId, editForm)
+        : Boolean(await createMock(editForm))
+      if (!saved) throw new Error('保存 Mock 规则失败')
+
+      toast.success('Mock 规则保存成功')
+      setEditOpen(false)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '保存失败')
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
-    setEditOpen(false)
   }, [editId, editForm, createMock, updateMock])
+
+  useSaveShortcut({
+    active: editOpen,
+    enabled: !saving && Boolean(editForm.urlPattern),
+    priority: SAVE_SHORTCUT_PRIORITY.modal,
+    onSave: handleSave,
+  })
 
   const handleToggle = useCallback(
     async (rule: MockRule, enabled: boolean) => {
@@ -747,9 +766,9 @@ export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, dele
             <Button variant="outline" size="sm" onClick={() => setEditOpen(false)}>
               取消
             </Button>
-            <Button size="sm" onClick={handleSave} disabled={saving || !editForm.urlPattern}>
+            <SaveButton size="sm" onClick={handleSave} disabled={saving || !editForm.urlPattern}>
               {saving ? '保存中...' : '保存'}
-            </Button>
+            </SaveButton>
           </div>
         </SheetContent>
       </Sheet>

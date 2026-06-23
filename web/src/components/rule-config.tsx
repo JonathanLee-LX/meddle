@@ -2,6 +2,9 @@ import { useEffect, useCallback, useMemo, useRef, useState, memo, useTransition,
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 import { Spinner } from '@/components/ui/spinner'
+import { SaveButton } from '@/components/save-shortcut/save-button'
+import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
+import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -792,20 +795,13 @@ export function RuleConfig(props: RuleConfigProps) {
   const textHasErrors = viewMode === 'text' && textDiagnostics.length > 0
   const showDragColumn = !ruleFilter && !targetFilter
 
-  // Ctrl/Cmd+S 快捷保存（与保存按钮的禁用条件保持一致）
   const canSave = Boolean(activeFileName) && !saving && !textLoading && !textHasErrors
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const isSaveShortcut = (event.ctrlKey || event.metaKey) && (event.key === 's' || event.key === 'S')
-      if (!isSaveShortcut) return
-      // 文本导入弹窗打开时不拦截，避免影响弹窗内输入
-      if (textImportOpen) return
-      event.preventDefault()
-      if (canSave) void handleSave()
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [canSave, handleSave, textImportOpen])
+  useSaveShortcut({
+    active: !textImportOpen,
+    enabled: canSave,
+    priority: SAVE_SHORTCUT_PRIORITY.page,
+    onSave: handleSave,
+  })
 
   const createToggleRuleCallback = useCallback((index: number) => () => toggleRule(index), [toggleRule])
   const createUpdateRuleCallback = useCallback(
@@ -1047,7 +1043,7 @@ export function RuleConfig(props: RuleConfigProps) {
                 </>
               )}
               {activeFileName && (
-                <Button
+                <SaveButton
                   size="sm"
                   onClick={handleSave}
                   disabled={saving || textLoading || textHasErrors}
@@ -1063,7 +1059,7 @@ export function RuleConfig(props: RuleConfigProps) {
                     <Save data-icon="inline-start" />
                   )}
                   保存
-                </Button>
+                </SaveButton>
               )}
             </div>
           </div>

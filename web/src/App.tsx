@@ -38,6 +38,7 @@ import { useProxyStore } from '@/hooks/use-proxy-store'
 import { useFuzzyFilter } from '@/hooks/use-fuzzy-filter'
 import { createMockFromLog, type CreateMockFromLogData } from '@/utils/mock-factory'
 import { GlobalPanelProvider } from '@/components/global-panel/global-panel-context'
+import { toast } from '@/components/ui/toast'
 import type { CommandAction, GlobalPanelApi, GlobalPanelRoute } from '@/components/global-panel/types'
 import type { MockRule, ResourceType } from '@/types'
 
@@ -414,8 +415,13 @@ function App() {
           disabledReason: '请先选择一个规则文件',
           run: async () => {
             if (!store.activeFileName) return
-            await store.saveFileContent(store.activeFileName, store.rules)
-            await store.fetchRuleFiles()
+            const saved = await store.saveFileContent(store.activeFileName, store.rules)
+            if (saved) {
+              await store.fetchRuleFiles()
+              toast.success('规则保存成功')
+            } else {
+              toast.error('规则保存失败')
+            }
           },
         },
         {

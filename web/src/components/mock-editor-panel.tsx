@@ -12,6 +12,10 @@ import { getAIConfig, isAIConfigValid } from '@/lib/ai-config-store'
 import { validateContent } from '@/lib/syntax-highlight'
 import type { MockRule } from '@/types'
 import { MonacoEditor } from './monaco-editor'
+import { SaveButton } from '@/components/save-shortcut/save-button'
+import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
+import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
+import { toast } from '@/components/ui/toast'
 
 interface MockEditorPanelProps {
   rule?: MockRule
@@ -168,18 +172,30 @@ export function MockEditorPanel({
       }
 
       const payload = { ...form, headers }
+      let saved = false
       if (rule) {
-        await updateMock(rule.id, payload)
+        saved = await updateMock(rule.id, payload)
       } else {
-        await createMock(payload)
+        saved = Boolean(await createMock(payload))
       }
+      if (!saved) throw new Error('保存 Mock 规则失败')
+      toast.success(rule ? 'Mock 规则已更新' : 'Mock 规则已创建')
       onSaved?.()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存失败')
+      const message = err instanceof Error ? err.message : '保存失败'
+      setError(message)
+      toast.error(message)
     } finally {
       setSaving(false)
     }
   }
+
+  useSaveShortcut({
+    active: true,
+    enabled: !saving && Boolean(form.urlPattern.trim()),
+    priority: SAVE_SHORTCUT_PRIORITY.panel,
+    onSave: handleSave,
+  })
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -323,10 +339,10 @@ export function MockEditorPanel({
       <Separator />
 
       <div className="flex justify-end gap-2 px-5 py-3">
-        <Button onClick={handleSave} disabled={saving || !form.urlPattern.trim()}>
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        <SaveButton onClick={handleSave} disabled={saving || !form.urlPattern.trim()}>
+          {saving ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <Save data-icon="inline-start" />}
           {saving ? '保存中...' : '保存'}
-        </Button>
+        </SaveButton>
       </div>
     </div>
   )

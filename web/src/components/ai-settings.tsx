@@ -7,6 +7,10 @@ import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { Settings, Save, RotateCcw, Eye, EyeOff, CheckCircle2, XCircle } from 'lucide-react'
 import { getAIConfig, saveAIConfig, resetAIConfig, isAIConfigValid, getDefaultValues, type AIConfig } from '@/lib/ai-config-store'
+import { SaveButton } from '@/components/save-shortcut/save-button'
+import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
+import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
+import { toast } from '@/components/ui/toast'
 
 interface AISettingsProps {
   open: boolean
@@ -44,16 +48,26 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
       saveAIConfig(config)
       setTestResult('success')
       setTestMessage('配置保存成功')
+      toast.success('AI 配置保存成功')
       setTimeout(() => {
         onOpenChange(false)
       }, 1000)
     } catch (error) {
+      const message = error instanceof Error ? error.message : '保存失败'
       setTestResult('error')
-      setTestMessage(error instanceof Error ? error.message : '保存失败')
+      setTestMessage(message)
+      toast.error(message)
     } finally {
       setSaving(false)
     }
   }
+
+  useSaveShortcut({
+    active: open,
+    enabled: !saving,
+    priority: SAVE_SHORTCUT_PRIORITY.modal,
+    onSave: handleSave,
+  })
 
   const handleReset = () => {
     resetAIConfig()
@@ -288,10 +302,10 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
             <Button variant="outline" size="sm" onClick={handleTest} disabled={!isValid || saving}>
               测试连接
             </Button>
-            <Button size="sm" onClick={handleSave} disabled={saving}>
-              <Save className="h-4 w-4 mr-1" />
+            <SaveButton size="sm" onClick={handleSave} disabled={saving}>
+              <Save data-icon="inline-start" className="h-4 w-4" />
               {saving ? '保存中...' : '保存'}
-            </Button>
+            </SaveButton>
           </div>
         </div>
       </SheetContent>

@@ -24,6 +24,10 @@ import {
   Check
 } from 'lucide-react'
 import { getAIConfig, isAIConfigValid } from '@/lib/ai-config-store'
+import { SaveButton } from '@/components/save-shortcut/save-button'
+import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
+import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
+import { toast } from '@/components/ui/toast'
 
 interface PluginGeneratorProps {
   open?: boolean
@@ -221,6 +225,7 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
       setStatusMessage(`插件已保存！现在可以热加载并测试。`)
       setSaved(true)
       window.dispatchEvent(new CustomEvent('plugins-custom-updated'))
+      toast.success('插件保存成功')
       
       // 通知父组件插件已保存
       if (onPluginSaved) {
@@ -228,12 +233,21 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
       }
       window.dispatchEvent(new CustomEvent('plugins-custom-updated'))
     } catch (error) {
+      const message = error instanceof Error ? error.message : '保存失败'
       setStatusType('error')
-      setStatusMessage(error instanceof Error ? error.message : '保存失败')
+      setStatusMessage(message)
+      toast.error(message)
     } finally {
       setSaving(false)
     }
   }
+
+  useSaveShortcut({
+    active: (open || embedded) && Boolean(generatedCode) && !saved,
+    enabled: !saving && !generating && Boolean(generatedFilename),
+    priority: SAVE_SHORTCUT_PRIORITY.panel,
+    onSave: handleSave,
+  })
 
   const handleCopy = async () => {
     if (generatedCode) {
@@ -551,23 +565,23 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
                 >
                   重新生成
                 </Button>
-                <Button
+                <SaveButton
                   size="sm"
                   onClick={handleSave}
                   disabled={saving}
                 >
                   {saving ? (
                     <>
-                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      <Loader2 data-icon="inline-start" className="animate-spin" />
                       保存中...
                     </>
                   ) : (
                     <>
-                      <Save className="h-4 w-4 mr-1" />
+                      <Save data-icon="inline-start" />
                       保存插件
                     </>
                   )}
-                </Button>
+                </SaveButton>
               </>
             ) : (
               <Button

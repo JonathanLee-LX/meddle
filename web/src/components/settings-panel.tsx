@@ -45,6 +45,10 @@ import {
 } from '@/lib/ai-config-store'
 import { useTheme } from '@/components/theme-provider'
 import { getCachedSettings, loadSettings, updateSettings, type AccentColor } from '@/lib/settings-store'
+import { SaveButton } from '@/components/save-shortcut/save-button'
+import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
+import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
+import { toast } from '@/components/ui/toast'
 
 interface SettingsPanelProps {
   open?: boolean
@@ -97,6 +101,7 @@ const accentColorOptions: Array<{ value: AccentColor; label: string; color: stri
 const settingsContentClassName = 'app-panel-content mt-0'
 const settingsGroupClassName = 'app-field-group'
 const settingsSectionClassName = 'app-section'
+type SettingsTab = 'preferences' | 'config' | 'clients' | 'ai'
 
 const normalizeZoomScale = (value?: string) => {
   if (!value) return '100'
@@ -114,6 +119,7 @@ const normalizeZoomScale = (value?: string) => {
 
 export function SettingsPanel({ open = false, onOpenChange, embedded = false }: SettingsPanelProps) {
   const { theme, accentColor, setTheme, setAccentColor, setZoom } = useTheme()
+  const [activeTab, setActiveTab] = useState<SettingsTab>('preferences')
 
   // AI 配置状态
   const [aiConfig, setAiConfig] = useState<AIConfig>(() => getAIConfig())
@@ -206,9 +212,12 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
 
       setAiTestResult('success')
       setAiTestMessage('AI 配置保存成功')
+      toast.success('AI 配置保存成功')
     } catch (error) {
+      const message = error instanceof Error ? error.message : '保存失败'
       setAiTestResult('error')
-      setAiTestMessage(error instanceof Error ? error.message : '保存失败')
+      setAiTestMessage(message)
+      toast.error(message)
     } finally {
       setSaving(false)
     }
@@ -371,13 +380,50 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
       await updateSettings({ clientAliases })
       setAiTestResult('success')
       setAiTestMessage('客户端名称已保存，新请求立即生效')
+      toast.success('客户端名称保存成功')
     } catch (error) {
+      const message = error instanceof Error ? error.message : '保存失败'
       setAiTestResult('error')
-      setAiTestMessage(error instanceof Error ? error.message : '保存失败')
+      setAiTestMessage(message)
+      toast.error(message)
     } finally {
       setSaving(false)
     }
   }
+
+  const handleSaveMocksFilePath = async () => {
+    setSaving(true)
+    try {
+      await updateSettings({ mocksFilePath })
+      setAiTestResult('success')
+      setAiTestMessage('Mock 文件路径已更新，刷新页面后生效')
+      toast.success('Mock 文件路径保存成功')
+      setTimeout(() => {
+        setAiTestResult(null)
+        setAiTestMessage('')
+      }, 3000)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '保存失败'
+      setAiTestResult('error')
+      setAiTestMessage(message)
+      toast.error(message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleActiveTabSave = () => {
+    if (activeTab === 'config') return handleSaveMocksFilePath()
+    if (activeTab === 'clients') return handleSaveClientAliases()
+    if (activeTab === 'ai') return handleAiSave()
+  }
+
+  useSaveShortcut({
+    active: (open || embedded) && activeTab !== 'preferences',
+    enabled: !saving,
+    priority: SAVE_SHORTCUT_PRIORITY.panel,
+    onSave: handleActiveTabSave,
+  })
 
   const body = (
     <>
@@ -391,7 +437,12 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
         </SheetHeader>
       )}
 
-      <Tabs defaultValue="preferences" orientation="vertical" className="min-h-0 flex-1 gap-0">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as SettingsTab)}
+        orientation="vertical"
+        className="min-h-0 flex-1 gap-0"
+      >
         <TabsList
           aria-label="设置分类"
           className="h-full w-14 shrink-0 self-stretch justify-start gap-1 rounded-none border-r bg-muted/25 p-2 group-data-[orientation=vertical]/tabs:!h-full sm:w-44 sm:p-3"
@@ -556,23 +607,16 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                     placeholder="如: /path/to/my-mocks.json"
                     className="flex-1 h-8 text-sm font-mono"
                   />
-                  <Button
+                  <SaveButton
                     variant="outline"
                     size="sm"
-                    onClick={async () => {
-                      await updateSettings({ mocksFilePath })
-                      setAiTestResult('success')
-                      setAiTestMessage('Mock 文件路径已更新，刷新页面后生效')
-                      setTimeout(() => {
-                        setAiTestResult(null)
-                        setAiTestMessage('')
-                      }, 3000)
-                    }}
+                    onClick={handleSaveMocksFilePath}
+                    disabled={saving}
                     className="h-8"
                   >
-                    <Save className="h-3 w-3 mr-1" />
+                    <Save data-icon="inline-start" className="h-3 w-3" />
                     应用
-                  </Button>
+                  </SaveButton>
                 </div>
                 <p className="text-xs text-muted-foreground">必须是 JSON 格式的 Mock 规则文件</p>
               </div>
@@ -766,10 +810,10 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
             </div>
           </div>
 
-          <Button onClick={handleSaveClientAliases} disabled={saving}>
-            <Save className="h-4 w-4 mr-1" />
+          <SaveButton onClick={handleSaveClientAliases} disabled={saving}>
+            <Save data-icon="inline-start" className="h-4 w-4" />
             {saving ? '保存中...' : '保存客户端名称'}
-          </Button>
+          </SaveButton>
         </TabsContent>
 
         {/* AI 配置 */}
@@ -1077,10 +1121,10 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
               <Button variant="outline" size="sm" onClick={handleAiTest} disabled={!isAIConfigValid(aiConfig) || saving}>
                 测试连接
               </Button>
-              <Button size="sm" onClick={handleAiSave} disabled={saving}>
-                <Save className="h-4 w-4 mr-1" />
+              <SaveButton size="sm" onClick={handleAiSave} disabled={saving}>
+                <Save data-icon="inline-start" className="h-4 w-4" />
                 {saving ? '保存中...' : '保存'}
-              </Button>
+              </SaveButton>
             </div>
           </div>
         </TabsContent>
