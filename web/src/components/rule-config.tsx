@@ -38,6 +38,7 @@ import { buildRuleGraph } from '@/utils/rule-graph'
 import { RouteCanvas } from '@/components/route-canvas'
 import { supportsOpenFilePicker } from '@/types/file-system-access'
 import { FEATURE_FLAGS } from '@/lib/feature-flags'
+import { useScrollShadows } from '@/hooks/use-scroll-shadows'
 import { getEprcTextDiagnostics, normalizeImportedRuleText, parseEprcRules, rulesToEprc } from '@/utils/eprc-parser'
 import { EprcTextarea } from '@/components/eprc-textarea'
 import {
@@ -352,6 +353,7 @@ export function RuleConfig(props: RuleConfigProps) {
   const nextRuleRowIdRef = useRef(0)
   const createRuleRowId = useCallback(() => `rule-${nextRuleRowIdRef.current++}`, [])
   const [ruleRowIds, setRuleRowIds] = useState<string[]>(() => rules.map(() => createRuleRowId()))
+  const ruleFileTabsScroll = useScrollShadows<HTMLDivElement>()
 
   // 创建规则文件
   const [isCreating, setIsCreating] = useState(false)
@@ -824,7 +826,17 @@ export function RuleConfig(props: RuleConfigProps) {
           <CardHeader className="block border-b bg-muted/30 p-0 [.border-b]:pb-0">
             <CardTitle className="sr-only">规则内容</CardTitle>
             <div className="flex min-w-0 items-center px-3 py-2">
-              <div data-slot="rule-file-tabs-scroll" className="min-w-0 flex-1 overflow-x-auto">
+              <div
+                data-slot="rule-file-tabs-scroll-wrap"
+                className="ep-tabs-scroll-wrap flex min-w-0 flex-1"
+                data-shadow-left={ruleFileTabsScroll.state.left ? 'true' : 'false'}
+                data-shadow-right={ruleFileTabsScroll.state.right ? 'true' : 'false'}
+              >
+                <div
+                  data-slot="rule-file-tabs-scroll"
+                  ref={ruleFileTabsScroll.ref}
+                  className="ep-tabs-scroll min-w-0 flex-1 overflow-x-auto"
+                >
                 <Tabs
                   className="min-w-max"
                   value={activeFileName || ''}
@@ -916,6 +928,7 @@ export function RuleConfig(props: RuleConfigProps) {
                     ))}
                   </TabsList>
                 </Tabs>
+                </div>
               </div>
               <div data-slot="rule-file-actions" className="ml-2 flex shrink-0 items-center border-l pl-2">
                 {isCreating ? (

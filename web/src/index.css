@@ -641,3 +641,62 @@
   border: 2px solid var(--background);
   background: var(--primary);
 }
+
+/* Horizontally scrollable tab strips: thin scrollbar + edge shadows that
+   toggle based on scroll position (via data-shadow-left / data-shadow-right).
+   The shadows are pseudo-elements on a wrapper that sits *outside* the scroll
+   viewport so they stay fixed at the visible edges while content scrolls. */
+.ep-tabs-scroll-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.ep-tabs-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--foreground) 22%, transparent) transparent;
+}
+
+.ep-tabs-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.ep-tabs-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ep-tabs-scroll::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, var(--foreground) 22%, transparent);
+  border-radius: 9999px;
+}
+
+.ep-tabs-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, var(--foreground) 36%, transparent);
+}
+
+.ep-tabs-scroll-wrap::before,
+.ep-tabs-scroll-wrap::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  pointer-events: none;
+  z-index: 1;
+  transition: opacity 180ms ease;
+  opacity: 0;
+}
+
+.ep-tabs-scroll-wrap::before {
+  left: 0;
+  box-shadow: inset 14px 0 10px -10px color-mix(in oklab, var(--foreground) 22%, transparent);
+}
+
+.ep-tabs-scroll-wrap::after {
+  right: 0;
+  box-shadow: inset -14px 0 10px -10px color-mix(in oklab, var(--foreground) 22%, transparent);
+}
+
+.ep-tabs-scroll-wrap[data-shadow-left='true']::before,
+.ep-tabs-scroll-wrap[data-shadow-right='true']::after {
+  opacity: 1;
+}
