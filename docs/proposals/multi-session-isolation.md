@@ -1,4 +1,4 @@
-# Easy-Proxy 多实例隔离技术方案
+# Easy-Proxy 多 Session 隔离技术方案
 
 > 状态: Proposal | 分支: `proposal/multi-instance-ep-home` | 日期: 2026-07-10
 
@@ -11,13 +11,13 @@
 
 ## 2. 设计目标
 
-Agent 通过 MCP 或 CLI **按需创建一个代理实例**，获取实例 ID，之后所有操作通过这个 ID 进行。Agent 无需关心底层文件路径或端口。
+Agent 通过 MCP 或 CLI **按需创建一个代理 session**，获取 session ID，之后所有操作通过这个 ID 进行。Agent 无需关心底层文件路径或端口。
 
 ```
 理想流程:
-  Agent: "创建代理实例"     →  返回 { id: "xyz", proxyUrl: "http://127.0.0.1:8989" }
-  Agent: "给 xyz 添加路由"  →  CLI 自动找到对应实例
-  Agent: "删除 xyz"        →  实例清理，资源回收
+  Agent: "创建代理 session"     →  返回 { id: "xyz", proxyUrl: "http://127.0.0.1:8989" }
+  Agent: "给 xyz 添加路由"     →  CLI 自动找到对应 session
+  Agent: "删除 xyz"           →  session 清理，资源回收
 ```
 
 ## 3. 架构设计
@@ -26,23 +26,23 @@ Agent 通过 MCP 或 CLI **按需创建一个代理实例**，获取实例 ID，
 
 ```
 ┌─────────────────────────────────────────────┐
-│              Instance Manager                │
-│  管理所有代理实例的创建、启动、停止、删除       │
-│  API: POST /instances, GET/DELETE /instances/:id │
-│  注册表: ~/.ep/instances.json               │
+│               Session Manager                │
+│  管理所有 proxy session 的创建、启动、停止、删除 │
+│  API: POST /sessions, GET/DELETE /sessions/:id │
+│  注册表: ~/.ep/sessions.json                 │
 │  端口: 固定（如 8900），或通过 Unix socket     │
 ├─────────────────────────────────────────────┤
 │                                             │
 │  ┌──────────────┐  ┌──────────────┐         │
-│  │ instance-a   │  │ instance-b   │         │
+│  │ session-a    │  │ session-b    │         │
 │  │ port: 8989   │  │ port: 8990   │         │
 │  │ EP_HOME:     │  │ EP_HOME:     │         │
-│  │  ~/.ep/i/a   │  │  ~/.ep/i/b   │         │
+│  │  ~/.ep/s/a   │  │  ~/.ep/s/b   │         │
 │  └──────────────┘  └──────────────┘         │
 │         ↑ child           ↑ child           │
 │                                             │
 │  ┌──────────────┐                            │
-│  │ default      │  (不指定 instance 时使用)   │
+│  │ default      │  (不指定 session 时使用)    │
 │  │ port: 8989?  │                            │
 │  │ EP_HOME:     │                            │
 │  │  ~/.ep/      │                            │
@@ -50,41 +50,41 @@ Agent 通过 MCP 或 CLI **按需创建一个代理实例**，获取实例 ID，
 └─────────────────────────────────────────────┘
 ```
 
-- **Manager**: 一个轻量进程，负责实例生命周期管理
-- **每个 Instance**: 独立的 Node.js 子进程，有独立的 `EP_HOME`、端口、插件、路由规则
-- **default**: 不指定 `--instance` 时回退到 `~/.ep/`，兼容现有行为
+- **Session Manager**: 一个轻量进程，负责 session 生命周期管理
+- **每个 Session**: 独立的 Node.js 子进程，有独立的 `EP_HOME`、端口、插件、路由规则
+- **default**: 不指定 `--session` 时回退到 `~/.ep/`，兼容现有行为
 
-### 3.2 实例注册表
+### 3.2 Session 注册表
 
-`~/.ep/instances.json` 记录所有活跃实例：
+`~/.ep/sessions.json` 记录所有活跃 session：
 
 ```json
 {
   "agent-a-1718283600": {
     "port": 8989,
     "pid": 12345,
-    "epHome": "/Users/xxx/.ep/instances/agent-a-1718283600",
+    "epHome": "/Users/xxx/.ep/sessions/agent-a-1718283600",
     "createdAt": "2026-07-10T10:00:00Z",
     "label": "agent-a"
   },
   "agent-b-1718283700": {
     "port": 8990,
     "pid": 12346,
-    "epHome": "/Users/xxx/.ep/instances/agent-b-1718283700",
+    "epHome": "/Users/xxx/.ep/sessions/agent-b-1718283700",
     "createdAt": "2026-07-10T10:01:00Z",
     "label": "agent-b"
   }
 }
 ```
 
-实例 ID 生成规则：`{label}-{timestamp}`，用户可指定 label，不指定则自动生成。
+Session ID 生成规则：`{label}-{timestamp}`，用户可指定 label，不指定则自动生成。
 
-### 3.3 实例完整目录布局
+### 3.3 Session 完整目录布局
 
 ```
 ~/.ep/
-├── instances.json              # 实例注册表
-├── instances/                  # 非 default 实例数据
+├── sessions.json               # session 注册表
+├── sessions/                   # 非 default session 数据
 │   ├── agent-a-1718283600/
 │   │   ├── ca/                 # 独立 CA 证书
 │   │   ├── route-rules/        # 独立路由规则
@@ -96,12 +96,12 @@ Agent 通过 MCP 或 CLI **按需创建一个代理实例**，获取实例 ID，
 │   │   └── supervisor.log
 │   └── agent-b-1718283700/
 │       └── ...
-├── ca/                         # default 实例 CA
-├── route-rules/                # default 实例路由
-├── mocks.json                  # default 实例 Mock
-├── settings.json               # default 实例设置
-├── plugins/                    # default 实例插件
-└── plugins-data/               # default 实例插件数据
+├── ca/                         # default session CA
+├── route-rules/                # default session 路由
+├── mocks.json                  # default session Mock
+├── settings.json               # default session 设置
+├── plugins/                    # default session 插件
+└── plugins-data/               # default session 插件数据
 ```
 
 ## 4. 交互流程
@@ -109,66 +109,66 @@ Agent 通过 MCP 或 CLI **按需创建一个代理实例**，获取实例 ID，
 ### 4.1 Agent 通过 MCP 使用
 
 ```
-1. MCP tool: ep_create_instance({ name: "my-debug-session" })
-   → Manager spawns child process
+1. MCP tool: ep_create_session({ name: "my-debug-session" })
+   → Session Manager spawns child process
    → Returns: { id: "my-debug-session-1718283600", port: 8989, proxyUrl: "..." }
 
-2. MCP tool: ep_route_add({ instance: "my-debug-session-1718283600", pattern: "...", target: "..." })
-   → CLI 读取 instances.json 找到该实例的 port + epHome
-   → 通过 HTTP API 操作该实例的代理服务
+2. MCP tool: ep_route_add({ session: "my-debug-session-1718283600", pattern: "...", target: "..." })
+   → CLI 读取 sessions.json 找到该 session 的 port + epHome
+   → 通过 HTTP API 操作该 session 的代理服务
 
-3. MCP tool: ep_mock_add({ instance: "my-debug-session-1718283600", ... })
+3. MCP tool: ep_mock_add({ session: "my-debug-session-1718283600", ... })
    → 同上
 
-4. MCP tool: ep_delete_instance({ id: "my-debug-session-1718283600" })
-   → Manager 发送 SIGTERM 给子进程
-   → 从 instances.json 移除
+4. MCP tool: ep_delete_session({ id: "my-debug-session-1718283600" })
+   → Session Manager 发送 SIGTERM 给子进程
+   → 从 sessions.json 移除
 ```
 
 ### 4.2 Agent 通过 CLI 使用
 
 ```
-$ ep instance create --name my-session
-Created instance: my-session-1718283600
+$ ep session create --name my-session
+Created session: my-session-1718283600
   Proxy URL: http://127.0.0.1:8989
 
-$ ep --instance my-session-1718283600 route list
-... (该实例的路由规则)
+$ ep --session my-session-1718283600 route list
+... (该 session 的路由规则)
 
-$ ep --instance my-session-1718283600 mock add --name "API" --pattern "api.test.com"
+$ ep --session my-session-1718283600 mock add --name "API" --pattern "api.test.com"
 ... 
 
-$ ep instance delete my-session-1718283600
-Instance deleted.
+$ ep session delete my-session-1718283600
+Session deleted.
 ```
 
 ### 4.3 现有用户不受影响
 
 ```
-$ ep                          # 启动 default 实例（等同于当前行为）
-$ ep route list               # 操作 default 实例（read from ~/.ep/）
+$ ep                          # 启动 default session（等同于当前行为）
+$ ep route list               # 操作 default session（read from ~/.ep/）
 $ ep mock add --name ...      # 同上
 ```
 
 ## 5. 关键设计决策
 
-### 5.1 Manager 的启动方式
+### 5.1 Session Manager 的启动方式
 
-**方案 A: Manager 内嵌于 default 实例**
+**方案 A: Session Manager 内嵌于 default session**
 
 ```
-ep                    → 启动 default 实例，同时启动 manager
-ep instance create    → 与 manager 通信，创建新实例
+ep                    → 启动 default session，同时启动 session manager
+ep session create     → 与 manager 通信，创建新 session
 ```
 
 优点: 用户体验一致，`ep` 一个命令搞定
-缺点: default 实例和 manager 耦合
+缺点: default session 和 manager 耦合
 
-**方案 B: Manager 作为独立守护进程**
+**方案 B: Session Manager 作为独立守护进程**
 
 ```
 ep manager start      → 启动 manager 守护进程（单次）
-ep instance create    → 与 manager 通信
+ep session create     → 与 manager 通信
 ```
 
 优点: 生命周期独立
@@ -176,57 +176,57 @@ ep instance create    → 与 manager 通信
 
 **推荐方案 A**，因为：
 - 用户无需感知 manager 的存在
-- 如果 default 实例被 kill，manager 也随之退出，不会留下孤儿进程
-- `ep instance create` 时如果 default 实例未运行，自动启动
+- 如果 default session 被 kill，manager 也随之退出，不会留下孤儿进程
+- `ep session create` 时如果 default session 未运行，自动启动
 
-### 5.2 Manager 与实例、CLI 之间的通信
+### 5.2 Session Manager 与 Session、CLI 之间的通信
 
 ```
-CLI (--instance <id>)
+CLI (--session <id>)
   │
-  ├─ 读 ~/.ep/instances.json → 获取实例 port
+  ├─ 读 ~/.ep/sessions.json → 获取 session port
   └─ HTTP API → http://127.0.0.1:{port}/api/...
 ```
 
-无需引入额外的 RPC 通道。CLI 始终通过 HTTP API 与代理实例通信。
+无需引入额外的 RPC 通道。CLI 始终通过 HTTP API 与代理 session 通信。
 
-### 5.3 `--instance` 全局标志
+### 5.3 `--session` 全局标志
 
-为所有现有 CLI 命令新增 `--instance <id>` 参数：
+为所有现有 CLI 命令新增 `--session <id>` 参数：
 
 ```
-ep --instance <id> route list|show|add|...
-ep --instance <id> mock list|add|delete|...
-ep --instance <id> status
-ep --instance <id> doctor
+ep --session <id> route list|show|add|...
+ep --session <id> mock list|add|delete|...
+ep --session <id> status
+ep --session <id> doctor
 ```
 
 ### 5.4 资源管理与清理
 
-- 实例在 `instances.json` 注册表中跟踪
-- `ep instance delete <id>` 终止进程 + 清理注册表
-- 可选的清理策略：`ep instance delete <id> --clean` 同时删除 `~/.ep/instances/<id>/` 目录
-- Manager 退出时向所有子进程发送 SIGTERM
-- `ep instance list` 显示所有实例（含进程存活检测：pid 死掉的标记为 `orphaned`）
+- Session 在 `sessions.json` 注册表中跟踪
+- `ep session delete <id>` 终止进程 + 清理注册表
+- 可选的清理策略：`ep session delete <id> --clean` 同时删除 `~/.ep/sessions/<id>/` 目录
+- Session Manager 退出时向所有子进程发送 SIGTERM
+- `ep session list` 显示所有 session（含进程存活检测：pid 死掉的标记为 `orphaned`）
 
 ## 6. 实现路线图
 
 ### Phase 1: 基础设施（底层支撑）
 
 1. **`EP_HOME` 支持** — 引入 `resolveEpHome()`，替换所有硬编码（详见附录 A）
-2. **CLI `--instance` 标志** — 所有命令读取 `instances.json` 定位目标实例
-3. **实例注册表** — `~/.ep/instances.json` 读写逻辑
+2. **CLI `--session` 标志** — 所有命令读取 `sessions.json` 定位目标 session
+3. **Session 注册表** — `~/.ep/sessions.json` 读写逻辑
 
-### Phase 2: 实例管理（核心功能）
+### Phase 2: Session 管理（核心功能）
 
-4. **`ep instance create`** — spawn 子进程，写入注册表，返回实例信息
-5. **`ep instance list`** — 列出所有实例及状态
-6. **`ep instance delete`** — 终止进程，清理注册表
-7. **Manager HTTP API** — `POST /__manager/instances` 等（供 MCP 调用）
+4. **`ep session create`** — spawn 子进程，写入注册表，返回 session 信息
+5. **`ep session list`** — 列出所有 session 及状态
+6. **`ep session delete`** — 终止进程，清理注册表
+7. **Session Manager HTTP API** — `POST /__manager/sessions` 等（供 MCP 调用）
 
 ### Phase 3: MCP 集成
 
-8. **MCP tools 适配** — 所有 MCP tool 支持 `instance` 参数
+8. **MCP tools 适配** — 所有 MCP tool 支持 `session` 参数
 
 ## 7. 变更总结
 
@@ -241,11 +241,11 @@ ep --instance <id> doctor
 | 场景 | 行为 |
 |------|------|
 | `ep` (不设任何参数) | 与当前完全一致，使用 `~/.ep/` |
-| `ep route list` (无 --instance) | 操作 default 实例，行为不变 |
-| `ep instance create --name x` | 新建实例，返回 ID + port |
-| `ep --instance xyz route add ...` | 操作指定实例 |
-| `ep instance delete xyz` | 终止进程，清理注册 |
-| 现有 292 tests | 零破坏（不设 --instance 时路径不变） |
+| `ep route list` (无 --session) | 操作 default session，行为不变 |
+| `ep session create --name x` | 新建 session，返回 ID + port |
+| `ep --session xyz route add ...` | 操作指定 session |
+| `ep session delete xyz` | 终止进程，清理注册 |
+| 现有 292 tests | 零破坏（不设 --session 时路径不变） |
 
 ---
 
