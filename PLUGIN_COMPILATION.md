@@ -247,7 +247,8 @@ loadCustomPlugins({ pluginsDir: '~/.ep/plugins', logger: console })
 ```bash
 $ npm start
 
-已加载配置文件: /home/user/.ep/.eprc (0 条规则)
+已加载 1 个规则文件 (共 0 条规则):
+  - 默认规则 (0 条)
 发现 1 个插件文件
 使用编译后的JS文件: test-plugin.js
 已加载插件: local.test (test-plugin.js)

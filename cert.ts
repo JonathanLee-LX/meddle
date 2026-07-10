@@ -155,4 +155,8 @@ export async function ensureRootCA(): Promise<void> {
     }
 }
 
+export function getRootCAPath(): string {
+    return crtMgr.getRootCAFilePath();
+}
+
 export { crtMgr };

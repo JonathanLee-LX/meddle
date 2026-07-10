@@ -13,18 +13,24 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { MonacoEditor } from './monaco-editor'
 import { getAIConfig, getActiveModel, isAIConfigValid } from '@/lib/ai-config-store'
-import { Code2, Save, Loader2, Zap, RotateCcw, PencilLine, GripVertical } from 'lucide-react'
+import { Code2, Save, Loader2, Zap, RotateCcw, PencilLine } from 'lucide-react'
+import { SaveButton } from '@/components/save-shortcut/save-button'
+import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
+import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
+import { toast } from '@/components/ui/toast'
 
 interface PluginCodeEditorProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  embedded?: boolean
   filename: string
   onSaved?: () => void
 }
 
 export function PluginCodeEditor({
-  open,
+  open = false,
   onOpenChange,
+  embedded = false,
   filename,
   onSaved,
 }: PluginCodeEditorProps) {
@@ -38,7 +44,6 @@ export function PluginCodeEditor({
   const [extraInstruction, setExtraInstruction] = useState('')
   const [reviseStatus, setReviseStatus] = useState<string | null>(null)
   const [aiReviseOpen, setAiReviseOpen] = useState(false)
-  const [editorHeight, setEditorHeight] = useState(420)
 
   const isDirty = code !== originalCode
   const aiConfig = getAIConfig()
@@ -77,10 +82,10 @@ export function PluginCodeEditor({
   }, [filename])
 
   useEffect(() => {
-    if (open && filename) {
+    if ((open || embedded) && filename) {
       fetchCode()
     }
-  }, [open, filename, fetchCode])
+  }, [open, embedded, filename, fetchCode])
 
   const handleSave = async () => {
     setSaving(true)
@@ -96,9 +101,13 @@ export function PluginCodeEditor({
         throw new Error(data.error || '保存失败')
       }
       setOriginalCode(code)
+      window.dispatchEvent(new CustomEvent('plugins-custom-updated'))
       onSaved?.()
+      toast.success('插件代码保存成功')
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存失败')
+      const message = err instanceof Error ? err.message : '保存失败'
+      setError(message)
+      toast.error(message)
     } finally {
       setSaving(false)
     }
@@ -125,41 +134,40 @@ export function PluginCodeEditor({
         throw new Error('热加载失败')
       }
       onSaved?.()
+      window.dispatchEvent(new CustomEvent('plugins-custom-updated'))
+      toast.success('插件代码已保存并完成热加载')
     } catch (err) {
-      setError(err instanceof Error ? err.message : '操作失败')
+      const message = err instanceof Error ? err.message : '操作失败'
+      setError(message)
+      toast.error(message)
     } finally {
       setSaving(false)
       setReloading(false)
     }
   }
 
+  useSaveShortcut({
+    active: open || embedded,
+    enabled: isDirty && !saving && !revising,
+    priority: SAVE_SHORTCUT_PRIORITY.panel,
+    onSave: handleSave,
+  })
+
   const handleRevert = () => {
     setCode(originalCode)
   }
 
-  const handleEditorResize = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    const startY = e.clientY
-    const startHeight = editorHeight
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const deltaY = moveEvent.clientY - startY
-      const newHeight = Math.max(220, startHeight + deltaY)
-      setEditorHeight(newHeight)
-    }
-
-    const handleMouseUp = () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-    }
-
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
-  }, [editorHeight])
+  const handleClose = () => {
+    if (isDirty && !confirm('有未保存的修改，确定要关闭吗？')) return
+    setAiReviseOpen(false)
+    onOpenChange?.(false)
+  }
 
   const handleAIRevise = async () => {
     if (!extraInstruction.trim() || !isAIReady) return
 
+    const codeBeforeRevise = code
+    setAiReviseOpen(true)
     setRevising(true)
     setError(null)
     setReviseStatus('AI 正在根据补充需求更新代码...')
@@ -232,20 +240,17 @@ export function PluginCodeEditor({
         throw new Error('AI 未返回有效代码')
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'AI 更新代码失败')
-      setReviseStatus(null)
+      const message = err instanceof Error ? err.message : 'AI 更新代码失败'
+      setCode(codeBeforeRevise)
+      setError(message)
+      setReviseStatus(`更新失败，已恢复原代码：${message}`)
     } finally {
       setRevising(false)
     }
   }
 
-  return (
-    <Sheet open={open} onOpenChange={(v) => {
-      if (!v && isDirty && !confirm('有未保存的修改，确定要关闭吗？')) return
-      if (!v) setAiReviseOpen(false)
-      onOpenChange(v)
-    }}>
-      <SheetContent className="p-0 flex flex-col" resizable defaultWidth={900} storageKey="plugin-code-editor">
+  const body = (
+    <>
         <SheetHeader className="px-6 pt-6 pb-3">
           <SheetTitle className="flex items-center gap-2">
             <Code2 className="h-5 w-5" />
@@ -257,34 +262,93 @@ export function PluginCodeEditor({
 
         <Separator />
 
-        <div className="flex-1 overflow-auto px-4 py-3 space-y-3">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-3">
           {loading ? (
-            <div className="flex items-center justify-center h-[320px] gap-2 text-muted-foreground">
+            <div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
               <span>加载中...</span>
             </div>
           ) : error && !code ? (
-            <div className="flex items-center justify-center h-[320px] text-destructive">
+            <div className="flex flex-1 items-center justify-center text-destructive">
               {error}
             </div>
           ) : (
-            <>
-              <div className="relative group" style={{ height: `${editorHeight}px` }}>
+            <div className="min-h-0 flex-1">
+              <div className="relative h-full min-h-[320px]">
                 <MonacoEditor
                   value={code}
                   onChange={setCode}
                   language="javascript"
                   height="flex"
                 />
-                <div
-                  className="absolute bottom-0 left-0 right-0 h-4 cursor-ns-resize flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-border/50 to-transparent"
-                  onMouseDown={handleEditorResize}
-                >
-                  <GripVertical className="h-4 w-4 text-muted-foreground" />
-                </div>
               </div>
-            </>
+            </div>
           )}
+        </div>
+
+        <div
+          aria-hidden={!aiReviseOpen}
+          className={[
+            'overflow-hidden transition-[max-height,opacity] duration-200 ease-out',
+            aiReviseOpen ? 'max-h-[260px] border-t opacity-100' : 'max-h-0 border-t-0 opacity-0 pointer-events-none',
+          ].join(' ')}
+        >
+          <div className="space-y-3 px-6 py-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <PencilLine className="h-4 w-4" />
+                  AI 更新代码
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  输入补充需求后，AI 会直接把结果写回当前编辑器。
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setAiReviseOpen(false)}
+                disabled={!aiReviseOpen || revising}
+              >
+                收起
+              </Button>
+            </div>
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+              <div className="app-field-group">
+                <Label htmlFor="plugin-editor-extra-instruction">补充需求信息</Label>
+                <Textarea
+                  id="plugin-editor-extra-instruction"
+                  value={extraInstruction}
+                  onChange={(e) => setExtraInstruction(e.target.value)}
+                  placeholder="例如：补充 onBeforeResponse 对空 referer 的处理；保留现有 manifest 和 hook，不要改插件 id。"
+                  className="min-h-[88px] resize-none"
+                  disabled={!aiReviseOpen || revising || saving}
+                />
+              </div>
+              <Button
+                size="sm"
+                onClick={handleAIRevise}
+                disabled={!aiReviseOpen || !extraInstruction.trim() || !isAIReady || revising || saving}
+                title={!isAIReady ? 'AI 未配置或未启用' : '根据补充需求更新当前代码'}
+              >
+                {revising ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    更新中...
+                  </>
+                ) : (
+                  <>
+                    <PencilLine className="h-4 w-4 mr-1" />
+                    更新代码
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {reviseStatus || (isAIReady ? '生成结果会写回上方编辑器，请检查后再保存或热加载。' : 'AI 未配置或未启用，请先在设置中配置 AI 服务。')}
+            </p>
+          </div>
         </div>
 
         {error && code && (
@@ -310,8 +374,8 @@ export function PluginCodeEditor({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setAiReviseOpen(true)}
-              disabled={!code || !isAIReady || saving || revising}
+              onClick={() => setAiReviseOpen((open) => !open)}
+              disabled={!code || saving || revising}
               title={!isAIReady ? 'AI 未配置或未启用' : '使用 AI 根据补充需求更新代码'}
             >
               <PencilLine className="h-4 w-4 mr-1" />
@@ -322,23 +386,20 @@ export function PluginCodeEditor({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                if (isDirty && !confirm('有未保存的修改，确定要关闭吗？')) return
-                onOpenChange(false)
-              }}
+              onClick={handleClose}
               disabled={saving || revising}
             >
               关闭
             </Button>
-            <Button
+            <SaveButton
               variant="outline"
               size="sm"
               onClick={handleSave}
               disabled={!isDirty || saving || revising}
             >
-              {saving && !reloading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+              {saving && !reloading ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <Save data-icon="inline-start" />}
               保存
-            </Button>
+            </SaveButton>
             <Button
               size="sm"
               onClick={handleSaveAndReload}
@@ -349,72 +410,21 @@ export function PluginCodeEditor({
             </Button>
           </div>
         </div>
+    </>
+  )
 
-        <Sheet open={aiReviseOpen} onOpenChange={setAiReviseOpen}>
-          <SheetContent className="p-0 flex flex-col" resizable defaultWidth={480} storageKey="plugin-code-ai-revise">
-            <SheetHeader className="border-b px-5 py-4">
-              <SheetTitle className="flex items-center gap-2">
-                <PencilLine className="h-5 w-5" />
-                AI 更新代码
-              </SheetTitle>
-              <SheetDescription>
-                输入补充需求后，AI 会基于当前插件代码直接更新编辑器内容。
-              </SheetDescription>
-            </SheetHeader>
+  if (embedded) {
+    return <div className="flex h-full min-h-0 flex-col">{body}</div>
+  }
 
-            <div className="flex-1 overflow-auto px-5 py-4 space-y-3">
-              <div className="space-y-2">
-                <Label htmlFor="plugin-editor-extra-instruction">补充需求信息</Label>
-                <Textarea
-                  id="plugin-editor-extra-instruction"
-                  value={extraInstruction}
-                  onChange={(e) => setExtraInstruction(e.target.value)}
-                  placeholder="例如：补充 onBeforeResponse 对空 referer 的处理；保留现有 manifest 和 hook，不要改插件 id。"
-                  className="min-h-[160px]"
-                  disabled={revising || saving}
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {reviseStatus || '生成结果会写回左侧代码编辑器，请检查后再保存或热加载。'}
-              </p>
-              {!isAIReady && (
-                <div className="rounded-md border border-yellow-200 bg-yellow-50/80 px-3 py-2 text-sm text-yellow-700 dark:border-yellow-900 dark:bg-yellow-950/20 dark:text-yellow-300">
-                  AI 未配置或未启用，请先在设置中配置 AI 服务。
-                </div>
-              )}
-            </div>
-
-            <div className="border-t p-4">
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setAiReviseOpen(false)}
-                  disabled={revising}
-                >
-                  关闭
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleAIRevise}
-                  disabled={!extraInstruction.trim() || !isAIReady || revising || saving}
-                >
-                  {revising ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                      AI 更新中...
-                    </>
-                  ) : (
-                    <>
-                      <PencilLine className="h-4 w-4 mr-1" />
-                      更新代码
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </SheetContent>
-        </Sheet>
+  return (
+    <Sheet open={open} onOpenChange={(v) => {
+      if (!v && isDirty && !confirm('有未保存的修改，确定要关闭吗？')) return
+      if (!v) setAiReviseOpen(false)
+      onOpenChange?.(v)
+    }}>
+      <SheetContent className="p-0 flex flex-col" resizable defaultWidth={900} storageKey="plugin-code-editor">
+        {body}
       </SheetContent>
     </Sheet>
   )

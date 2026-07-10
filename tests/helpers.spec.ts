@@ -123,6 +123,31 @@ describe('helpers.getFreePort', () => {
     }).trim()
     expect(Number(output) >= 18989).toBeTruthy()
   })
+
+  it('searches above an occupied base port larger than 9999', () => {
+    const script = `
+      const net = require('net')
+      const server = net.createServer()
+      server.listen(18989, '127.0.0.1', async () => {
+        try {
+          const { getFreePort } = require('./dist/helpers')
+          const port = await getFreePort()
+          process.stdout.write(String(port))
+          server.close()
+        } catch (err) {
+          server.close()
+          process.stderr.write(String(err && err.message ? err.message : err))
+          process.exit(1)
+        }
+      })
+    `
+    const output = execFileSync(process.execPath, ['-e', script], {
+      cwd: path.resolve(__dirname, '..'),
+      env: { ...process.env, PORT: '18989' },
+      encoding: 'utf8',
+    }).trim()
+    expect(Number(output)).toBeGreaterThan(18989)
+  })
 })
 
 describe('helpers.parseEprc + resolveTargetUrl [marker] rewrite', () => {

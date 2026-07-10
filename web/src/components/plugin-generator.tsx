@@ -24,14 +24,27 @@ import {
   Check
 } from 'lucide-react'
 import { getAIConfig, isAIConfigValid } from '@/lib/ai-config-store'
+import { SaveButton } from '@/components/save-shortcut/save-button'
+import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
+import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
+import { toast } from '@/components/ui/toast'
 
 interface PluginGeneratorProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  embedded?: boolean
   onPluginSaved?: () => void
 }
 
-export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGeneratorProps) {
+interface GeneratedPluginManifest {
+  id: string
+  name: string
+  version: string
+  hooks: string[]
+  permissions: string[]
+}
+
+export function PluginGenerator({ open = false, onOpenChange, embedded = false, onPluginSaved }: PluginGeneratorProps) {
   const [pluginName, setPluginName] = useState('')
   const [pluginDescription, setPluginDescription] = useState('')
   const [hooks, setHooks] = useState('')
@@ -40,7 +53,7 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
   const [saving, setSaving] = useState(false)
   const [generatedCode, setGeneratedCode] = useState('')
   const [generatedFilename, setGeneratedFilename] = useState('')
-  const [generatedManifest, setGeneratedManifest] = useState<any>(null)
+  const [generatedManifest, setGeneratedManifest] = useState<GeneratedPluginManifest | null>(null)
   const [statusType, setStatusType] = useState<'success' | 'error' | null>(null)
   const [statusMessage, setStatusMessage] = useState('')
   const [copied, setCopied] = useState(false)
@@ -211,18 +224,30 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
       setStatusType('success')
       setStatusMessage(`插件已保存！现在可以热加载并测试。`)
       setSaved(true)
+      window.dispatchEvent(new CustomEvent('plugins-custom-updated'))
+      toast.success('插件保存成功')
       
       // 通知父组件插件已保存
       if (onPluginSaved) {
         onPluginSaved()
       }
+      window.dispatchEvent(new CustomEvent('plugins-custom-updated'))
     } catch (error) {
+      const message = error instanceof Error ? error.message : '保存失败'
       setStatusType('error')
-      setStatusMessage(error instanceof Error ? error.message : '保存失败')
+      setStatusMessage(message)
+      toast.error(message)
     } finally {
       setSaving(false)
     }
   }
+
+  useSaveShortcut({
+    active: (open || embedded) && Boolean(generatedCode) && !saved,
+    enabled: !saving && !generating && Boolean(generatedFilename),
+    priority: SAVE_SHORTCUT_PRIORITY.panel,
+    onSave: handleSave,
+  })
 
   const handleCopy = async () => {
     if (generatedCode) {
@@ -255,7 +280,7 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
 
       // 3秒后关闭
       setTimeout(() => {
-        onOpenChange(false)
+        onOpenChange?.(false)
         resetForm()
       }, 3000)
     } catch (error) {
@@ -283,14 +308,8 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
     setReloading(false)
   }
 
-  return (
-    <Sheet open={open} onOpenChange={(newOpen) => {
-      onOpenChange(newOpen)
-      if (!newOpen) {
-        resetForm()
-      }
-    }}>
-      <SheetContent className="p-0 flex flex-col" resizable defaultWidth={900} storageKey="plugin-generator">
+  const body = (
+    <>
         <SheetHeader className="px-6 pt-6 pb-4">
           <SheetTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" />
@@ -303,7 +322,7 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
         
         <Separator />
         
-        <div className="flex-1 overflow-auto px-6 py-4 space-y-5">
+        <div className="app-panel-content">
           {!isAIReady && (
             <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900 rounded-md p-3">
               <p className="text-sm text-yellow-700 dark:text-yellow-300">
@@ -313,8 +332,8 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
           )}
 
           {/* 插件需求输入 */}
-          <div className="space-y-4">
-            <div className="space-y-2">
+          <div className="app-section">
+            <div className="app-field-group">
               <Label htmlFor="pluginName">
                 插件名称 <span className="text-red-500">*</span>
               </Label>
@@ -327,7 +346,7 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="app-field-group">
               <Label htmlFor="pluginDescription">
                 插件描述 <span className="text-red-500">*</span>
               </Label>
@@ -341,7 +360,7 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="app-field-group">
               <Label htmlFor="hooks">
                 需要的 Hooks（可选，用逗号分隔）
               </Label>
@@ -357,7 +376,7 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
               </p>
             </div>
 
-            <div className="space-y-2">
+            <div className="app-field-group">
               <Label htmlFor="permissions">
                 需要的权限（可选，用逗号分隔）
               </Label>
@@ -376,7 +395,7 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
 
           {/* 实时生成进度 */}
           {generating && generationProgress > 0 && (
-            <div className="space-y-2">
+            <div className="app-field-group">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">生成进度</span>
                 <span className="font-medium">{generationProgress}%</span>
@@ -392,7 +411,7 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
 
           {/* 生成的代码 */}
           {(generatedCode || generating) && (
-            <div className="space-y-2">
+            <div className="app-field-group">
               <div className="flex items-center justify-between">
                 <Label className="flex items-center gap-2">
                   <Code className="h-4 w-4" />
@@ -504,7 +523,7 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
             variant="outline"
             size="sm"
             onClick={() => {
-              onOpenChange(false)
+              onOpenChange?.(false)
               resetForm()
             }}
             disabled={generating || saving || reloading}
@@ -546,23 +565,23 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
                 >
                   重新生成
                 </Button>
-                <Button
+                <SaveButton
                   size="sm"
                   onClick={handleSave}
                   disabled={saving}
                 >
                   {saving ? (
                     <>
-                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      <Loader2 data-icon="inline-start" className="animate-spin" />
                       保存中...
                     </>
                   ) : (
                     <>
-                      <Save className="h-4 w-4 mr-1" />
+                      <Save data-icon="inline-start" />
                       保存插件
                     </>
                   )}
-                </Button>
+                </SaveButton>
               </>
             ) : (
               <Button
@@ -586,6 +605,22 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
             )}
           </div>
         </div>
+    </>
+  )
+
+  if (embedded) {
+    return <div className="flex h-full min-h-0 flex-col">{body}</div>
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={(newOpen) => {
+      onOpenChange?.(newOpen)
+      if (!newOpen) {
+        resetForm()
+      }
+    }}>
+      <SheetContent className="p-0 flex flex-col" resizable defaultWidth={900} storageKey="plugin-generator">
+        {body}
       </SheetContent>
     </Sheet>
   )

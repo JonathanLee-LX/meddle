@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState, type KeyboardEvent } from 'react'
-import { AlertTriangle, ArrowRight, FileText, Loader2, Search } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react'
+import { AlertTriangle, ArrowRight, FileText, Loader2, LocateFixed, Search } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,6 +9,14 @@ import { rulesToEprc } from '@/utils/eprc-parser'
 interface RoutePreviewProps {
   rules: RuleItem[]
   activeFileName: string | null
+  embedded?: boolean
+  onRevealRule?: (rule: RoutePreviewMatchedRule) => void
+}
+
+interface RoutePreviewMatchedRule {
+  pattern: string
+  target: string
+  kind: 'empty' | 'file' | 'absolute-url' | 'host'
 }
 
 interface RoutePreviewResponse {
@@ -16,22 +24,27 @@ interface RoutePreviewResponse {
   inputUrl: string
   matched: boolean
   resolvedUrl: string
-  matchedRule?: {
-    pattern: string
-    target: string
-    kind: 'empty' | 'file' | 'absolute-url' | 'host'
-  }
+  matchedRule?: RoutePreviewMatchedRule
   notes: string[]
   error?: string
 }
 
-export function RoutePreview({ rules, activeFileName }: RoutePreviewProps) {
+export function RoutePreview({ rules, activeFileName, embedded = false, onRevealRule }: RoutePreviewProps) {
   const [inputUrl, setInputUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<RoutePreviewResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const rulesText = useMemo(() => rulesToEprc(rules), [rules])
+  const inputId = embedded ? 'global-route-preview-url' : 'route-preview-url'
+
+  useEffect(() => {
+    if (!embedded) return
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(inputId)?.focus()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [embedded, inputId])
 
   const handlePreview = useCallback(async () => {
     const trimmed = inputUrl.trim()
@@ -69,7 +82,7 @@ export function RoutePreview({ rules, activeFileName }: RoutePreviewProps) {
   }, [handlePreview])
 
   return (
-    <div className="rounded-lg border bg-card p-4 space-y-3">
+    <div className={embedded ? 'app-panel-content h-full' : 'rounded-lg border bg-card p-4 space-y-3'}>
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
@@ -90,6 +103,7 @@ export function RoutePreview({ rules, activeFileName }: RoutePreviewProps) {
 
       <div className="flex gap-2">
         <Input
+          id={inputId}
           value={inputUrl}
           onChange={(event) => setInputUrl(event.target.value)}
           onKeyDown={handleKeyDown}
@@ -101,6 +115,12 @@ export function RoutePreview({ rules, activeFileName }: RoutePreviewProps) {
         </Button>
       </div>
 
+      {embedded && (
+        <div className="text-xs text-muted-foreground">
+          使用当前编辑区内尚未保存的规则进行计算，结果会与路由规则页的预览保持一致。
+        </div>
+      )}
+
       {error && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           <div className="flex items-center gap-2">
@@ -111,7 +131,7 @@ export function RoutePreview({ rules, activeFileName }: RoutePreviewProps) {
       )}
 
       {result && (
-        <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+        <div className={embedded ? 'min-h-0 flex-1 space-y-3 overflow-auto rounded-md border bg-muted/20 p-3' : 'space-y-3 rounded-md border bg-muted/20 p-3'}>
           <div className="flex flex-wrap items-center gap-2">
             <Badge className={result.matched ? 'bg-green-100 text-green-800 border-green-200' : 'bg-blue-100 text-blue-800 border-blue-200'}>
               {result.matched ? '已命中规则' : '未命中规则'}
@@ -133,10 +153,25 @@ export function RoutePreview({ rules, activeFileName }: RoutePreviewProps) {
           {result.matchedRule && (
             <div className="space-y-1">
               <div className="text-[11px] uppercase tracking-wide text-muted-foreground">命中规则</div>
-              <div className="rounded-md border bg-background px-3 py-2 font-mono text-xs break-all">
-                {result.matchedRule.pattern}
-                <span className="text-muted-foreground"> → </span>
-                {result.matchedRule.target}
+              <div className="flex items-stretch gap-2">
+                <div className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 font-mono text-xs break-all">
+                  {result.matchedRule.pattern}
+                  <span className="text-muted-foreground"> → </span>
+                  {result.matchedRule.target}
+                </div>
+                {onRevealRule && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-auto shrink-0 gap-1.5 px-3 text-xs"
+                    onClick={() => result.matchedRule && onRevealRule(result.matchedRule)}
+                    title="在路由规则页面定位这条规则"
+                  >
+                    <LocateFixed className="h-3.5 w-3.5" />
+                    定位
+                  </Button>
+                )}
               </div>
             </div>
           )}

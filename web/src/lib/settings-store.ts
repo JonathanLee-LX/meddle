@@ -1,21 +1,26 @@
 /**
  * 系统设置存储服务
- * 使用文件系统保存设置到 ~/.ep/.epconfig/settings.json
+ * 使用文件系统保存设置到 ~/.ep/settings.json
  */
 
 import { saveAIConfig } from './ai-config-store'
 import type { AIConfig } from './ai-config-store'
 
+export type AccentColor = 'auto' | 'neutral' | 'blue' | 'violet' | 'green' | 'orange' | 'rose'
+
 export interface SystemSettings {
   theme: 'light' | 'dark' | 'system'
+  accentColor: AccentColor
   fontSize: string
   aiConfig: AIConfig
   mocksFilePath?: string
   pluginMode?: 'off' | 'shadow' | 'on'
+  clientAliases?: Record<string, string>
 }
 
 const DEFAULT_SETTINGS: SystemSettings = {
   theme: 'system',
+  accentColor: 'auto',
   fontSize: 'medium',
   aiConfig: {
     enabled: false,
@@ -26,7 +31,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
     models: []
   },
   mocksFilePath: '',
-  pluginMode: 'off'
+  pluginMode: 'off',
+  clientAliases: {}
 }
 
 // 内存缓存
@@ -40,14 +46,21 @@ export async function loadSettings(): Promise<SystemSettings> {
     const response = await fetch('/api/settings')
     if (response.ok) {
       const settings = await response.json()
-      cachedSettings = settings
+      const mergedSettings: SystemSettings = {
+        ...DEFAULT_SETTINGS,
+        ...settings,
+        accentColor: settings.accentColor || DEFAULT_SETTINGS.accentColor,
+        aiConfig: {
+          ...DEFAULT_SETTINGS.aiConfig,
+          ...settings.aiConfig,
+        },
+      }
+      cachedSettings = mergedSettings
 
       // 同步 AI 配置到 localStorage
-      if (settings.aiConfig) {
-        saveAIConfig(settings.aiConfig)
-      }
+      saveAIConfig(mergedSettings.aiConfig)
 
-      return settings
+      return mergedSettings
     }
   } catch (error) {
     console.error('加载设置失败:', error)

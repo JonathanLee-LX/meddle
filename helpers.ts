@@ -175,7 +175,7 @@ const parsedBasePort = parseInt(process.env.PORT || '', 10);
 const BASE_PORT = Number.isFinite(parsedBasePort) && parsedBasePort > 0 ? parsedBasePort : 8989;
 
 export async function getFreePort(): Promise<number> {
-    const highestPort = Math.max(9999, BASE_PORT);
+    const highestPort = Math.min(65535, Math.max(9999, BASE_PORT + 1000));
     setBasePort(BASE_PORT);
     setHighestPort(highestPort);
     return getPortPromise();

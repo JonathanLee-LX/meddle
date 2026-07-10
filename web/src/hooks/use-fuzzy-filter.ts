@@ -1,6 +1,62 @@
-import { useMemo, useState } from 'react'
-import type { ProxyRecord, ResourceType } from '@/types'
+import { useDeferredValue, useMemo, useState } from 'react'
+import type { ClientSourceFilter, ProxyRecord, ResourceType } from '@/types'
 import { getResourceType } from '@/utils/resource-type'
+
+interface ProxyRecordSearchIndex {
+  methodUpper: string
+  statusCode: number | undefined
+  statusText: string
+  sourceLower: string
+  domainLower: string
+  clientLower: string
+  clientIpLower: string
+  applicationLower: string
+  haystack: string
+  resourceType: ResourceType
+}
+
+const searchIndexCache = new WeakMap<ProxyRecord, ProxyRecordSearchIndex>()
+
+function getSearchIndex(record: ProxyRecord): ProxyRecordSearchIndex {
+  const cached = searchIndexCache.get(record)
+  if (cached) return cached
+
+  const method = typeof record.method === 'string' ? record.method : ''
+  const source = typeof record.source === 'string' ? record.source : ''
+  const target = typeof record.target === 'string' ? record.target : ''
+  const time = typeof record.time === 'string' ? record.time : ''
+  const clientType = record.clientType || ''
+  const clientIp = record.clientIp || ''
+  const clientName = record.clientName || ''
+  const applicationName = record.applicationName || ''
+  const applicationProcess = record.applicationProcess || ''
+  const applicationBundleId = record.applicationBundleId || ''
+  const applicationPid = record.applicationPid?.toString() || ''
+  const applicationIdentitySource = record.applicationIdentitySource || ''
+  const applicationIdentityConfidence = record.applicationIdentityConfidence || ''
+  let domain = source
+
+  try {
+    domain = new URL(source).hostname
+  } catch {
+    // Invalid or relative URLs fall back to matching the complete source.
+  }
+
+  const index: ProxyRecordSearchIndex = {
+    methodUpper: method.toUpperCase(),
+    statusCode: record.statusCode,
+    statusText: record.statusCode?.toString() || '',
+    sourceLower: source.toLowerCase(),
+    domainLower: domain.toLowerCase(),
+    clientLower: `${clientType} ${clientName} ${clientIp}`.toLowerCase(),
+    clientIpLower: clientIp.toLowerCase(),
+    applicationLower: `${applicationName} ${applicationProcess} ${applicationBundleId} ${applicationPid} ${applicationIdentitySource} ${applicationIdentityConfidence}`.toLowerCase(),
+    haystack: `${method} ${source} ${target} ${time} ${clientType} ${clientIp} ${clientName} ${applicationName} ${applicationProcess} ${applicationBundleId} ${applicationPid} ${applicationIdentitySource} ${applicationIdentityConfidence}`.toLowerCase(),
+    resourceType: getResourceType(record),
+  }
+  searchIndexCache.set(record, index)
+  return index
+}
 
 /**
  * Chrome DevTools style fuzzy filter for proxy records.
@@ -16,73 +72,85 @@ import { getResourceType } from '@/utils/resource-type'
 export function useFuzzyFilter(records: ProxyRecord[]) {
   const [filterText, setFilterText] = useState('')
   const [resourceTypeFilter, setResourceTypeFilter] = useState<ResourceType>('all')
+  const [clientSourceFilter, setClientSourceFilter] = useState<ClientSourceFilter>('all')
+  const deferredFilterText = useDeferredValue(filterText)
 
   const filteredRecords = useMemo(() => {
-    // First filter by resource type
-    let result = records
-    if (resourceTypeFilter !== 'all') {
-      result = result.filter((record) => getResourceType(record) === resourceTypeFilter)
+    const raw = deferredFilterText.trim()
+    if (!raw && resourceTypeFilter === 'all' && clientSourceFilter === 'all') {
+      return records
     }
-    
-    // Then filter by text
-    const raw = filterText.trim()
-    if (!raw) return result
 
     const terms = raw.split(/\s+/).filter(Boolean)
+    const result: ProxyRecord[] = []
 
-    return result.filter((record) => {
-      const method = typeof record.method === 'string' ? record.method : ''
-      const source = typeof record.source === 'string' ? record.source : ''
-      const target = typeof record.target === 'string' ? record.target : ''
-      const time = typeof record.time === 'string' ? record.time : ''
+    for (const record of records) {
+      if (clientSourceFilter !== 'all' && record.clientType !== clientSourceFilter) continue
+      const index = getSearchIndex(record)
+      if (resourceTypeFilter !== 'all' && index.resourceType !== resourceTypeFilter) continue
 
-      return terms.every((term) => {
+      const matchesAllTerms = terms.every((term) => {
         const isNegative = term.startsWith('-') && term.length > 1
         const cleanTerm = isNegative ? term.slice(1) : term
+        const lowerTerm = cleanTerm.toLowerCase()
 
         let matches = false
 
         // method: filter
-        if (cleanTerm.startsWith('method:')) {
-          const expectedMethod = cleanTerm.slice(7).toUpperCase()
-          matches = method.toUpperCase() === expectedMethod
+        if (lowerTerm.startsWith('method:')) {
+          matches = index.methodUpper === cleanTerm.slice(7).toUpperCase()
         }
         // status: filter (e.g., status:200, status:4xx, status:5xx)
-        else if (cleanTerm.startsWith('status:')) {
-          const pattern = cleanTerm.slice(7).toLowerCase()
-          if (!record.statusCode) {
+        else if (lowerTerm.startsWith('status:')) {
+          const pattern = lowerTerm.slice(7)
+          if (!index.statusCode) {
             matches = false
           } else if (pattern.includes('x')) {
             const prefix = pattern.replace(/x/gi, '')
-            matches = record.statusCode.toString().startsWith(prefix)
+            matches = index.statusText.startsWith(prefix)
           } else {
-            matches = record.statusCode.toString() === pattern
+            matches = index.statusText === pattern
           }
         }
         // domain: filter
-        else if (cleanTerm.startsWith('domain:')) {
-          const domain = cleanTerm.slice(7).toLowerCase()
-          try {
-            const url = new URL(source)
-            matches = url.hostname.toLowerCase().includes(domain)
-          } catch {
-            matches = source.toLowerCase().includes(domain)
-          }
+        else if (lowerTerm.startsWith('domain:')) {
+          matches = index.domainLower.includes(lowerTerm.slice(7)) ||
+            index.sourceLower.includes(lowerTerm.slice(7))
+        }
+        // client: filter (type, alias, or IP)
+        else if (lowerTerm.startsWith('client:')) {
+          matches = index.clientLower.includes(lowerTerm.slice(7))
+        }
+        // ip: filter
+        else if (lowerTerm.startsWith('ip:')) {
+          matches = index.clientIpLower.includes(lowerTerm.slice(3))
+        }
+        // app: filter (application name, process, bundle ID, or PID)
+        else if (lowerTerm.startsWith('app:')) {
+          matches = index.applicationLower.includes(lowerTerm.slice(4))
         }
         // Plain text fuzzy match against source, target, method
         else {
-          const lower = cleanTerm.toLowerCase()
-          const haystack = `${method} ${source} ${target} ${time}`.toLowerCase()
-          // Fuzzy: check if all characters appear in order
-          matches = fuzzyMatch(lower, haystack)
+          matches = fuzzyMatch(lowerTerm, index.haystack)
         }
 
         return isNegative ? !matches : matches
       })
-    })
-  }, [records, filterText, resourceTypeFilter])
 
-  return { filterText, setFilterText, resourceTypeFilter, setResourceTypeFilter, filteredRecords }
+      if (matchesAllTerms) result.push(record)
+    }
+    return result
+  }, [records, deferredFilterText, resourceTypeFilter, clientSourceFilter])
+
+  return {
+    filterText,
+    setFilterText,
+    resourceTypeFilter,
+    setResourceTypeFilter,
+    clientSourceFilter,
+    setClientSourceFilter,
+    filteredRecords,
+  }
 }
 
 function fuzzyMatch(needle: string, haystack: string): boolean {

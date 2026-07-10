@@ -7,6 +7,7 @@ import type { ProxyResponse } from './types'
 const proxyDebug = _debug('proxy')
 
 const h2SessionPool = new Map<string, http2.ClientHttp2Session>()
+const UPSTREAM_REQUEST_TIMEOUT_MS = 60000
 
 const HOP_BY_HOP_HEADERS = new Set([
     'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
@@ -106,7 +107,10 @@ function proxyViaH1(target: string, method: string, headers: Record<string, any>
     const h1Headers: Record<string, any> = {}
     const originalHost: string = headers[':authority'] || headers.host || headers.Host || url.host
     for (const [key, value] of Object.entries(headers)) {
-        if (!key.startsWith(':')) h1Headers[key] = value
+        const normalized = key.toLowerCase()
+        if (!key.startsWith(':') && normalized !== 'proxy-authorization' && normalized !== 'proxy-connection') {
+            h1Headers[key] = value
+        }
     }
     if (!h1Headers.host && !h1Headers.Host) h1Headers.host = originalHost
 
@@ -119,6 +123,9 @@ function proxyViaH1(target: string, method: string, headers: Record<string, any>
                 stream: proxyRes,
                 protocol: 'h1.1'
             })
+        })
+        proxyReq.setTimeout(UPSTREAM_REQUEST_TIMEOUT_MS, () => {
+            proxyReq.destroy(new Error('HTTP/1.1 upstream request timeout'))
         })
         proxyReq.on('error', reject)
         if (reqBody && reqBody.length > 0) proxyReq.write(reqBody)

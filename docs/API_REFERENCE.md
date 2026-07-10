@@ -583,6 +583,31 @@ Delete rule file.
 
 Get proxy logs.
 
+Application identity fields are optional:
+
+```json
+[
+  {
+    "id": 12,
+    "method": "GET",
+    "source": "https://example.com/",
+    "target": "https://example.com/",
+    "time": "10:20:30",
+    "clientType": "remote",
+    "clientIp": "192.168.1.20",
+    "applicationName": "Safari",
+    "applicationIdentitySource": "user-agent",
+    "applicationIdentityConfidence": "medium"
+  }
+]
+```
+
+- `local-process`: verified from a local macOS socket/process; may include `applicationProcess`, `applicationPid`, `applicationPath`, and `applicationBundleId`.
+- `user-agent`: inferred from a remote HTTP User-Agent; does not include process metadata.
+- User-Agent inference requires HTTP headers. Encrypted HTTPS CONNECT tunnels without interception remain unidentified.
+
+See [Application Identity](./APPLICATION_IDENTITY.md) for supported browsers, confidence semantics, and limitations.
+
 ### GET /api/logs/:id
 
 Get log detail.

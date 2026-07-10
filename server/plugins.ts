@@ -13,6 +13,77 @@ type TestPlugin = {
     [key: string]: unknown
 }
 
+export interface PluginSummary {
+    id: string
+    name: string
+    version: string
+}
+
+export async function reloadPlugins(ctx: ServerContext): Promise<{
+    status: string
+    message: string
+    count: number
+    plugins: PluginSummary[]
+}> {
+    const plugins = await ctx.reloadCustomPlugins()
+    const summaries = plugins.map((p: unknown) => {
+        const plugin = p as { manifest: { id: string; name: string; version: string } }
+        return {
+            id: plugin.manifest.id,
+            name: plugin.manifest.name,
+            version: plugin.manifest.version,
+        }
+    })
+    return {
+        status: 'success',
+        message: `已重新加载 ${summaries.length} 个自定义插件`,
+        count: summaries.length,
+        plugins: summaries,
+    }
+}
+
+export function setPluginEnabled(ctx: ServerContext, pluginId: string, enabled: boolean): {
+    status: string
+    pluginId: string
+    state: string
+} {
+    const allPlugins = ctx.pluginManager.getAll()
+    const target = allPlugins.find(p => p.manifest.id === pluginId)
+    if (!target) {
+        throw new Error('插件不存在')
+    }
+
+    const newState = enabled ? 'running' : 'disabled'
+    ctx.pluginManager.setState(pluginId, newState)
+
+    try {
+        let settings: Record<string, unknown> = {}
+        if (fs.existsSync(ctx.settingsPath)) {
+            settings = JSON.parse(fs.readFileSync(ctx.settingsPath, 'utf8'))
+        }
+        const disabledPlugins: string[] = Array.isArray(settings.disabledPlugins)
+            ? settings.disabledPlugins as string[]
+            : []
+        if (enabled) {
+            settings.disabledPlugins = disabledPlugins.filter(id => id !== pluginId)
+        } else {
+            if (!disabledPlugins.includes(pluginId)) {
+                disabledPlugins.push(pluginId)
+            }
+            settings.disabledPlugins = disabledPlugins
+        }
+        fs.writeFileSync(ctx.settingsPath, JSON.stringify(settings, null, 2), 'utf8')
+    } catch (e) {
+        console.error('保存插件状态失败:', e)
+    }
+
+    return {
+        status: 'success',
+        pluginId,
+        state: newState,
+    }
+}
+
 export function sortPluginsByHookOrder(plugins: TestPlugin[]): TestPlugin[] {
     return [...plugins].sort((a, b) => {
         const priorityA = typeof a.manifest.priority === 'number' ? a.manifest.priority : 100
@@ -272,20 +343,7 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
     app.post('/api/plugins/reload', async (_req: Request, res: Response) => {
         res.setHeader('Content-Type', 'application/json')
         try {
-            const plugins = await ctx.reloadCustomPlugins()
-            res.write(JSON.stringify({
-                status: 'success',
-                message: `已重新加载 ${plugins.length} 个自定义插件`,
-                count: plugins.length,
-                plugins: plugins.map((p: unknown) => {
-                    const plugin = p as { manifest: { id: string; name: string; version: string } }
-                    return {
-                        id: plugin.manifest.id,
-                        name: plugin.manifest.name,
-                        version: plugin.manifest.version
-                    }
-                })
-            }))
+            res.write(JSON.stringify(await reloadPlugins(ctx)))
         } catch (error) {
             res.statusCode = 500
             res.write(JSON.stringify({ error: (error as Error).message }))
@@ -718,43 +776,15 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
         const pluginId = String(req.params.id)
         const { enabled } = req.body
 
-        const allPlugins = ctx.pluginManager.getAll()
-        const target = allPlugins.find(p => p.manifest.id === pluginId)
-        if (!target) {
-            res.status(404).json({ error: '插件不存在' })
-            return
-        }
-
-        const newState = enabled ? 'running' : 'disabled'
-        ctx.pluginManager.setState(pluginId, newState)
-
-        // 持久化到 settings.json
         try {
-            let settings: Record<string, unknown> = {}
-            if (fs.existsSync(ctx.settingsPath)) {
-                settings = JSON.parse(fs.readFileSync(ctx.settingsPath, 'utf8'))
+            res.json(setPluginEnabled(ctx, pluginId, Boolean(enabled)))
+        } catch (error) {
+            if ((error as Error).message === '插件不存在') {
+                res.status(404).json({ error: '插件不存在' })
+                return
             }
-            const disabledPlugins: string[] = Array.isArray(settings.disabledPlugins)
-                ? settings.disabledPlugins as string[]
-                : []
-            if (enabled) {
-                settings.disabledPlugins = disabledPlugins.filter(id => id !== pluginId)
-            } else {
-                if (!disabledPlugins.includes(pluginId)) {
-                    disabledPlugins.push(pluginId)
-                }
-                settings.disabledPlugins = disabledPlugins
-            }
-            fs.writeFileSync(ctx.settingsPath, JSON.stringify(settings, null, 2), 'utf8')
-        } catch (e) {
-            console.error('保存插件状态失败:', e)
+            res.status(500).json({ error: (error as Error).message })
         }
-
-        res.json({
-            status: 'success',
-            pluginId,
-            state: newState,
-        })
     })
 
     // API: 获取所有插件列表

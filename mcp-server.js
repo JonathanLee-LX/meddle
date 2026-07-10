@@ -154,11 +154,9 @@ const mcpServer = new McpServer({
 })
 
 mcpServer.registerTool('start_proxy', {
-    description: '启动 easy-proxy 代理服务器，返回代理地址。env 可指定配置（如 beta）。',
-    inputSchema: {
-        env: z.string().optional().describe('环境名，如 beta、eprc.beta，对应 .epconfig/.{env} 配置文件')
-    }
-}, async ({ env }) => {
+    description: '启动 easy-proxy 代理服务器，返回代理地址。',
+    inputSchema: {}
+}, async () => {
     if (proxyProcess && proxyProcess.exitCode === null) {
         return {
             content: [{ type: 'text', text: `代理已在运行: ${cachedProxyUrl}` }]
@@ -168,7 +166,6 @@ mcpServer.registerTool('start_proxy', {
     cachedProxyUrl = null
     const indexPath = path.join(__dirname, 'index.js')
     const spawnEnv = { ...process.env, EP_MCP: '1', DEBUG: process.env.DEBUG || '' }
-    if (env) spawnEnv.EP_ENV = env
     const child = spawn(process.execPath, [indexPath], {
         env: spawnEnv,
         stdio: ['ignore', 'pipe', 'pipe'],

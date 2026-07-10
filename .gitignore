@@ -1,6 +1,4 @@
 node_modules
-.epconfig/*
-!.epconfig/*.example
 .playwright-mcp/
 solution-*.png
 web/node_modules
@@ -21,3 +19,4 @@ helpers.*.map
 cert.js
 cert.d.ts
 cert.*.mapserver.log
+.ghfs

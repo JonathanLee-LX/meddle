@@ -3,6 +3,7 @@ import * as path from 'path'
 import _debug from 'debug'
 import { getMimeType } from './map-local'
 import { appendProxyRecord } from './proxy-record'
+import { getRequestClientIdentity } from './client-identity'
 import type { ProxyContext, MockHandler, MockRuleEntry } from './types'
 
 const proxyDebug = _debug('proxy')
@@ -210,6 +211,7 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
                     target: `[MOCK: ${rule.name || rule.urlPattern}]`,
                     time: new Date().toLocaleTimeString(), mock: true as const,
                     statusCode: finalStatusCode, duration,
+                    ...getRequestClientIdentity(req),
                     mockRuleId: rule.id,
                     mockRuleName: rule.name,
                 }

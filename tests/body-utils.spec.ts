@@ -16,6 +16,19 @@ describe('body-utils safeBodyToString', () => {
         expect(safeBodyToString(gz, 100, 'gzip')).toBe('abc')
     })
 
+    it('decompresses zstd buffer when supported', () => {
+        const compress = (zlib as typeof zlib & {
+            zstdCompressSync?: (buffer: Buffer) => Buffer
+        }).zstdCompressSync
+        if (!compress) return
+        expect(safeBodyToString(compress(Buffer.from('zstd body')), 100, 'zstd')).toBe('zstd body')
+    })
+
+    it('does not decode unsupported compressed bytes as utf8', () => {
+        expect(safeBodyToString(Buffer.from([0xff, 0xfe]), 100, 'compress'))
+            .toBe('(compressed body: compress, 2 bytes)')
+    })
+
     it('returns truncated marker when exceeds max', () => {
         const text = 'x'.repeat(20)
         const result = safeBodyToString(Buffer.from(text), 5)

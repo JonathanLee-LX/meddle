@@ -530,6 +530,16 @@ export interface ProxyRecord {
     mock?: boolean;
     mapLocal?: boolean;
     protocol?: string;
+    clientType?: 'local' | 'remote' | 'plugin';
+    clientIp?: string;
+    clientName?: string;
+    applicationName?: string;
+    applicationProcess?: string;
+    applicationPid?: number;
+    applicationPath?: string;
+    applicationBundleId?: string;
+    applicationIdentitySource?: 'local-process' | 'user-agent' | 'client-reported';
+    applicationIdentityConfidence?: 'high' | 'medium' | 'low';
     _fromPluginTest?: boolean;
 }
 

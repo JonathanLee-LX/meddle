@@ -1,28 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Play, Square, Loader2, Shield, ShieldAlert, Sparkles, RefreshCw, Zap, TestTube2, Code2 } from 'lucide-react'
 import type { Plugin } from '@/types'
-import { PluginGenerator } from './plugin-generator'
-import { PluginTestDialog } from './plugin-test-dialog'
-import { PluginCodeEditor } from './plugin-code-editor'
 
 interface PluginConfigProps {
   // 插件列表相关
@@ -39,6 +23,11 @@ interface PluginConfigProps {
   fetchThirdPartyPlugins: () => Promise<void>
   loadThirdPartyPlugin: (path: string) => Promise<void>
   unloadThirdPartyPlugin: (id: string) => Promise<void>
+}
+
+interface CustomPluginFile {
+  filename: string
+  modified: string | number | Date
 }
 
 export function PluginConfig({
@@ -58,21 +47,23 @@ export function PluginConfig({
   const [loading, setLoading] = useState(false)
   const [thirdPartyPath, setThirdPartyPath] = useState('')
   const [loadingThirdParty, setLoadingThirdParty] = useState(false)
-  const [generatorOpen, setGeneratorOpen] = useState(false)
-  const [customPlugins, setCustomPlugins] = useState<any[]>([])
-  const [testDialogOpen, setTestDialogOpen] = useState(false)
-  const [testPluginId, setTestPluginId] = useState('')
-  const [testPluginName, setTestPluginName] = useState('')
-  const [testPluginHooks, setTestPluginHooks] = useState<string[]>([])
+  const [customPlugins, setCustomPlugins] = useState<CustomPluginFile[]>([])
   const [hotReloading, setHotReloading] = useState(false)
-  const [codeEditorOpen, setCodeEditorOpen] = useState(false)
-  const [codeEditorFilename, setCodeEditorFilename] = useState('')
 
   useEffect(() => {
     fetchPlugins()
     fetchThirdPartyPlugins()
     fetchCustomPlugins()
   }, [fetchPlugins, fetchThirdPartyPlugins])
+
+  useEffect(() => {
+    const handleCustomPluginsUpdated = () => {
+      void fetchCustomPlugins()
+    }
+
+    window.addEventListener('plugins-custom-updated', handleCustomPluginsUpdated)
+    return () => window.removeEventListener('plugins-custom-updated', handleCustomPluginsUpdated)
+  }, [])
 
   const fetchCustomPlugins = async () => {
     try {
@@ -88,12 +79,12 @@ export function PluginConfig({
     if (!confirm(`确定要删除插件 ${filename} 吗？`)) {
       return
     }
-    
+
     try {
       const res = await fetch(`/api/plugins/custom/${encodeURIComponent(filename)}`, {
-        method: 'DELETE'
+        method: 'DELETE',
       })
-      
+
       if (res.ok) {
         await fetchCustomPlugins()
       } else {
@@ -110,9 +101,9 @@ export function PluginConfig({
     setHotReloading(true)
     try {
       const res = await fetch('/api/plugins/reload', {
-        method: 'POST'
+        method: 'POST',
       })
-      
+
       if (res.ok) {
         const data = await res.json()
         alert(`成功热加载 ${data.count} 个插件！`)
@@ -131,15 +122,29 @@ export function PluginConfig({
   }
 
   const handleTestPlugin = (pluginId: string, pluginName: string, hooks: string[]) => {
-    setTestPluginId(pluginId)
-    setTestPluginName(pluginName)
-    setTestPluginHooks(hooks)
-    setTestDialogOpen(true)
+    window.dispatchEvent(
+      new CustomEvent('global-panel:open-panel', {
+        detail: {
+          id: 'plugin.test',
+          title: `测试插件：${pluginName}`,
+          size: 'xl',
+          params: { pluginId, pluginName, hooks },
+        },
+      }),
+    )
   }
 
   const handleEditCode = (filename: string) => {
-    setCodeEditorFilename(filename)
-    setCodeEditorOpen(true)
+    window.dispatchEvent(
+      new CustomEvent('global-panel:open-panel', {
+        detail: {
+          id: 'plugin.code',
+          title: `编辑插件代码：${filename}`,
+          size: 'xl',
+          params: { filename },
+        },
+      }),
+    )
   }
 
   const handleStartPlugin = async (id: string) => {
@@ -185,10 +190,10 @@ export function PluginConfig({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="app-page-stack">
       {/* Built-in Plugins */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
+      <section className="app-section">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-sm font-medium">内置插件</h3>
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">插件模式:</span>
@@ -197,13 +202,17 @@ export function PluginConfig({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="off">关闭</SelectItem>
-                <SelectItem value="on">开启</SelectItem>
-                <SelectItem value="shadow">影子模式</SelectItem>
+                <SelectGroup>
+                  <SelectItem value="off">关闭</SelectItem>
+                  <SelectItem value="on">开启</SelectItem>
+                  <SelectItem value="shadow">影子模式</SelectItem>
+                </SelectGroup>
               </SelectContent>
             </Select>
             {pluginMode === 'off' && (
-              <Badge variant="destructive" className="text-xs">插件未生效</Badge>
+              <Badge variant="destructive" className="text-xs">
+                插件未生效
+              </Badge>
             )}
           </div>
         </div>
@@ -240,19 +249,12 @@ export function PluginConfig({
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={plugin.state === 'running' ? 'default' : 'secondary'}>
-                        {plugin.state}
-                      </Badge>
+                      <Badge variant={plugin.state === 'running' ? 'default' : 'secondary'}>{plugin.state}</Badge>
                     </TableCell>
                     <TableCell>
                       {plugin.state === 'running' ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleStopPlugin(plugin.id)}
-                          disabled={loading}
-                        >
-                          <Square className="h-4 w-4" />
+                        <Button variant="ghost" size="sm" onClick={() => handleStopPlugin(plugin.id)} disabled={loading} aria-label={`停止插件 ${plugin.name}`}>
+                          <Square />
                         </Button>
                       ) : (
                         <Button
@@ -260,8 +262,9 @@ export function PluginConfig({
                           size="sm"
                           onClick={() => handleStartPlugin(plugin.id)}
                           disabled={loading}
+                          aria-label={`启动插件 ${plugin.name}`}
                         >
-                          <Play className="h-4 w-4" />
+                          <Play />
                         </Button>
                       )}
                     </TableCell>
@@ -271,46 +274,45 @@ export function PluginConfig({
             </TableBody>
           </Table>
         </div>
-      </div>
+      </section>
 
       {/* Custom AI Plugins */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
+      <section className="app-section">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-sm font-medium">自定义插件</h3>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={fetchCustomPlugins}
-              disabled={loading || hotReloading}
-            >
-              <RefreshCw className="h-4 w-4 mr-1" />
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={fetchCustomPlugins} disabled={loading || hotReloading}>
+              <RefreshCw data-icon="inline-start" />
               刷新列表
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleHotReload}
-              disabled={loading || hotReloading}
-              className="text-orange-600 border-orange-300 hover:bg-orange-50"
-            >
+            <Button variant="outline" size="sm" onClick={handleHotReload} disabled={loading || hotReloading}>
               {hotReloading ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  <Loader2 data-icon="inline-start" className="animate-spin" />
                   加载中...
                 </>
               ) : (
                 <>
-                  <Zap className="h-4 w-4 mr-1" />
+                  <Zap data-icon="inline-start" />
                   热加载插件
                 </>
               )}
             </Button>
             <Button
               size="sm"
-              onClick={() => setGeneratorOpen(true)}
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent('global-panel:open-panel', {
+                    detail: {
+                      id: 'plugin.generate',
+                      title: 'AI 插件生成器',
+                      size: 'xl',
+                    },
+                  }),
+                )
+              }
             >
-              <Sparkles className="h-4 w-4 mr-1" />
+              <Sparkles data-icon="inline-start" />
               AI 生成插件
             </Button>
           </div>
@@ -336,40 +338,19 @@ export function PluginConfig({
               ) : (
                 customPlugins.map((plugin) => {
                   const pluginId = plugin.filename.replace(/\.js$/, '').replace(/^/, 'local.')
-                  const loadedPlugin = plugins.find(p => p.id === pluginId)
+                  const loadedPlugin = plugins.find((p) => p.id === pluginId)
                   const isEnabled = loadedPlugin ? loadedPlugin.state !== 'disabled' : false
-                  
+
                   return (
                     <TableRow key={plugin.filename} className={!isEnabled && loadedPlugin ? 'opacity-60' : ''}>
                       <TableCell className="font-medium font-mono text-sm">{plugin.filename}</TableCell>
                       <TableCell className="text-center">
-                        {loadedPlugin && (
-                          <Switch
-                            checked={isEnabled}
-                            onCheckedChange={(checked) => togglePlugin(loadedPlugin.id, checked)}
-                          />
-                        )}
+                        {loadedPlugin && <Switch checked={isEnabled} onCheckedChange={(checked) => togglePlugin(loadedPlugin.id, checked)} />}
                       </TableCell>
                       <TableCell>
-                        {loadedPlugin ? (
-                          isEnabled ? (
-                            <Badge variant="outline" className="text-green-600 border-green-300">
-                              已启用
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-orange-600 border-orange-300">
-                              已禁用
-                            </Badge>
-                          )
-                        ) : (
-                          <Badge variant="outline" className="text-gray-600 border-gray-300">
-                            未加载
-                          </Badge>
-                        )}
+                        {loadedPlugin ? isEnabled ? <Badge>已启用</Badge> : <Badge variant="secondary">已禁用</Badge> : <Badge variant="outline">未加载</Badge>}
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {new Date(plugin.modified).toLocaleString()}
-                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{new Date(plugin.modified).toLocaleString()}</TableCell>
                       <TableCell>
                         <div className="flex gap-1">
                           <Button
@@ -377,18 +358,19 @@ export function PluginConfig({
                             size="sm"
                             onClick={() => handleEditCode(plugin.filename)}
                             title="查看/编辑代码"
+                            aria-label={`编辑插件 ${plugin.filename}`}
                           >
-                            <Code2 className="h-4 w-4" />
+                            <Code2 />
                           </Button>
                           {loadedPlugin && isEnabled && (
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleTestPlugin(loadedPlugin.id, loadedPlugin.name, loadedPlugin.hooks)}
-                              className="text-blue-600"
                               title="测试插件"
+                              aria-label={`测试插件 ${loadedPlugin.name}`}
                             >
-                              <TestTube2 className="h-4 w-4" />
+                              <TestTube2 />
                             </Button>
                           )}
                           <Button
@@ -409,32 +391,23 @@ export function PluginConfig({
             </TableBody>
           </Table>
         </div>
-      </div>
+      </section>
 
       {/* Third-party Plugins */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
+      <section className="app-section">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-sm font-medium">第三方插件</h3>
           <div className="flex items-center gap-2">
-            {thirdPartySecurity.allowAll ? (
-              <Shield className="h-4 w-4 text-green-500" />
-            ) : (
-              <ShieldAlert className="h-4 w-4 text-yellow-500" />
-            )}
+            {thirdPartySecurity.allowAll ? <Shield className="size-4 text-primary" /> : <ShieldAlert className="size-4 text-muted-foreground" />}
             <span className="text-xs text-muted-foreground">
               {thirdPartySecurity.allowAll ? '已信任所有插件' : `已信任: ${thirdPartySecurity.trusted.length} 个`}
             </span>
           </div>
         </div>
-        <div className="flex gap-2 mb-4">
-          <Input
-            value={thirdPartyPath}
-            onChange={(e) => setThirdPartyPath(e.target.value)}
-            placeholder="输入插件路径..."
-            className="flex-1"
-          />
+        <div className="flex gap-2">
+          <Input value={thirdPartyPath} onChange={(e) => setThirdPartyPath(e.target.value)} placeholder="输入插件路径..." className="flex-1" />
           <Button onClick={handleLoadThirdParty} disabled={loadingThirdParty || !thirdPartyPath.trim()}>
-            {loadingThirdParty ? <Loader2 className="h-4 w-4 animate-spin" /> : '加载'}
+            {loadingThirdParty ? <Loader2 className="animate-spin" /> : '加载'}
           </Button>
         </div>
         <div className="rounded-md border">
@@ -460,9 +433,7 @@ export function PluginConfig({
                     <TableCell className="font-medium">{plugin.name}</TableCell>
                     <TableCell>{plugin.version}</TableCell>
                     <TableCell>
-                      <Badge variant={plugin.state === 'running' ? 'default' : 'secondary'}>
-                        {plugin.state}
-                      </Badge>
+                      <Badge variant={plugin.state === 'running' ? 'default' : 'secondary'}>{plugin.state}</Badge>
                     </TableCell>
                     <TableCell>
                       <Button
@@ -481,38 +452,7 @@ export function PluginConfig({
             </TableBody>
           </Table>
         </div>
-      </div>
-
-      {/* Plugin Generator Dialog */}
-      <PluginGenerator
-        open={generatorOpen}
-        onOpenChange={setGeneratorOpen}
-        onPluginSaved={fetchCustomPlugins}
-      />
-
-      {/* Plugin Test Dialog */}
-      <PluginTestDialog
-        open={testDialogOpen}
-        onOpenChange={setTestDialogOpen}
-        pluginId={testPluginId}
-        pluginName={testPluginName}
-        hooks={testPluginHooks}
-        onPluginFixed={async () => {
-          await fetchCustomPlugins()
-          await fetchPlugins()
-        }}
-      />
-
-      {/* Plugin Code Editor */}
-      <PluginCodeEditor
-        open={codeEditorOpen}
-        onOpenChange={setCodeEditorOpen}
-        filename={codeEditorFilename}
-        onSaved={async () => {
-          await fetchCustomPlugins()
-          await fetchPlugins()
-        }}
-      />
+      </section>
     </div>
   )
 }

@@ -3,21 +3,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { FileUp, Wand2 } from 'lucide-react'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
 import { Plus, Trash2, Pencil, FileText, Code, ChevronDown, ChevronRight, GripVertical } from 'lucide-react'
 import { MonacoEditor } from '@/components/monaco-editor'
@@ -26,6 +14,11 @@ import { validateContent } from '@/lib/syntax-highlight'
 import { fixCode } from '@/lib/code-fixer'
 import { getAIConfig, isAIConfigValid } from '@/lib/ai-config-store'
 import type { MockRule } from '@/types'
+import { supportsOpenFilePicker } from '@/types/file-system-access'
+import { SaveButton } from '@/components/save-shortcut/save-button'
+import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
+import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
+import { toast } from '@/components/ui/toast'
 
 // 判断是否为 Base64 图片
 function isBase64Image(content: string): boolean {
@@ -55,17 +48,9 @@ const EMPTY_RULE: Omit<MockRule, 'id'> = {
   enabled: true,
 }
 
-export function MockConfig({
-  mockRules,
-  fetchMocks,
-  createMock,
-  updateMock,
-  deleteMock,
-  initialEditData,
-  onInitialEditConsumed,
-}: MockConfigProps) {
+export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, deleteMock, initialEditData, onInitialEditConsumed }: MockConfigProps) {
   const [editOpen, setEditOpen] = useState(false)
-  const [editId, setEditId] = useState<number | null>(null) // null = create, number = edit
+  const [editId] = useState<number | null>(null) // null = create, number = edit
   const [editForm, setEditForm] = useState<Omit<MockRule, 'id'>>(EMPTY_RULE)
   const [saving, setSaving] = useState(false)
   const [headersExpanded, setHeadersExpanded] = useState(false)
@@ -89,22 +74,22 @@ export function MockConfig({
   const getContentType = (filename: string): string => {
     const ext = filename.toLowerCase().split('.').pop() || ''
     const contentTypes: Record<string, string> = {
-      'json': 'application/json',
-      'js': 'application/javascript',
-      'css': 'text/css',
-      'html': 'text/html',
-      'htm': 'text/html',
-      'xml': 'application/xml',
-      'txt': 'text/plain',
-      'csv': 'text/csv',
-      'png': 'image/png',
-      'jpg': 'image/jpeg',
-      'jpeg': 'image/jpeg',
-      'gif': 'image/gif',
-      'webp': 'image/webp',
-      'svg': 'image/svg+xml',
-      'ico': 'image/x-icon',
-      'bmp': 'image/bmp',
+      json: 'application/json',
+      js: 'application/javascript',
+      css: 'text/css',
+      html: 'text/html',
+      htm: 'text/html',
+      xml: 'application/xml',
+      txt: 'text/plain',
+      csv: 'text/csv',
+      png: 'image/png',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      svg: 'image/svg+xml',
+      ico: 'image/x-icon',
+      bmp: 'image/bmp',
     }
     return contentTypes[ext] || 'text/plain'
   }
@@ -140,9 +125,9 @@ export function MockConfig({
   // 使用系统文件选择器选择文件
   const handleSelectFile = useCallback(async () => {
     // 优先尝试使用 File System Access API
-    if ('showOpenFilePicker' in window) {
+    if (supportsOpenFilePicker(window)) {
       try {
-        const [fileHandle] = await (window as any).showOpenFilePicker({
+        const [fileHandle] = await window.showOpenFilePicker({
           types: [
             {
               description: '响应文件',
@@ -176,7 +161,7 @@ export function MockConfig({
   const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      readFileContent(file).then(content => {
+      readFileContent(file).then((content) => {
         updateField('body', content)
         setSuggestedContentType(getSuggestedContentType(file.name))
       })
@@ -192,10 +177,16 @@ export function MockConfig({
   // 处理外部传入的初始编辑数据
   useEffect(() => {
     if (initialEditData) {
-      setEditId(null)
-      setEditForm({ ...EMPTY_RULE, ...initialEditData })
-      setEditOpen(true)
-      setHeadersExpanded(Object.keys(initialEditData.headers || {}).length > 0)
+      window.dispatchEvent(
+        new CustomEvent('global-panel:open-panel', {
+          detail: {
+            id: 'mock.create',
+            title: '新建 Mock 规则',
+            size: 'lg',
+            params: { initialData: initialEditData },
+          },
+        }),
+      )
       onInitialEditConsumed?.()
     }
   }, [initialEditData, onInitialEditConsumed])
@@ -227,78 +218,84 @@ export function MockConfig({
   }, [])
 
   const openCreate = useCallback(() => {
-    setEditId(null)
-    setEditForm(EMPTY_RULE)
-    setHeadersExpanded(false)
-    setValidationError(null)
-    setEditOpen(true)
+    window.dispatchEvent(
+      new CustomEvent('global-panel:open-panel', {
+        detail: { id: 'mock.create', title: '新建 Mock 规则', size: 'lg' },
+      }),
+    )
   }, [])
 
   const openEdit = useCallback((rule: MockRule) => {
-    setEditId(rule.id)
-    setEditForm({
-      name: rule.name,
-      urlPattern: rule.urlPattern,
-      method: rule.method,
-      statusCode: rule.statusCode,
-      delay: rule.delay || 0,
-      bodyType: rule.bodyType || 'inline',
-      headers: rule.headers || {},
-      body: rule.body,
-      enabled: rule.enabled,
-    })
-    setHeadersExpanded(!!rule.headers && Object.keys(rule.headers).length > 0)
-    
-    // 验证已有的body内容
-    if (rule.bodyType === 'inline' && rule.body) {
-      validateBody(rule.body)
-    } else {
-      setValidationError(null)
-    }
-    
-    setEditOpen(true)
-  }, [validateBody])
+    window.dispatchEvent(
+      new CustomEvent('global-panel:open-panel', {
+        detail: {
+          id: 'mock.edit',
+          title: `编辑 Mock：${rule.name || rule.urlPattern}`,
+          size: 'lg',
+          params: { id: rule.id },
+        },
+      }),
+    )
+  }, [])
 
   // 拖拽调整编辑器高度
-  const handleEditorResize = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    const startY = e.clientY
-    const startHeight = editorHeight
+  const handleEditorResize = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault()
+      const startY = e.clientY
+      const startHeight = editorHeight
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const deltaY = moveEvent.clientY - startY
-      const newHeight = Math.max(150, startHeight + deltaY) // 最小高度 150px
-      setEditorHeight(newHeight)
-    }
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        const deltaY = moveEvent.clientY - startY
+        const newHeight = Math.max(150, startHeight + deltaY) // 最小高度 150px
+        setEditorHeight(newHeight)
+      }
 
-    const handleMouseUp = () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-    }
+      const handleMouseUp = () => {
+        document.removeEventListener('mousemove', handleMouseMove)
+        document.removeEventListener('mouseup', handleMouseUp)
+      }
 
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
-  }, [editorHeight])
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+    },
+    [editorHeight],
+  )
 
   const handleSave = useCallback(async () => {
     // 在保存前进行最终验证
     if (editForm.bodyType === 'inline' && editForm.body.trim()) {
       const result = validateContent(editForm.body)
       if (!result.valid) {
-        setValidationError(result.error || '内容格式错误')
+        const message = result.error || '内容格式错误'
+        setValidationError(message)
+        toast.error(message)
         return
       }
     }
 
     setSaving(true)
-    if (editId != null) {
-      await updateMock(editId, editForm)
-    } else {
-      await createMock(editForm)
+    try {
+      const saved = editId != null
+        ? await updateMock(editId, editForm)
+        : Boolean(await createMock(editForm))
+      if (!saved) throw new Error('保存 Mock 规则失败')
+
+      toast.success('Mock 规则保存成功')
+      setEditOpen(false)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '保存失败')
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
-    setEditOpen(false)
   }, [editId, editForm, createMock, updateMock])
+
+  useSaveShortcut({
+    active: editOpen,
+    enabled: !saving && Boolean(editForm.urlPattern),
+    priority: SAVE_SHORTCUT_PRIORITY.modal,
+    onSave: handleSave,
+  })
 
   const handleToggle = useCallback(
     async (rule: MockRule, enabled: boolean) => {
@@ -316,7 +313,7 @@ export function MockConfig({
 
   const updateField = <K extends keyof Omit<MockRule, 'id'>>(field: K, value: Omit<MockRule, 'id'>[K]) => {
     setEditForm((prev) => ({ ...prev, [field]: value }))
-    
+
     // 当更新body时进行实时验证
     if (field === 'body' && typeof value === 'string') {
       validateBody(value)
@@ -362,16 +359,11 @@ export function MockConfig({
   }, [editForm.body])
 
   return (
-    <div className="space-y-4">
+    <div className="app-page-stack">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-muted-foreground">
-          Mock 规则配置
-          <span className="ml-2 text-xs">
-            匹配请求后直接返回预设响应，不再转发到真实服务器
-          </span>
-        </h3>
+        <h3 className="text-sm font-medium">规则列表</h3>
         <Button variant="outline" size="sm" onClick={openCreate}>
-          <Plus className="h-4 w-4 mr-1" />
+          <Plus data-icon="inline-start" />
           新增规则
         </Button>
       </div>
@@ -402,14 +394,9 @@ export function MockConfig({
               mockRules.map((rule) => (
                 <TableRow key={rule.id}>
                   <TableCell>
-                    <Checkbox
-                      checked={rule.enabled}
-                      onCheckedChange={(checked) => handleToggle(rule, checked === true)}
-                    />
+                    <Checkbox checked={rule.enabled} onCheckedChange={(checked) => handleToggle(rule, checked === true)} />
                   </TableCell>
-                  <TableCell className="font-medium text-sm">
-                    {rule.name || <span className="text-muted-foreground italic">未命名</span>}
-                  </TableCell>
+                  <TableCell className="font-medium text-sm">{rule.name || <span className="text-muted-foreground italic">未命名</span>}</TableCell>
                   <TableCell className="font-mono text-xs truncate max-w-[300px]" title={rule.urlPattern}>
                     {rule.urlPattern}
                   </TableCell>
@@ -419,33 +406,22 @@ export function MockConfig({
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={`text-xs ${
-                        rule.statusCode >= 200 && rule.statusCode < 300
-                          ? 'text-green-600'
-                          : rule.statusCode >= 400
-                          ? 'text-red-600'
-                          : 'text-amber-600'
-                      }`}
-                    >
-                      {rule.statusCode}
-                    </Badge>
+                    <Badge variant={rule.statusCode >= 400 ? 'destructive' : rule.statusCode >= 300 ? 'secondary' : 'default'}>{rule.statusCode}</Badge>
                   </TableCell>
                   <TableCell>
                     {rule.bodyType === 'file' ? (
-                      <Badge variant="outline" className="text-xs text-blue-600">
-                        <FileText className="h-3 w-3 mr-0.5" />文件
+                      <Badge variant="secondary">
+                        <FileText />
+                        文件
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-xs text-muted-foreground">
-                        <Code className="h-3 w-3 mr-0.5" />内容
+                      <Badge variant="outline">
+                        <Code />
+                        内容
                       </Badge>
                     )}
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground font-mono">
-                    {rule.delay ? `${rule.delay}ms` : '-'}
-                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground font-mono">{rule.delay ? `${rule.delay}ms` : '-'}</TableCell>
                   <TableCell>
                     {rule.headers && Object.keys(rule.headers).length > 0 ? (
                       <Badge variant="secondary" className="text-xs">
@@ -459,19 +435,21 @@ export function MockConfig({
                     <div className="flex gap-1">
                       <Button
                         variant="ghost"
-                        size="sm"
+                        size="icon-sm"
                         onClick={() => openEdit(rule)}
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
+                        className="text-muted-foreground hover:text-primary"
+                        aria-label="编辑 Mock 规则"
                       >
-                        <Pencil className="h-3.5 w-3.5" />
+                        <Pencil />
                       </Button>
                       <Button
                         variant="ghost"
-                        size="sm"
+                        size="icon-sm"
                         onClick={() => handleDelete(rule.id)}
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        className="text-muted-foreground hover:text-destructive"
+                        aria-label="删除 Mock 规则"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 />
                       </Button>
                     </div>
                   </TableCell>
@@ -486,27 +464,18 @@ export function MockConfig({
       <Sheet open={editOpen} onOpenChange={setEditOpen}>
         <SheetContent className="p-0 flex flex-col" resizable defaultWidth={700} storageKey="mock-config-editor">
           <SheetHeader className="px-4 pt-4 pb-2">
-            <SheetTitle className="text-base">
-              {editId != null ? '编辑 Mock 规则' : '新建 Mock 规则'}
-            </SheetTitle>
+            <SheetTitle className="text-base">{editId != null ? '编辑 Mock 规则' : '新建 Mock 规则'}</SheetTitle>
           </SheetHeader>
           <Separator />
-          <div className="flex-1 overflow-auto px-4 py-3 space-y-4">
+          <div className="app-panel-content">
             {/* 名称 */}
-            <div className="space-y-1">
+            <div className="app-field-group">
               <label className="text-xs font-medium text-muted-foreground">规则名称</label>
-              <Input
-                value={editForm.name}
-                onChange={(e) => updateField('name', e.target.value)}
-                placeholder="如：模拟欠费状态"
-                className="h-8"
-              />
+              <Input value={editForm.name} onChange={(e) => updateField('name', e.target.value)} placeholder="如：模拟欠费状态" className="h-8" />
             </div>
             {/* URL 匹配 */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
-                URL 匹配（支持正则）
-              </label>
+            <div className="app-field-group">
+              <label className="text-xs font-medium text-muted-foreground">URL 匹配（支持正则）</label>
               <Input
                 value={editForm.urlPattern}
                 onChange={(e) => updateField('urlPattern', e.target.value)}
@@ -516,7 +485,7 @@ export function MockConfig({
             </div>
             {/* 方法和状态码 */}
             <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
+              <div className="app-field-group">
                 <label className="text-xs font-medium text-muted-foreground">HTTP 方法</label>
                 <select
                   value={editForm.method}
@@ -531,16 +500,11 @@ export function MockConfig({
                   <option value="PATCH">PATCH</option>
                 </select>
               </div>
-              <div className="space-y-1">
+              <div className="app-field-group">
                 <label className="text-xs font-medium text-muted-foreground">响应状态码</label>
-                <Input
-                  type="number"
-                  value={editForm.statusCode}
-                  onChange={(e) => updateField('statusCode', parseInt(e.target.value) || 200)}
-                  className="h-8"
-                />
+                <Input type="number" value={editForm.statusCode} onChange={(e) => updateField('statusCode', parseInt(e.target.value) || 200)} className="h-8" />
               </div>
-              <div className="space-y-1">
+              <div className="app-field-group">
                 <label className="text-xs font-medium text-muted-foreground">响应延迟 (ms)</label>
                 <Input
                   type="number"
@@ -552,17 +516,12 @@ export function MockConfig({
               </div>
             </div>
             {/* 响应 Body */}
-            <div className="space-y-1">
+            <div className="app-field-group">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-medium text-muted-foreground">响应内容 (Body)</label>
                 <div className="flex items-center gap-2">
                   {/* 从文件加载按钮 */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-6 text-xs"
-                    onClick={handleSelectFile}
-                  >
+                  <Button variant="outline" size="sm" className="h-6 text-xs" onClick={handleSelectFile}>
                     <FileUp className="h-3 w-3 mr-1" />
                     从文件加载
                   </Button>
@@ -601,29 +560,15 @@ export function MockConfig({
                     <FileUp className="h-3 w-3 mr-1" />
                     从URL导入
                   </Button>
-                  {formatError && (
-                    <span className="text-xs text-red-500">{formatError}</span>
-                  )}
+                  {formatError && <span className="text-xs text-red-500">{formatError}</span>}
                   {/* AI修复按钮 - 当有内容时显示 */}
                   {editForm.body.trim() && isAIConfigValid(getAIConfig()) && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 text-xs"
-                      onClick={fixBodyErrors}
-                      disabled={fixing}
-                    >
+                    <Button variant="outline" size="sm" className="h-6 text-xs" onClick={fixBodyErrors} disabled={fixing}>
                       <Wand2 className="h-3 w-3 mr-1" />
                       {fixing ? '修复中...' : 'AI修复'}
                     </Button>
                   )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 text-xs"
-                    onClick={formatBody}
-                    disabled={formatting}
-                  >
+                  <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={formatBody} disabled={formatting}>
                     <Code className="h-3 w-3 mr-1" />
                     {formatting ? '格式化中...' : '智能格式化'}
                   </Button>
@@ -640,19 +585,10 @@ export function MockConfig({
               {editForm.body.trim() && isBase64Image(editForm.body) ? (
                 <div className="space-y-2">
                   <div className="border rounded-md p-2 bg-muted/30">
-                    <img
-                      src={editForm.body}
-                      alt="Preview"
-                      className="max-w-full max-h-96 object-contain"
-                    />
+                    <img src={editForm.body} alt="Preview" className="max-w-full max-h-96 object-contain" />
                   </div>
                   <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 text-xs"
-                      onClick={() => updateField('body', '')}
-                    >
+                    <Button variant="outline" size="sm" className="h-6 text-xs" onClick={() => updateField('body', '')}>
                       删除图片
                     </Button>
                     <Button
@@ -674,7 +610,7 @@ export function MockConfig({
                   <MonacoEditor
                     value={editForm.body}
                     onChange={(v) => updateField('body', v)}
-                    placeholder='支持 JSON, HTML, JS, CSS 等格式，或从文件/URL导入'
+                    placeholder="支持 JSON, HTML, JS, CSS 等格式，或从文件/URL导入"
                     height={`${editorHeight}px`}
                   />
                   {/* 拖拽调整高度手柄 */}
@@ -701,11 +637,7 @@ export function MockConfig({
                   className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
                   onClick={() => setHeadersExpanded(!headersExpanded)}
                 >
-                  {headersExpanded ? (
-                    <ChevronDown className="h-3 w-3" />
-                  ) : (
-                    <ChevronRight className="h-3 w-3" />
-                  )}
+                  {headersExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                   响应头 (Headers)
                   {Object.keys(editForm.headers || {}).length > 0 && (
                     <Badge variant="secondary" className="ml-1 text-xs">
@@ -716,27 +648,23 @@ export function MockConfig({
                 {/* Content-Type 建议更新提示 */}
                 {suggestedContentType && (
                   <div className="flex items-center gap-2 text-xs">
-                    <span className="text-amber-600 dark:text-amber-400">
-                      检测到内容类型变更，建议更新为 {suggestedContentType}?
-                    </span>
+                    <span className="text-amber-600 dark:text-amber-400">检测到内容类型变更，建议更新为 {suggestedContentType}?</span>
                     <Button
                       variant="outline"
                       size="sm"
                       className="h-6 text-xs"
                       onClick={() => {
                         const currentHeaders = editForm.headers || {}
-                        updateField('headers', { ...currentHeaders, 'Content-Type': suggestedContentType })
+                        updateField('headers', {
+                          ...currentHeaders,
+                          'Content-Type': suggestedContentType,
+                        })
                         setSuggestedContentType(null)
                       }}
                     >
                       更新
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-xs"
-                      onClick={() => setSuggestedContentType(null)}
-                    >
+                    <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setSuggestedContentType(null)}>
                       忽略
                     </Button>
                   </div>
@@ -765,7 +693,10 @@ export function MockConfig({
                           <Input
                             value={value}
                             onChange={(e) => {
-                              updateField('headers', { ...editForm.headers, [key]: e.target.value })
+                              updateField('headers', {
+                                ...editForm.headers,
+                                [key]: e.target.value,
+                              })
                             }}
                             placeholder="Header 值"
                             className="h-7 font-mono text-xs flex-1"
@@ -808,7 +739,10 @@ export function MockConfig({
                       className="h-7"
                       onClick={() => {
                         if (headerKey && headerValue) {
-                          updateField('headers', { ...editForm.headers, [headerKey]: headerValue })
+                          updateField('headers', {
+                            ...editForm.headers,
+                            [headerKey]: headerValue,
+                          })
                           setHeaderKey('')
                           setHeaderValue('')
                         }
@@ -823,10 +757,7 @@ export function MockConfig({
             </div>
             {/* 启用 */}
             <div className="flex items-center gap-2">
-              <Checkbox
-                checked={editForm.enabled}
-                onCheckedChange={(checked) => updateField('enabled', !!checked)}
-              />
+              <Checkbox checked={editForm.enabled} onCheckedChange={(checked) => updateField('enabled', !!checked)} />
               <label className="text-sm">启用此规则</label>
             </div>
           </div>
@@ -835,9 +766,9 @@ export function MockConfig({
             <Button variant="outline" size="sm" onClick={() => setEditOpen(false)}>
               取消
             </Button>
-            <Button size="sm" onClick={handleSave} disabled={saving || !editForm.urlPattern}>
+            <SaveButton size="sm" onClick={handleSave} disabled={saving || !editForm.urlPattern}>
               {saving ? '保存中...' : '保存'}
-            </Button>
+            </SaveButton>
           </div>
         </SheetContent>
       </Sheet>

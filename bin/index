@@ -8,6 +8,7 @@ const subcommand = args[1]
 const commands = {
   'doctor': './doctor.js',
   'start': './commands/start.js',
+  'supervise': './commands/supervise.js',
   'url': './commands/url.js',
   'status': './commands/status.js',
   'mock': './commands/mock/index.js',
@@ -40,7 +41,9 @@ Easy Proxy - 开发代理工具
 
 用法:
   ep                          启动代理服务器 (默认)
-  ep start [--env <name>]     启动代理服务器 (指定环境)
+  ep start [options]          启动代理服务器
+  ep supervise [options]      以前台守护模式启动并自动重启
+  ep --remote                 启动局域网手机代理并解密 HTTPS
   ep doctor                   检查配置文件健康状况
   ep url                      获取代理 URL
   ep status                   查看代理状态
@@ -68,10 +71,20 @@ Route 命令:
   --help, -h                  显示帮助信息
   --json                      JSON 格式输出 (用于 list/show/preview 命令)
   --open                      启动后自动打开浏览器
+  --remote                    允许局域网设备连接代理
+  --remote-token <token>      为远程代理启用 Basic 认证
+  --intercept-https           解密所有 HTTPS 流量
+  --no-intercept-https        远程模式下不解密 HTTPS
+  --daemon                    supervise 后台运行，日志写入 ~/.ep/supervisor.log
+  --max-restarts <n>          supervise 最大重启次数，0 表示不限
+  --restart-delay <ms>        supervise 重启延迟，默认 1000ms
 
 示例:
   ep                          # 启动代理服务器
   ep --open                   # 启动并打开浏览器
+  ep --remote                 # 启动手机抓包代理
+  ep --remote --remote-token "change-me"
+  ep supervise --remote       # 守护模式启动远程代理
   ep doctor                   # 检查配置文件
   ep mock list --json         # JSON 格式列出 mock 规则
   ep mock add --name "API" --pattern "api.test.com" --status 200

@@ -201,8 +201,9 @@ function HeaderDiffView({
 }
 
 interface PluginTestDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  embedded?: boolean
   pluginId: string
   pluginName: string
   hooks: string[]
@@ -213,6 +214,62 @@ interface TestErrorItem {
   hookName: string
   message: string
   stack?: string
+}
+
+interface PluginHookResult {
+  status?: 'success' | 'error' | string
+  error?: string
+  stack?: string
+  duration?: number
+  targetChanged?: string
+}
+
+interface PluginTestRequestSnapshot {
+  headers?: Record<string, unknown>
+  body?: string
+}
+
+interface PluginTestResponseSnapshot {
+  statusCode?: number
+  bodyLength: number
+  bodyPreview?: string
+  bodyForDiff?: string
+  bodyChanged?: boolean
+  headers?: Record<string, unknown>
+}
+
+interface PluginTestRealRequest {
+  fetchDuration?: number
+  fetchError?: string
+  method: string
+  targetResolved?: boolean
+  testMode?: 'integrated' | 'standalone' | string
+  url: string
+  usedMock?: boolean
+}
+
+interface PluginTestLog {
+  level: string
+  message: string
+}
+
+interface PluginTestResults {
+  error?: string
+  hookResults?: Record<string, PluginHookResult>
+  logs?: PluginTestLog[]
+  modifiedRequest?: PluginTestRequestSnapshot
+  modifiedResponse?: PluginTestResponseSnapshot
+  originalRequest?: PluginTestRequestSnapshot
+  originalResponse?: PluginTestResponseSnapshot
+  realRequest?: PluginTestRealRequest
+  requestBodyChanged?: boolean
+  requestHeadersChanged?: boolean
+  responseHeadersChanged?: boolean
+  shortCircuited?: boolean
+  shortCircuitResponse?: {
+    body?: string
+    statusCode?: number
+  }
 }
 
 function getFixStageLabel(stage: 'idle' | 'generating' | 'saving' | 'reloading' | 'retesting'): string {
@@ -231,8 +288,9 @@ function getFixStageLabel(stage: 'idle' | 'generating' | 'saving' | 'reloading' 
 }
 
 export function PluginTestDialog({
-  open,
+  open = false,
   onOpenChange,
+  embedded = false,
   pluginId,
   pluginName,
   hooks,
@@ -243,7 +301,7 @@ export function PluginTestDialog({
   const [testUrl, setTestUrl] = useState('https://365.wps.cn/home')
   const [testMethod, setTestMethod] = useState('GET')
   const [testMode, setTestMode] = useState<'standalone' | 'integrated'>('standalone')
-  const [testResults, setTestResults] = useState<any>(null)
+  const [testResults, setTestResults] = useState<PluginTestResults | null>(null)
   const [headerDiffMode, setHeaderDiffMode] = useState<DiffViewMode>('split')
   const [bodyDiffMode, setBodyDiffMode] = useState<DiffViewMode>('inline')
   const [fixResult, setFixResult] = useState<{ status: 'success' | 'error'; message: string } | null>(null)
@@ -311,7 +369,7 @@ export function PluginTestDialog({
     if (testResults?.error) {
       errors.push({ hookName: 'test', message: testResults.error })
     }
-    Object.entries(testResults?.hookResults || {}).forEach(([hookName, result]: [string, any]) => {
+    Object.entries(testResults?.hookResults || {}).forEach(([hookName, result]) => {
       if (result?.status === 'error') {
         errors.push({
           hookName,
@@ -354,6 +412,7 @@ export function PluginTestDialog({
     setPluginCode(nextCode)
     setFixStreamCode(nextCode)
     setCodeViewMode('diff')
+    window.dispatchEvent(new CustomEvent('plugins-custom-updated'))
     onPluginFixed?.()
 
     if (shouldRetest) {
@@ -585,9 +644,8 @@ export function PluginTestDialog({
     }
   }
 
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="p-0 flex flex-col" resizable defaultWidth={900} storageKey="plugin-test">
+  const body = (
+    <>
         <SheetHeader className="px-6 pt-6 pb-4">
           <SheetTitle className="flex items-center gap-2">
             <Terminal className="h-5 w-5" />
@@ -600,10 +658,10 @@ export function PluginTestDialog({
 
         <Separator />
 
-        <div className="flex-1 overflow-auto px-6 py-4 space-y-4">
+        <div className="app-panel-content">
           {/* 测试配置 */}
-          <div className="space-y-3">
-            <div className="space-y-2">
+          <div className="app-section">
+            <div className="app-field-group">
               <Label htmlFor="testUrl">请求 URL</Label>
               <Input
                 id="testUrl"
@@ -614,14 +672,14 @@ export function PluginTestDialog({
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="app-field-group">
               <Label>HTTP 方法</Label>
               <div className="flex gap-2">
                 {['GET', 'POST', 'PUT', 'DELETE'].map((method) => (
                   <Button
                     key={method}
                     type="button"
-                    variant={testMethod === method ? 'default' : 'outline'}
+                    variant={testMethod === method ? 'selected' : 'outline'}
                     size="sm"
                     onClick={() => setTestMethod(method)}
                     disabled={testing}
@@ -632,12 +690,12 @@ export function PluginTestDialog({
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="app-field-group">
               <Label>测试模式</Label>
               <div className="flex gap-2 flex-wrap">
                 <Button
                   type="button"
-                  variant={testMode === 'standalone' ? 'default' : 'outline'}
+                  variant={testMode === 'standalone' ? 'selected' : 'outline'}
                   size="sm"
                   onClick={() => setTestMode('standalone')}
                   disabled={testing}
@@ -647,7 +705,7 @@ export function PluginTestDialog({
                 </Button>
                 <Button
                   type="button"
-                  variant={testMode === 'integrated' ? 'default' : 'outline'}
+                  variant={testMode === 'integrated' ? 'selected' : 'outline'}
                   size="sm"
                   onClick={() => setTestMode('integrated')}
                   disabled={testing}
@@ -872,7 +930,7 @@ export function PluginTestDialog({
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {Object.entries(testResults.hookResults || {}).map(([hookName, result]: [string, any]) => (
+                        {Object.entries(testResults.hookResults || {}).map(([hookName, result]) => (
                           <div
                             key={hookName}
                             className={`border rounded-md p-3 ${
@@ -1107,7 +1165,7 @@ export function PluginTestDialog({
                       <h3 className="text-sm font-medium">插件日志</h3>
                       <div className="bg-muted rounded-md p-3 max-h-[200px] overflow-auto">
                         <div className="space-y-1">
-                          {testResults.logs.map((log: any, idx: number) => (
+                          {testResults.logs.map((log, idx) => (
                             <div key={idx} className="text-xs font-mono">
                               <span
                                 className={`inline-block w-12 ${
@@ -1138,7 +1196,7 @@ export function PluginTestDialog({
         <Separator />
 
         <div className="px-6 py-4 flex justify-between gap-2">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={testing}>
+          <Button variant="outline" size="sm" onClick={() => onOpenChange?.(false)} disabled={testing}>
             关闭
           </Button>
           <Button size="sm" onClick={handleTest} disabled={testing}>
@@ -1155,6 +1213,17 @@ export function PluginTestDialog({
             )}
           </Button>
         </div>
+    </>
+  )
+
+  if (embedded) {
+    return <div className="flex h-full min-h-0 flex-col">{body}</div>
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={(value) => onOpenChange?.(value)}>
+      <SheetContent className="p-0 flex flex-col" resizable defaultWidth={900} storageKey="plugin-test">
+        {body}
       </SheetContent>
     </Sheet>
   )

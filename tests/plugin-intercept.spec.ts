@@ -36,9 +36,9 @@ describe('plugin-intercept createPluginIntercept', () => {
             expect(pi.shouldInterceptResponse()).toBe(false)
         })
 
-        it('returns false when pipeline mode is "shadow"', () => {
+        it('returns true when pipeline mode is "shadow"', () => {
             const pi = createPluginIntercept(makeCtx({ requestPipeline: { mode: 'shadow' } }))
-            expect(pi.shouldInterceptResponse()).toBe(false)
+            expect(pi.shouldInterceptResponse()).toBe(true)
         })
     })
 
@@ -110,6 +110,85 @@ describe('plugin-intercept createPluginIntercept', () => {
             expect(capturedBody).toBe('hello world')
         })
 
+        it('decompresses zstd content before passing to plugins', async () => {
+            const compress = (zlib as typeof zlib & {
+                zstdCompressSync?: (buffer: Buffer) => Buffer
+            }).zstdCompressSync
+            if (!compress) return
+
+            let capturedBody = ''
+            let endedBody: Buffer | null = null
+            const ctx = makeCtx({
+                requestPipeline: { mode: 'on' },
+                hookDispatcher: {
+                    dispatch: async (_hook: string, responseCtx: any) => {
+                        if (responseCtx?.response) capturedBody = responseCtx.response.body
+                    },
+                },
+            })
+            const pi = createPluginIntercept(ctx)
+            const compressed = compress(Buffer.from('<html>zstd page</html>'))
+
+            const result = await pi.interceptResponseWithPlugins({
+                req: { method: 'GET', headers: {} },
+                res: {
+                    writeHead: () => {},
+                    end: (body: Buffer) => { endedBody = body },
+                },
+                source: 'https://oc.livs.top/',
+                target: 'https://oc.livs.top/',
+                startTime: Date.now(),
+                statusCode: 200,
+                headers: { 'content-type': 'text/html', 'content-encoding': 'zstd' },
+                bodyBuffer: compressed,
+                reqBody: Buffer.alloc(0),
+            })
+
+            expect(result).toBe(true)
+            expect(capturedBody).toBe('<html>zstd page</html>')
+            expect(endedBody?.toString('utf8')).toBe('<html>zstd page</html>')
+        })
+
+        it('passes through text responses with unsupported or invalid compression', async () => {
+            const dispatches: string[] = []
+            const ctx = makeCtx({
+                requestPipeline: { mode: 'on' },
+                hookDispatcher: {
+                    dispatch: async (hook: string) => { dispatches.push(hook) },
+                },
+            })
+            const pi = createPluginIntercept(ctx)
+            const res = {
+                writeHead: () => { throw new Error('should not write intercepted response') },
+                end: () => { throw new Error('should not end intercepted response') },
+            }
+
+            expect(await pi.interceptResponseWithPlugins({
+                req: { method: 'GET', headers: {} },
+                res,
+                source: 'https://a.com',
+                target: 'https://a.com',
+                startTime: Date.now(),
+                statusCode: 200,
+                headers: { 'content-type': 'text/plain', 'content-encoding': 'compress' },
+                bodyBuffer: Buffer.from('encoded'),
+                reqBody: Buffer.alloc(0),
+            })).toBe(false)
+
+            expect(await pi.interceptResponseWithPlugins({
+                req: { method: 'GET', headers: {} },
+                res,
+                source: 'https://a.com',
+                target: 'https://a.com',
+                startTime: Date.now(),
+                statusCode: 200,
+                headers: { 'content-type': 'text/plain', 'content-encoding': 'gzip' },
+                bodyBuffer: Buffer.from('invalid gzip'),
+                reqBody: Buffer.alloc(0),
+            })).toBe(false)
+            expect(dispatches).toEqual([])
+        })
+
         it('applies cleanHeaders function when provided', async () => {
             const ctx = makeCtx({
                 requestPipeline: { mode: 'on' },
@@ -169,6 +248,60 @@ describe('plugin-intercept createPluginIntercept', () => {
                 'onAfterResponse',
             ])
             expect(inspectionMeta._inspectionStages[0].changes?.responseHeaders?.['x-plugin']).toBe('1')
+        })
+
+        it('runs response hooks in shadow mode without applying plugin response mutations', async () => {
+            const dispatched: string[] = []
+            const inspectionMeta = { _inspectionStages: [] as any[] }
+            const ctx = makeCtx({
+                requestPipeline: { mode: 'shadow' },
+                hookDispatcher: {
+                    dispatch: async (hook: string, responseCtx: any) => {
+                        dispatched.push(hook)
+                        if (hook === 'onBeforeResponse') {
+                            responseCtx.response.statusCode = 299
+                            responseCtx.response.headers['x-plugin'] = 'shadow'
+                            responseCtx.response.body = '{"changed":true}'
+                        }
+                        return [{
+                            pluginId: 'local.custom',
+                            status: 'ok',
+                            duration: 2,
+                        }]
+                    },
+                },
+            })
+            const pi = createPluginIntercept(ctx)
+
+            let writtenStatus = 0
+            let writtenHeaders: any = null
+            let endedBody: Buffer | null = null
+            const originalBody = Buffer.from('{"ok":true}')
+            await pi.interceptResponseWithPlugins({
+                req: { method: 'GET', headers: {} },
+                res: {
+                    writeHead: (status: number, headers: any) => {
+                        writtenStatus = status
+                        writtenHeaders = headers
+                    },
+                    end: (body: Buffer) => { endedBody = body },
+                },
+                source: 'https://a.com',
+                target: 'https://a.com',
+                startTime: Date.now(),
+                statusCode: 200,
+                headers: { 'content-type': 'application/json', 'content-length': String(originalBody.length) },
+                bodyBuffer: originalBody,
+                reqBody: Buffer.alloc(0),
+                inspectionMeta,
+            })
+
+            expect(dispatched).toEqual(['onBeforeResponse', 'onAfterResponse'])
+            expect(writtenStatus).toBe(200)
+            expect(writtenHeaders['x-plugin']).toBe(undefined)
+            expect(writtenHeaders['content-length']).toBe(String(originalBody.length))
+            expect(endedBody?.toString('utf-8')).toBe('{"ok":true}')
+            expect(inspectionMeta._inspectionStages[0].changes?.responseBody).toBe('{"changed":true}')
         })
     })
 

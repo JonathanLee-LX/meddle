@@ -13,12 +13,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Loader2, Wand2, RotateCw, Activity, XCircle, ArrowRight, ArrowDown, Clock, CornerDownRight, Flag, Route, ShieldCheck, ChevronDown, ChevronRight, Monitor, Server } from 'lucide-react'
 import { diffLines } from 'diff'
 import { highlightCode } from '@/lib/syntax-highlight'
+import { ApplicationIcon } from '@/components/application-icon'
 import type { RecordDetail, ProxyRecord, InspectionStage } from '@/types'
 import { BodyDiffView } from './body-diff-view'
 
 interface DetailPanelProps {
-  open: boolean
-  onClose: () => void
+  open?: boolean
+  onClose?: () => void
+  embedded?: boolean
   detail: RecordDetail | null
   loading: boolean
   error?: string | null
@@ -664,7 +666,7 @@ function InspectionView({ inspection }: { inspection: NonNullable<RecordDetail['
   )
 }
 
-export function DetailPanel({ open, onClose, detail, loading, error, selectedRecord, onCreateMock, onReplay }: DetailPanelProps) {
+export function DetailPanel({ open = false, onClose, embedded = false, detail, loading, error, selectedRecord, onCreateMock, onReplay }: DetailPanelProps) {
   const [replaying, setReplaying] = useState(false)
 
   const handleCreateMock = () => {
@@ -694,15 +696,57 @@ export function DetailPanel({ open, onClose, detail, loading, error, selectedRec
     }
   }
 
-  return (
-    <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <SheetContent className="p-0 flex flex-col" resizable defaultWidth={640} storageKey="detail-panel">
+  const body = (
+    <>
         <SheetHeader className="px-4 pt-4 pb-2">
           <SheetTitle className="flex items-center gap-2 text-base">
             请求详情
             {detail && (
               <Badge className={`${getStatusColor(detail.statusCode)} border-0`}>
                 {detail.statusCode} {detail.statusMessage}
+              </Badge>
+            )}
+            {selectedRecord?.clientType && (
+              <Badge
+                variant="outline"
+                className="max-w-48 text-[10px] font-mono"
+                title={[selectedRecord.clientName, selectedRecord.clientIp].filter(Boolean).join(' · ')}
+              >
+                {selectedRecord.clientName
+                  || (selectedRecord.clientType === 'local'
+                    ? '本机'
+                    : selectedRecord.clientType === 'plugin'
+                      ? '插件测试'
+                      : '远程设备')}
+                {selectedRecord.clientIp ? ` · ${selectedRecord.clientIp}` : ''}
+              </Badge>
+            )}
+            {selectedRecord?.applicationName && (
+              <Badge
+                variant="outline"
+                className="max-w-56 gap-1.5 text-[10px]"
+                title={[
+                  selectedRecord.applicationIdentitySource === 'local-process'
+                    ? '识别方式: 本机进程'
+                    : selectedRecord.applicationIdentitySource === 'user-agent'
+                      ? '识别方式: User-Agent 推断'
+                      : selectedRecord.applicationIdentitySource === 'client-reported'
+                        ? '识别方式: 客户端上报'
+                        : undefined,
+                  selectedRecord.applicationIdentityConfidence
+                    ? `可信度: ${selectedRecord.applicationIdentityConfidence === 'high' ? '高' : selectedRecord.applicationIdentityConfidence === 'medium' ? '中' : '低'}`
+                    : undefined,
+                  selectedRecord.applicationProcess,
+                  selectedRecord.applicationPid ? `PID ${selectedRecord.applicationPid}` : undefined,
+                  selectedRecord.applicationBundleId,
+                  selectedRecord.applicationPath,
+                ].filter(Boolean).join(' · ')}
+              >
+                <ApplicationIcon record={selectedRecord} compact />
+                <span className="truncate">{selectedRecord.applicationName}</span>
+                {selectedRecord.applicationIdentitySource === 'user-agent' && (
+                  <span className="shrink-0 text-[9px] text-muted-foreground">推断</span>
+                )}
               </Badge>
             )}
             <div className="flex items-center gap-1.5 ml-auto">
@@ -822,6 +866,17 @@ export function DetailPanel({ open, onClose, detail, loading, error, selectedRec
             )}
           </div>
         )}
+    </>
+  )
+
+  if (embedded) {
+    return <div className="flex h-full min-h-0 flex-col">{body}</div>
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose?.()}>
+      <SheetContent className="p-0 flex flex-col" resizable defaultWidth={640} storageKey="detail-panel">
+        {body}
       </SheetContent>
     </Sheet>
   )

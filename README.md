@@ -16,9 +16,6 @@ ep
 # 启动并自动打开浏览器
 ep --open
 
-# 指定环境启动
-ep start --env beta
-
 # 检查配置文件健康状况
 ep doctor
 
@@ -37,20 +34,20 @@ ep --help
 
 ```
 ~/.ep/
-├── .eprc              # 路由规则配置
+├── route-rules/       # 路由规则文本文件
 ├── mocks.json         # Mock 规则配置
 ├── settings.json      # 系统设置（主题、字体、AI配置）
 └── ca/                # SSL 证书目录
 ```
 
 **路由规则配置**:
-- 项目目录配置（优先）：`.eprc`、`ep.config.json`、`ep.config.js`
-- 用户默认配置：`~/.ep/.eprc`
-- 支持 EPRC、JSON、JS 三种格式
-- EPRC 路由匹配规则、通配符、排除和 marker 重写说明见 [配置文件结构说明](./CONFIG_STRUCTURE.md)
+- 每个规则文件存储为 `~/.ep/route-rules/<名称>.txt`
+- 可同时启用多个规则文件，启用顺序记录在 `settings.json` 的 `activeRuleFiles`
+- 支持顺序匹配、通配符、正则、排除规则和 marker 路径重写
+- 可通过 Web 界面或 `ep route *` 命令管理
 
 **Web 界面管理**:
-- 启动后访问 http://localhost:8899
+- 启动后访问 http://localhost:8989
 - 通过界面管理路由规则、Mock 规则和系统设置
 
 详见 [配置文件结构说明](./CONFIG_STRUCTURE.md)
@@ -64,12 +61,53 @@ ep --help
 
 启动后将使用 Chrome/Edge/Chromium 的 `--proxy-server` 参数启动浏览器，仅该浏览器实例使用代理，不修改系统代理设置。
 
+### 手机远程代理与抓包
+
+电脑和手机连接同一局域网后，使用远程模式启动：
+
+```bash
+ep --remote
+
+# 推荐：在支持代理认证的设备上设置口令
+ep --remote --remote-token "change-me"
+```
+
+启动日志会输出手机配置入口和代理地址，例如：
+
+```text
+手机配置入口: http://192.168.1.10:8989/
+代理服务器: 192.168.1.10:8989
+```
+
+也可以在电脑上打开 `http://127.0.0.1:8989/_easy-proxy/setup` 查看手机配置页。
+
+1. 用手机浏览器打开“手机配置入口”。
+2. 在当前 Wi-Fi 的 HTTP 代理设置中选择手动，填写电脑 IP 和端口。
+3. 下载并安装 `easy-proxy-ca.crt`。
+4. 在系统设置中完全信任该根证书，然后在电脑 Web 界面查看 HTTP/HTTPS 请求与响应。
+
+iOS 安装证书后，还需前往“设置 → 通用 → 关于本机 → 证书信任设置”开启完全信任。Android 应用是否信任用户证书取决于应用配置；使用证书锁定的 App 无法解密 HTTPS 流量。
+
+远程模式只允许局域网私有地址接入，且远程设备不能访问管理 API。默认会解密 HTTPS；如只需普通隧道代理，可使用：
+
+```bash
+ep --remote --no-intercept-https
+```
+
+### 请求来源应用识别
+
+日志面板会识别请求来源应用：
+
+- macOS 本机请求通过 socket 反查真实进程，可信度高。
+- 远程设备请求根据 User-Agent 推断 Chrome、Safari、Firefox、Edge 和常见 WebView。
+- 推断结果会显示“推断”标记，不会生成虚假的 PID 或 Bundle ID。
+- 可使用 `app:Chrome`、`app:Safari` 等条件过滤日志。
+
+远程 HTTPS 只有在开启解密并成功读取 HTTP 请求头时才能进行 User-Agent 推断。完整策略、字段和限制见 [请求来源应用识别](./docs/APPLICATION_IDENTITY.md)。
+
 ### MCP Server
 
 提供 MCP 工具 `start_proxy`：启动代理服务器并返回代理地址。
-
-- `env`：环境名（如 `beta`、`eprc.beta`），对应 `.epconfig/.{env}` 配置
-- `openBrowser: true`：启动浏览器并设置代理
 
 **Cursor 配置**：在 Cursor 设置中添加 MCP 服务器：
 
@@ -102,6 +140,7 @@ ep --help
 - [配置文件结构说明](./CONFIG_STRUCTURE.md) - 配置文件详细说明 ⭐
 - [CLI Reference](./docs/CLI_REFERENCE.md) - CLI 命令完整文档 ⭐
 - [API Reference](./docs/API_REFERENCE.md) - HTTP API 完整文档
+- [请求来源应用识别](./docs/APPLICATION_IDENTITY.md) - 本机进程识别、远程 UA 推断与限制
 - [文档索引](./docs/DOCS_INDEX.md) - 了解所有可用文档
 - [Mock 优化指南](./MOCK_OPTIMIZATION_SUMMARY.md) - Mock 功能优化说明
 
@@ -158,6 +197,10 @@ Easy Proxy 提供了强大的插件系统，允许开发者扩展代理功能。
 | `EP_ENABLE_BUILTIN_LOGGER` | 启用内置日志插件 | `true` |
 | `EP_ENABLE_BUILTIN_MOCK` | 启用内置 Mock 插件 | `false` |
 | `PORT` | Web 界面端口 | `8989` |
+| `EP_REMOTE` | 允许局域网设备连接代理 | `false` |
+| `EP_REMOTE_TOKEN` | 远程代理认证口令，用户名固定为 `easy-proxy` | 空 |
+| `EP_INTERCEPT_HTTPS` | 解密并记录全部 HTTPS 流量；远程模式默认开启 | `false` |
+| `EP_BIND_HOST` | 监听地址；远程模式默认 `0.0.0.0` | `127.0.0.1` |
 
 详见 [插件 Pipeline 模式指南](./docs/plugin/PIPELINE_MODE_GUIDE.md)
 

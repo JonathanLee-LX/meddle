@@ -78,6 +78,12 @@ export function usePlugins() {
   const fetchThirdPartyPlugins = useCallback(async () => {
     try {
       const res = await fetch('/api/plugins/third-party')
+      const contentType = res.headers.get('content-type') || ''
+      if (!res.ok || !contentType.includes('application/json')) {
+        setThirdPartyPlugins([])
+        setThirdPartySecurity({ allowAll: false, trusted: [] })
+        return
+      }
       const data = await res.json()
       setThirdPartyPlugins(data.plugins || [])
       setThirdPartySecurity(data.security || { allowAll: false, trusted: [] })

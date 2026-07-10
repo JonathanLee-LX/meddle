@@ -25,10 +25,10 @@ else
     echo "✗ Mock规则文件不存在"
 fi
 
-if [ -f ~/.ep/.eprc ]; then
-    echo "✓ 路由规则: ~/.ep/.eprc"
+if [ -d ~/.ep/route-rules ]; then
+    echo "✓ 路由规则目录: ~/.ep/route-rules/"
 else
-    echo "✗ 路由规则文件不存在（将使用默认配置）"
+    echo "✗ 路由规则目录不存在（首次启动时将自动创建）"
 fi
 
 echo ""
@@ -51,28 +51,13 @@ if [ -f ~/.ep/rootCA.key ] && [ ! -f ~/.ep/ca/rootCA.key ]; then
     echo "  已移动 rootCA.key"
 fi
 
-# 迁移旧的 .epconfig 目录
-if [ -d ~/.ep/.epconfig ]; then
-    echo "发现旧的 .epconfig 目录..."
-    
-    if [ -f ~/.ep/.epconfig/settings.json ]; then
-        echo "  迁移 settings.json 到 ~/.ep/"
-        mv ~/.ep/.epconfig/settings.json ~/.ep/settings.json
-    fi
-    
-    if [ -z "$(ls -A ~/.ep/.epconfig)" ]; then
-        echo "  删除空的 .epconfig 目录"
-        rmdir ~/.ep/.epconfig
-    fi
-fi
-
 echo ""
 echo "==================================="
 echo "配置文件结构："
 echo "==================================="
 echo ""
 echo "~/.ep/"
-echo "├── .eprc               # 路由规则（可选）"
+echo "├── route-rules/        # 路由规则文本文件"
 echo "├── mocks.json          # Mock 规则"
 echo "├── settings.json       # 系统设置（主题、字体、AI配置）"
 echo "└── ca/                 # SSL 证书目录"

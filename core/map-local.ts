@@ -2,6 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import type { ProxyContext } from './types'
 import { appendProxyRecord } from './proxy-record'
+import { getRequestClientIdentity } from './client-identity'
 import { testRulePattern } from '../helpers'
 
 const MIME_TYPES: Record<string, string> = {
@@ -47,6 +48,7 @@ export function handleMapLocalRequest(ctx: ProxyContext, req: any, res: any, sou
         return {
             id: recordId, method: req.method as string, source, target: fileUrl,
             time: new Date().toLocaleTimeString(), mapLocal: true, statusCode, duration,
+            ...getRequestClientIdentity(req),
             matchedRule: matchedRule || undefined,
             matchedTarget: matchedTarget || undefined,
         }

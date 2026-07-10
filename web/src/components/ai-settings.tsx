@@ -2,24 +2,15 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { Settings, Save, RotateCcw, Eye, EyeOff, CheckCircle2, XCircle } from 'lucide-react'
-import { 
-  getAIConfig, 
-  saveAIConfig, 
-  resetAIConfig, 
-  isAIConfigValid,
-  getDefaultValues,
-  type AIConfig
-} from '@/lib/ai-config-store'
+import { getAIConfig, saveAIConfig, resetAIConfig, isAIConfigValid, getDefaultValues, type AIConfig } from '@/lib/ai-config-store'
+import { SaveButton } from '@/components/save-shortcut/save-button'
+import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
+import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
+import { toast } from '@/components/ui/toast'
 
 interface AISettingsProps {
   open: boolean
@@ -57,16 +48,26 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
       saveAIConfig(config)
       setTestResult('success')
       setTestMessage('配置保存成功')
+      toast.success('AI 配置保存成功')
       setTimeout(() => {
         onOpenChange(false)
       }, 1000)
     } catch (error) {
+      const message = error instanceof Error ? error.message : '保存失败'
       setTestResult('error')
-      setTestMessage(error instanceof Error ? error.message : '保存失败')
+      setTestMessage(message)
+      toast.error(message)
     } finally {
       setSaving(false)
     }
   }
+
+  useSaveShortcut({
+    active: open,
+    enabled: !saving,
+    priority: SAVE_SHORTCUT_PRIORITY.modal,
+    onSave: handleSave,
+  })
 
   const handleReset = () => {
     resetAIConfig()
@@ -92,7 +93,7 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
         'Content-Type': 'application/json',
       }
 
-      let body: any
+      let body: Record<string, unknown>
 
       if (config.provider === 'anthropic') {
         headers['x-api-key'] = config.apiKey
@@ -110,7 +111,7 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
           model: config.model,
           messages: [
             { role: 'system', content: 'You are a helpful assistant.' },
-            { role: 'user', content: 'Say "test successful"' }
+            { role: 'user', content: 'Say "test successful"' },
           ],
           temperature: 0.3,
           max_tokens: 100,
@@ -129,7 +130,7 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
       }
 
       const data = await response.json()
-      
+
       // 验证响应格式
       if (config.provider === 'anthropic') {
         if (!data.content?.[0]?.text) {
@@ -161,27 +162,19 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
             <Settings className="h-5 w-5" />
             AI 代码修复设置
           </SheetTitle>
-          <SheetDescription>
-            配置AI服务以启用智能代码修复功能。支持OpenAI和Anthropic。
-          </SheetDescription>
+          <SheetDescription>配置AI服务以启用智能代码修复功能。支持OpenAI和Anthropic。</SheetDescription>
         </SheetHeader>
-        
+
         <Separator />
-        
-        <div className="flex-1 overflow-auto px-6 py-4 space-y-5">
+
+        <div className="app-panel-content">
           {/* 启用开关 */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label>启用AI修复功能</Label>
-              <p className="text-xs text-muted-foreground">
-                开启后将在代码编辑器中显示AI修复按钮
-              </p>
+              <p className="text-xs text-muted-foreground">开启后将在代码编辑器中显示AI修复按钮</p>
             </div>
-            <Button
-              variant={config.enabled ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setConfig({ ...config, enabled: !config.enabled })}
-            >
+            <Button variant={config.enabled ? 'selected' : 'outline'} size="sm" onClick={() => setConfig({ ...config, enabled: !config.enabled })}>
               {config.enabled ? '已启用' : '已禁用'}
             </Button>
           </div>
@@ -189,12 +182,12 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
           <Separator />
 
           {/* AI服务提供商 */}
-          <div className="space-y-2">
+          <div className="app-field-group">
             <Label>AI服务提供商</Label>
             <div className="flex gap-2">
               <Button
                 type="button"
-                variant={config.provider === 'openai' ? 'default' : 'outline'}
+                variant={config.provider === 'openai' ? 'selected' : 'outline'}
                 className="flex-1"
                 onClick={() => handleProviderChange('openai')}
               >
@@ -202,7 +195,7 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
               </Button>
               <Button
                 type="button"
-                variant={config.provider === 'anthropic' ? 'default' : 'outline'}
+                variant={config.provider === 'anthropic' ? 'selected' : 'outline'}
                 className="flex-1"
                 onClick={() => handleProviderChange('anthropic')}
               >
@@ -212,7 +205,7 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
           </div>
 
           {/* API密钥 */}
-          <div className="space-y-2">
+          <div className="app-field-group">
             <Label htmlFor="apiKey">
               API密钥 <span className="text-red-500">*</span>
             </Label>
@@ -236,15 +229,12 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              {config.provider === 'openai' 
-                ? '从 platform.openai.com 获取API密钥'
-                : '从 console.anthropic.com 获取API密钥'
-              }
+              {config.provider === 'openai' ? '从 platform.openai.com 获取API密钥' : '从 console.anthropic.com 获取API密钥'}
             </p>
           </div>
 
           {/* 模型 */}
-          <div className="space-y-2">
+          <div className="app-field-group">
             <Label htmlFor="model">
               模型 <span className="text-red-500">*</span>
             </Label>
@@ -255,48 +245,46 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
               placeholder={config.provider === 'openai' ? 'gpt-4o-mini' : 'claude-3-5-sonnet-20241022'}
             />
             <p className="text-xs text-muted-foreground">
-              {config.provider === 'openai' 
+              {config.provider === 'openai'
                 ? '推荐: gpt-4o-mini (经济), gpt-4o (强大)'
-                : '推荐: claude-3-5-sonnet-20241022 (平衡), claude-3-opus-20240229 (强大)'
-              }
+                : '推荐: claude-3-5-sonnet-20241022 (平衡), claude-3-opus-20240229 (强大)'}
             </p>
           </div>
 
           {/* API端点 */}
-          <div className="space-y-2">
+          <div className="app-field-group">
             <Label htmlFor="baseUrl">API端点</Label>
             <Input
               id="baseUrl"
               value={config.baseUrl}
               onChange={(e) => setConfig({ ...config, baseUrl: e.target.value })}
-              placeholder={config.provider === 'openai' 
-                ? 'https://api.openai.com/v1/chat/completions'
-                : 'https://api.anthropic.com/v1/messages'
-              }
+              placeholder={config.provider === 'openai' ? 'https://api.openai.com/v1/chat/completions' : 'https://api.anthropic.com/v1/messages'}
             />
-            <p className="text-xs text-muted-foreground">
-              使用默认值或自定义代理地址
-            </p>
+            <p className="text-xs text-muted-foreground">使用默认值或自定义代理地址</p>
           </div>
 
           {/* 测试结果 */}
           {testMessage && (
-            <div className={`flex items-start gap-2 p-3 rounded-md border ${
-              testResult === 'success' 
-                ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900'
-                : testResult === 'error'
-                ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900'
-                : 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900'
-            }`}>
+            <div
+              className={`flex items-start gap-2 p-3 rounded-md border ${
+                testResult === 'success'
+                  ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900'
+                  : testResult === 'error'
+                    ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900'
+                    : 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900'
+              }`}
+            >
               {testResult === 'success' && <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5" />}
               {testResult === 'error' && <XCircle className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5" />}
-              <span className={`text-xs flex-1 ${
-                testResult === 'success' 
-                  ? 'text-green-700 dark:text-green-300'
-                  : testResult === 'error'
-                  ? 'text-red-700 dark:text-red-300'
-                  : 'text-blue-700 dark:text-blue-300'
-              }`}>
+              <span
+                className={`text-xs flex-1 ${
+                  testResult === 'success'
+                    ? 'text-green-700 dark:text-green-300'
+                    : testResult === 'error'
+                      ? 'text-red-700 dark:text-red-300'
+                      : 'text-blue-700 dark:text-blue-300'
+                }`}
+              >
                 {testMessage}
               </span>
             </div>
@@ -304,33 +292,20 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
         </div>
 
         <Separator />
-        
+
         <div className="px-6 py-4 flex justify-between gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleReset}
-          >
+          <Button variant="outline" size="sm" onClick={handleReset}>
             <RotateCcw className="h-4 w-4 mr-1" />
             重置
           </Button>
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleTest}
-              disabled={!isValid || saving}
-            >
+            <Button variant="outline" size="sm" onClick={handleTest} disabled={!isValid || saving}>
               测试连接
             </Button>
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={saving}
-            >
-              <Save className="h-4 w-4 mr-1" />
+            <SaveButton size="sm" onClick={handleSave} disabled={saving}>
+              <Save data-icon="inline-start" className="h-4 w-4" />
               {saving ? '保存中...' : '保存'}
-            </Button>
+            </SaveButton>
           </div>
         </div>
       </SheetContent>
@@ -354,16 +329,8 @@ export function AIConfigBadge() {
   }
 
   if (!isValid) {
-    return (
-      <Badge variant="outline" className="text-xs text-orange-600 border-orange-300">
-        AI: 未配置
-      </Badge>
-    )
+    return <Badge variant="secondary">AI: 未配置</Badge>
   }
 
-  return (
-    <Badge variant="outline" className="text-xs text-green-600 border-green-300">
-      AI: {config.provider === 'openai' ? 'OpenAI' : 'Anthropic'}
-    </Badge>
-  )
+  return <Badge variant="outline">AI: {config.provider === 'openai' ? 'OpenAI' : 'Anthropic'}</Badge>
 }

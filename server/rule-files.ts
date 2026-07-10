@@ -17,6 +17,14 @@ function ensureRulesDir(ctx: ServerContext): void {
     }
 }
 
+function normalizeRuleFileName(name: string): string {
+    const safeName = name.trim().replace(/[/\\:*?"<>|]/g, '_')
+    if (!safeName) {
+        throw new Error('缺少规则文件名称')
+    }
+    return safeName
+}
+
 function ruleFilePath(ctx: ServerContext, name: string): string {
     return path.join(getRulesDir(ctx), `${name}.txt`)
 }
@@ -53,6 +61,72 @@ export interface RuleFileInfo {
     enabled: boolean
     ruleCount: number
     excludeCount: number
+}
+
+export function getActiveRuleFileNames(ctx: ServerContext): string[] {
+    return getActiveFileNames(ctx)
+}
+
+export function readRuleFileContent(ctx: ServerContext, name: string): string {
+    ensureRulesDir(ctx)
+    const safeName = normalizeRuleFileName(name)
+    const filePath = ruleFilePath(ctx, safeName)
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`规则文件 "${safeName}" 不存在`)
+    }
+    return fs.readFileSync(filePath, 'utf8')
+}
+
+export function writeRuleFileContent(ctx: ServerContext, name: string, content: string): void {
+    ensureRulesDir(ctx)
+    const safeName = normalizeRuleFileName(name)
+    const filePath = ruleFilePath(ctx, safeName)
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`规则文件 "${safeName}" 不存在`)
+    }
+    fs.writeFileSync(filePath, content, 'utf8')
+    ctx.reloadAllRuleFiles()
+}
+
+export function createRuleFile(ctx: ServerContext, name: string, content = '', enabled = true): RuleFileInfo {
+    ensureRulesDir(ctx)
+    const safeName = normalizeRuleFileName(name)
+    const filePath = ruleFilePath(ctx, safeName)
+    if (fs.existsSync(filePath)) {
+        throw new Error(`规则文件 "${safeName}" 已存在`)
+    }
+
+    fs.writeFileSync(filePath, content, 'utf8')
+
+    if (enabled) {
+        const activeNames = getActiveFileNames(ctx)
+        if (!activeNames.includes(safeName)) {
+            activeNames.push(safeName)
+            setActiveFileNames(ctx, activeNames)
+        }
+    }
+
+    ctx.reloadAllRuleFiles()
+    const { ruleMap, excludeMap } = parseEprcWithExclusions(content)
+    return {
+        name: safeName,
+        enabled,
+        ruleCount: Object.keys(ruleMap).length,
+        excludeCount: Object.values(excludeMap).reduce((total, exclusions) => total + exclusions.length, 0),
+    }
+}
+
+export function setActiveRuleFileNames(ctx: ServerContext, names: string[]): string[] {
+    ensureRulesDir(ctx)
+    const safeNames = names.map((name) => normalizeRuleFileName(name))
+    const missingNames = safeNames.filter((name) => !fs.existsSync(ruleFilePath(ctx, name)))
+    if (missingNames.length > 0) {
+        throw new Error(`规则文件不存在: ${missingNames.join(', ')}`)
+    }
+
+    setActiveFileNames(ctx, safeNames)
+    ctx.reloadAllRuleFiles()
+    return safeNames
 }
 
 /**

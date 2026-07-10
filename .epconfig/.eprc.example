@@ -1,5 +1,0 @@
-// 复制为 .eprc 使用，格式：IP domain1 [domain2] ...
-// 表示将 domain1、domain2 等域名解析到指定 IP
-10.23.10.11 kdocs.cn www.kdocs.cn web.wps.cn
-10.23.10.11 api.kdocs.cn account.kdocs.cn
-https://localhost:8000 solution.wps.cn/console solution.wps.cn/dev-server

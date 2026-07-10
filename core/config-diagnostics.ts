@@ -39,7 +39,6 @@ export function createConfigDiagnostics(ctx: ProxyContext, serverContext: Server
                     details: {
                         theme: settings.theme, fontSize: settings.fontSize,
                         aiEnabled: settings.aiConfig?.enabled || false,
-                        customRulesPath: settings.rulesFilePath || null,
                         customMocksPath: settings.mocksFilePath || null
                     }
                 })
