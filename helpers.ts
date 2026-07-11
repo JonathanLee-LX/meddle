@@ -1,8 +1,8 @@
 import { getPortPromise, setBasePort, setHighestPort } from 'portfinder';
-import * as os from 'os';
 import * as path from 'path';
 import { readFileSync } from 'fs';
 import * as http from 'http';
+import { resolveEpHome } from './core/ep-home';
 
 export type RuleMap = Record<string, string>;
 export type ExcludeMap = Record<string, string[]>;
@@ -181,7 +181,7 @@ export async function getFreePort(): Promise<number> {
     return getPortPromise();
 }
 
-export const ROUTE_RULES_DIR = path.resolve(os.homedir(), '.ep', 'route-rules');
+export const ROUTE_RULES_DIR = path.resolve(resolveEpHome(), 'route-rules');
 
 const FILE_PATTERN = /^file:\/\//;
 const LOCAL_FILE_PATTERN = /^[A-Za-z]:\\|^\/|^\\/;

@@ -1,5 +1,25 @@
 #!/usr/bin/env node
 
+// Strip --session <id> / --session=<id> from argv so command routing
+// and all downstream `process.argv.slice(N)` calls see a clean argv.
+// The session id is stashed in EP_SESSION_ID for session-args.js to
+// pick up when applying the session context.
+(function stripSessionFlag() {
+  const argv = process.argv
+  for (let i = 2; i < argv.length; i++) {
+    if (argv[i] === '--session' && i + 1 < argv.length) {
+      process.env.EP_SESSION_ID = argv[i + 1]
+      argv.splice(i, 2)
+      return
+    }
+    if (argv[i].startsWith('--session=')) {
+      process.env.EP_SESSION_ID = argv[i].slice('--session='.length)
+      argv.splice(i, 1)
+      return
+    }
+  }
+})()
+
 const args = process.argv.slice(2)
 const command = args[0]
 const subcommand = args[1]
@@ -11,6 +31,7 @@ const commands = {
   'supervise': './commands/supervise.js',
   'url': './commands/url.js',
   'status': './commands/status.js',
+  'session': './commands/session/index.js',
   'mock': './commands/mock/index.js',
   'route': './commands/route/index.js'
 }
@@ -21,8 +42,8 @@ if (command === '--help' || command === '-h' || command === 'help') {
   process.exit(0)
 }
 
-// Handle nested commands (mock/route)
-if (command === 'mock' || command === 'route') {
+// Handle nested commands (mock/route/session)
+if (command === 'mock' || command === 'route' || command === 'session') {
   require(commands[command])
 } else if (commands[command]) {
   require(commands[command])
@@ -48,6 +69,15 @@ Easy Proxy - 开发代理工具
   ep url                      获取代理 URL
   ep status                   查看代理状态
 
+Session 命令 (多实例隔离，预览功能):
+  ep session create [--name <label>] [--port <port>]
+                              创建一个新的代理 session（独立 EP_HOME + 端口）
+  ep session list             列出所有 session（含存活检测）
+  ep session delete <id> [--clean]
+                              终止 session 并从注册表移除（--clean 同时删除数据目录）
+  ep session prune            清理所有孤儿 session 记录
+  ep --session <id> <command> 对指定 session 执行命令（如 route list）
+
 Mock 命令:
   ep mock list [--json]       列出所有 mock 规则
   ep mock add [options]       添加 mock 规则
@@ -69,6 +99,7 @@ Route 命令:
 
 全局选项:
   --help, -h                  显示帮助信息
+  --session <id>              指定目标 session（与 EP_HOME 互斥）
   --json                      JSON 格式输出 (用于 list/show/preview 命令)
   --open                      启动后自动打开浏览器
   --remote                    允许局域网设备连接代理
