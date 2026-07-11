@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { AIConfigBadge } from '@/components/ai-settings'
 import { useTheme } from '@/components/theme-provider'
+import { SessionSwitcher } from '@/components/session-switcher'
 import { Command, Globe, Moon, Sun, Settings, Monitor, QrCode } from 'lucide-react'
 
 interface AppHeaderProps {
@@ -29,6 +30,7 @@ export function AppHeader({ onSettingsClick, onCommandClick, onMobileProxyClick 
         </div>
         <div className="flex-1" />
         <AIConfigBadge />
+        <SessionSwitcher />
         <Button variant="outline" size="sm" onClick={onMobileProxyClick} title="手机代理与二维码">
           <QrCode data-icon="inline-start" />
           <span className="hidden sm:inline">手机代理</span>

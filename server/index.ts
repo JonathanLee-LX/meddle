@@ -10,6 +10,7 @@ import { registerRefactorRoutes } from './refactor'
 import { registerRuleFilesRoutes } from './rule-files'
 import { registerAgentRoutes } from './agent/routes'
 import { registerHealthRoutes } from './health'
+import { registerSessionsRoutes } from './sessions'
 
 // RuleMap and ExcludeMap types from helpers
 export type RuleMap = Record<string, string>;
@@ -210,6 +211,7 @@ export function createApp(serverContext: ServerContext): Application {
     registerRefactorRoutes(app, serverContext)
     registerRuleFilesRoutes(app, serverContext)
     registerAgentRoutes(app, serverContext)
+    registerSessionsRoutes(app, serverContext)
 
     // Export helper references for backward compatibility
     ;(app as unknown as { serverContext: ServerContext }).serverContext = serverContext
