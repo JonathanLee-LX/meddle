@@ -397,13 +397,22 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
       const result = response.result && typeof response.result === 'object'
         ? response.result as { message?: string }
         : null
+      const outcomeMessage = result?.message || response.message
       setAgentResponse((current) => ({
         runId: current?.runId || confirmationId,
-        message: result?.message || response.message,
+        message: outcomeMessage,
         pendingConfirmations: [],
         toolResults: response.result ? [response.result] : [],
         conversationId: current?.conversationId || '',
       }))
+      setConversationTurns((turns) => {
+        if (turns.length === 0) return turns
+        return turns.map((turn, index) => (
+          index === turns.length - 1
+            ? { ...turn, aiMessage: outcomeMessage }
+            : turn
+        ))
+      })
     } catch (error) {
       setAgentError((error as Error).message)
     } finally {

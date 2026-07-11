@@ -2,12 +2,17 @@ import { randomUUID } from 'crypto'
 import type { Application, Request, Response } from 'express'
 import type { ServerContext } from '../index'
 import { createAgentTools, describeAgentTools } from './tools'
-import { runAgent } from './runtime'
+import { completeConfirmationInHistory, runAgent } from './runtime'
 import type { AgentChatMessage } from './model'
 import type { AgentAIConfig, AgentChatRequest, AgentPendingConfirmation } from './types'
 
 const MAX_CONVERSATIONS = 100
-const pendingConfirmations = new Map<string, AgentPendingConfirmation>()
+
+interface StoredPendingConfirmation extends AgentPendingConfirmation {
+    conversationId: string
+}
+
+const pendingConfirmations = new Map<string, StoredPendingConfirmation>()
 const conversations = new Map<string, AgentChatMessage[]>()
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -85,7 +90,7 @@ export function registerAgentRoutes(app: Application, ctx: ServerContext): void 
                     id: randomUUID(),
                     createdAt: Date.now(),
                 }
-                pendingConfirmations.set(item.id, item)
+                pendingConfirmations.set(item.id, { ...item, conversationId })
                 return item
             }, {}, history)
             conversations.set(conversationId, result.messages)
@@ -114,7 +119,7 @@ export function registerAgentRoutes(app: Application, ctx: ServerContext): void 
                     id: randomUUID(),
                     createdAt: Date.now(),
                 }
-                pendingConfirmations.set(item.id, item)
+                pendingConfirmations.set(item.id, { ...item, conversationId })
                 return item
             }, {
                 onContentDelta: (delta) => writeSse(res, 'delta', { delta }),
@@ -145,6 +150,18 @@ export function registerAgentRoutes(app: Application, ctx: ServerContext): void 
 
             pendingConfirmations.delete(confirmationId)
             if (!approved) {
+                const cancellation = {
+                    status: 'cancelled',
+                    toolName: pending.toolName,
+                    message: '用户取消了写入操作。',
+                }
+                const history = conversations.get(pending.conversationId)
+                if (history) {
+                    conversations.set(
+                        pending.conversationId,
+                        completeConfirmationInHistory(history, pending.toolCallId, cancellation),
+                    )
+                }
                 sendJson(res, 200, { status: 'cancelled', message: '已取消执行。' })
                 return
             }
@@ -154,7 +171,35 @@ export function registerAgentRoutes(app: Application, ctx: ServerContext): void 
                 throw new Error(`工具不存在: ${pending.toolName}`)
             }
 
-            const result = await tool.execute(pending.input, toolContext)
+            let result: unknown
+            try {
+                result = await tool.execute(pending.input, toolContext)
+            } catch (err) {
+                const failure = {
+                    status: 'error',
+                    toolName: pending.toolName,
+                    error: (err as Error).message,
+                }
+                const history = conversations.get(pending.conversationId)
+                if (history) {
+                    conversations.set(
+                        pending.conversationId,
+                        completeConfirmationInHistory(history, pending.toolCallId, failure),
+                    )
+                }
+                throw err
+            }
+            const history = conversations.get(pending.conversationId)
+            if (history) {
+                conversations.set(
+                    pending.conversationId,
+                    completeConfirmationInHistory(history, pending.toolCallId, {
+                        status: 'executed',
+                        toolName: pending.toolName,
+                        result,
+                    }),
+                )
+            }
             sendJson(res, 200, {
                 status: 'executed',
                 message: '已执行。',

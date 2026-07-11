@@ -44,6 +44,7 @@ export interface AgentTool<Output = unknown> {
 export interface AgentPendingConfirmation extends AgentToolConfirmation {
     id: string
     runId: string
+    toolCallId: string
     toolName: string
     createdAt: number
 }

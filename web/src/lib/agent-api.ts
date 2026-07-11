@@ -3,6 +3,7 @@ import { getActiveModel, getAIConfig, isAIConfigValid, type AIConfig } from './a
 export interface AgentPendingConfirmation {
   id: string
   runId: string
+  toolCallId: string
   toolName: string
   summary: string
   diff?: string

@@ -49,6 +49,65 @@ function safeJson(value: unknown): string {
     }
 }
 
+function buildMessages(history: AgentChatMessage[] | undefined, userMessage: string): AgentChatMessage[] {
+    const previousMessages = (history || []).filter((message) => message.role !== 'system')
+    return [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...previousMessages,
+        { role: 'user', content: userMessage },
+    ]
+}
+
+function pendingToolResult(confirmation: AgentPendingConfirmation): AgentChatMessage {
+    return {
+        role: 'tool',
+        tool_call_id: confirmation.toolCallId,
+        content: safeJson({
+            status: 'confirmation_required',
+            confirmationId: confirmation.id,
+            summary: confirmation.summary,
+        }),
+    }
+}
+
+function skippedToolResult(toolCallId: string): AgentChatMessage {
+    return {
+        role: 'tool',
+        tool_call_id: toolCallId,
+        content: safeJson({
+            status: 'skipped',
+            reason: 'waiting_for_confirmation',
+        }),
+    }
+}
+
+export function completeConfirmationInHistory(
+    history: AgentChatMessage[],
+    toolCallId: string,
+    result: unknown,
+): AgentChatMessage[] {
+    let replaced = false
+    const messages = history.map((message) => {
+        if (!replaced && message.role === 'tool' && message.tool_call_id === toolCallId) {
+            replaced = true
+            return {
+                ...message,
+                content: safeJson(result),
+            }
+        }
+        return message
+    })
+
+    if (!replaced) {
+        messages.push({
+            role: 'tool',
+            tool_call_id: toolCallId,
+            content: safeJson(result),
+        })
+    }
+    return messages
+}
+
 export async function runAgent(
     request: AgentChatRequest,
     toolRegistry: Map<string, AgentTool>,
@@ -58,11 +117,7 @@ export async function runAgent(
     history?: AgentChatMessage[],
 ): Promise<AgentRunResult> {
     const runId = randomUUID()
-    const messages: AgentChatMessage[] = [
-        { role: 'system', content: SYSTEM_PROMPT },
-        ...(history || []),
-        { role: 'user', content: request.message },
-    ]
+    const messages = buildMessages(history, request.message)
     const toolResults: unknown[] = []
     const pendingConfirmations: AgentPendingConfirmation[] = []
 
@@ -104,7 +159,8 @@ export async function runAgent(
         }
         messages.push(assistantMessage)
 
-        for (const call of response.toolCalls) {
+        for (let callIndex = 0; callIndex < response.toolCalls.length; callIndex += 1) {
+            const call = response.toolCalls[callIndex]
             const tool = toolRegistry.get(call.name)
             if (!tool) {
                 messages.push({
@@ -133,6 +189,7 @@ export async function runAgent(
                     : { summary: `执行工具 ${tool.name}`, input }
                 const confirmation = createConfirmation({
                     runId,
+                    toolCallId: call.id,
                     toolName: tool.name,
                     summary: prepared.summary,
                     diff: prepared.diff,
@@ -140,6 +197,10 @@ export async function runAgent(
                     input: prepared.input,
                 })
                 pendingConfirmations.push(confirmation)
+                messages.push(pendingToolResult(confirmation))
+                for (const remainingCall of response.toolCalls.slice(callIndex + 1)) {
+                    messages.push(skippedToolResult(remainingCall.id))
+                }
                 return {
                     response: {
                         runId,
