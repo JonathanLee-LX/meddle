@@ -5,5 +5,6 @@ export default defineConfig({
     include: ['tests/**/*.spec.ts'],
     globals: true,
     testTimeout: 10000,
+    exclude: process.env.CI ? ['tests/browser.spec.ts'] : [],
   },
 })

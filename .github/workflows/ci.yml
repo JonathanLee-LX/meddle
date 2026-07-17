@@ -52,7 +52,7 @@ jobs:
         run: pnpm run build:web
 
       - name: Test (main)
-        run: pnpm test -- --exclude tests/browser.spec.ts
+        run: pnpm test
 
       - name: Test (web)
         run: cd web && pnpm run test:run
