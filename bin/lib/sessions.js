@@ -112,7 +112,12 @@ function isPidAlive(pid) {
         process.kill(pid, 0)
         return true
     } catch (err) {
-        return err.code === 'EPERM' // exists but not ours
+        // ESRCH: no such process — definitely not alive
+        if (err.code === 'ESRCH') return false
+        // EPERM: exists but we don't have permission to signal — alive
+        if (err.code === 'EPERM') return true
+        // Unexpected error — assume alive to be safe (don't prune on fluke)
+        return true
     }
 }
 

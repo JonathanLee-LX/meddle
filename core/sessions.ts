@@ -31,7 +31,13 @@ function isPidAlive(pid: number): boolean {
         process.kill(pid, 0)
         return true
     } catch (err) {
-        return (err as NodeJS.ErrnoException).code === 'EPERM'
+        const code = (err as NodeJS.ErrnoException).code
+        // ESRCH: no such process — definitely not alive
+        if (code === 'ESRCH') return false
+        // EPERM: exists but we don't have permission to signal — alive
+        if (code === 'EPERM') return true
+        // Unexpected error — assume alive to be safe
+        return true
     }
 }
 
