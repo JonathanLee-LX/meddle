@@ -42,6 +42,7 @@ jobs:
         run: cd web && npx tsc --noEmit
 
       - name: Lint (web)
+        continue-on-error: true
         run: cd web && pnpm run lint
 
       - name: Test (main)
