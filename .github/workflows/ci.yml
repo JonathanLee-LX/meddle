@@ -45,14 +45,14 @@ jobs:
         continue-on-error: true
         run: cd web && pnpm run lint
 
+      - name: Build (main)
+        run: pnpm run build
+
+      - name: Build (web)
+        run: pnpm run build:web
+
       - name: Test (main)
         run: pnpm test
 
       - name: Test (web)
         run: cd web && pnpm run test:run
-
-      - name: Build (web)
-        run: pnpm run build:web
-
-      - name: Build (main)
-        run: pnpm run build
