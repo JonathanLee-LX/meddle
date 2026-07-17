@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: pnpm
+
+      - name: Install dependencies
+        # postinstall triggers web build — skip artifact caching conflict by
+        # building separately after install
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Install web dependencies
+        run: cd web && pnpm install --frozen-lockfile
+
+      - name: TypeCheck (main)
+        run: npx tsc --noEmit
+
+      - name: TypeCheck (web)
+        run: cd web && npx tsc --noEmit
+
+      - name: Lint (web)
+        run: cd web && pnpm run lint
+
+      - name: Test (main)
+        run: pnpm test
+
+      - name: Test (web)
+        run: cd web && pnpm run test:run
+
+      - name: Build (web)
+        run: pnpm run build:web
+
+      - name: Build (main)
+        run: pnpm run build
