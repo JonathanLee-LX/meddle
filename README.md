@@ -107,7 +107,7 @@ ep --remote --no-intercept-https
 
 ### MCP Server
 
-提供 MCP 工具 `start_proxy`：启动代理服务器并返回代理地址。
+提供 MCP 工具：启动代理服务器、管理路由规则与 Mock 规则、创建和管理多 Session。
 
 **Cursor 配置**：在 Cursor 设置中添加 MCP 服务器：
 
@@ -134,6 +134,90 @@ ep --remote --no-intercept-https
   }
 }
 ```
+
+**MCP 工具列表：**
+
+| 工具 | 说明 |
+|------|------|
+| `start_proxy` | 启动默认代理服务器 |
+| `get_proxy_url` | 获取代理地址 |
+| `create_session` | 创建隔离代理 session |
+| `delete_session` | 删除指定 session |
+| `list_sessions` | 列出所有 session |
+| `mock_rule_*` | Mock 规则管理（支持 session 参数） |
+| `route_rule_*` | 路由规则管理（支持 session 参数） |
+| `route_preview` | 预览路由匹配结果（支持 session 参数） |
+
+所有 `mock_rule_*`、`route_rule_*`、`route_preview` 工具均支持可选 `session` 参数，指定后可操作对应 session 的规则，不传则操作默认 session。
+
+### 多 Session 隔离（预览功能）
+
+多 Session 允许同时运行多个独立的 `ep` 代理进程，每个进程拥有独立的配置目录（EP_HOME）、端口、路由规则和 Mock 规则，适用于多个 Agent 或项目需要隔离代理环境的场景。
+
+**核心概念**：
+- **Session**：一个独立的 `ep` 代理进程，拥有自己的 EP_HOME 和端口
+- **默认 Session**：不指定 `--session` 时的回退，使用 `~/.ep/`，行为与之前完全一致
+- **CA 共享**：所有 session 共用 `~/.ep/ca/` 证书，无需重复安装
+
+**目录结构**：
+
+```
+~/.ep/
+├── sessions.json                 # session 注册表
+├── sessions/                     # 非默认 session 的数据目录
+│   ├── my-project-1718283600/
+│   │   ├── route-rules/
+│   │   ├── mocks.json
+│   │   ├── settings.json
+│   │   ├── plugins/
+│   │   └── plugins-data/
+│   └── ...
+├── ca/                           # 共享 CA 证书
+├── route-rules/                  # 默认 session 路由
+├── mocks.json                    # 默认 session Mock
+└── settings.json                 # 默认 session 设置
+```
+
+**CLI 命令**：
+
+```bash
+# 创建一个新 session，返回 session id
+ep session create --name my-project
+
+# 指定端口创建
+ep session create --name debug --port 9100
+
+# 列出所有 session（含存活状态）
+ep session list
+
+# 操作指定 session 的路由/Mock 等
+ep --session <session-id> route list
+ep --session <session-id> mock add --name API --pattern "api.test.com"
+
+# 删除 session（--clean 同时删除数据目录）
+ep session delete <session-id>
+ep session delete <session-id> --clean
+
+# 清理所有孤儿 session（进程已退出的注册表记录）
+ep session prune
+```
+
+**MCP 工具**：
+
+```
+# 通过 MCP 创建 session
+create_session({ name: "my-project" })
+# → { id: "my-project-1718283600", port: 9000, proxyUrl: "http://127.0.0.1:9000" }
+
+# 操作指定 session 的路由（传入 session 参数）
+route_rule_list({ session: "my-project-1718283600" })
+route_rule_add({ session: "my-project-1718283600", ruleFile: "dev", pattern: "...", target: "..." })
+
+# 不传 session 参数时操作默认 session（向后兼容）
+route_rule_list({})
+```
+
+**兼容性**：不设置 `--session` 或 `EP_HOME` 环境变量时，行为与之前完全一致，所有配置仍在 `~/.ep/` 下。详见 [多 Session 隔离设计文档](./docs/proposals/multi-session-isolation.md)。
 
 ## 文档
 
