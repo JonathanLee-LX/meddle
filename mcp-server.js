@@ -9,10 +9,10 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 const z = require('zod/v3')
 const path = require('path')
 const fs = require('fs')
-const os = require('os')
 const { spawn } = require('child_process')
+const { resolveEpHome } = require('./bin/lib/ep-home')
 
-const epDir = path.resolve(os.homedir(), '.ep')
+const epDir = resolveEpHome()
 const mcpFile = path.join(epDir, 'mcp-proxy-url.json')
 const DEFAULT_PROXY_BASE = 'http://127.0.0.1:9001'
 

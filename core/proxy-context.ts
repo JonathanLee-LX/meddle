@@ -1,5 +1,4 @@
 import * as fs from 'fs'
-import * as os from 'os'
 import * as path from 'path'
 import { createPipeline, normalizeMode } from './pipeline'
 import { PluginManager, HookDispatcher } from './plugin-runtime'
@@ -9,8 +8,9 @@ import { createPipelineGate } from './pipeline-gate'
 import { buildRefactorConfig } from './refactor-config'
 import { createBuiltinLoggerPlugin } from '../plugins/builtin/logger-plugin'
 import type { ProxyContext, PluginMode } from './types'
+import { resolveEpHome } from './ep-home'
 
-const epDir = path.resolve(os.homedir(), '.ep')
+const epDir = resolveEpHome()
 const certDir = path.resolve(epDir, 'ca')
 if (!fs.existsSync(certDir)) {
     fs.mkdirSync(certDir, { recursive: true })

@@ -1,6 +1,5 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { EventEmitter } from 'events';
 import {
     PluginManifest,
@@ -10,8 +9,9 @@ import {
     PluginEventBusAPI,
     Logger
 } from './types';
+import { resolveEpHome } from './ep-home';
 
-const epDir = path.resolve(os.homedir(), '.ep');
+const epDir = resolveEpHome();
 const pluginsDir = path.resolve(epDir, 'plugins-data');
 
 // Ensure plugins-data directory exists

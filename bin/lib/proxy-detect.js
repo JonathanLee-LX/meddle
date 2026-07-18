@@ -1,20 +1,37 @@
 /**
  * Proxy detection utilities
  * Detect if proxy is running and get proxy URL
+ *
+ * On module load, applies any --session context from argv. This makes
+ * every CLI command session-aware without individual changes: when
+ * --session <id> is set, EP_HOME is pinned to the session's data dir
+ * and getProxyUrl() returns that session's port.
  */
 
 const fs = require('fs')
 const path = require('path')
-const os = require('os')
+const { resolveEpHome } = require('./ep-home')
+const { applySessionContext, GLOBAL_DEFAULT_PORT } = require('./session-args')
 
-const epDir = path.resolve(os.homedir(), '.ep')
+// Apply --session / EP_HOME precedence before computing paths.
+applySessionContext()
+
+const epDir = resolveEpHome()
 const mcpFile = path.join(epDir, 'mcp-proxy-url.json')
-const DEFAULT_PROXY_BASE = 'http://127.0.0.1:9001'
+const DEFAULT_PROXY_BASE = `http://127.0.0.1:${GLOBAL_DEFAULT_PORT}`
 
 /**
- * Get proxy URL from mcp-proxy-url.json or return default
+ * Get proxy URL.
+ *
+ * Priority:
+ *   1. EP_SESSION_PORT env (set by --session resolution)
+ *   2. mcp-proxy-url.json (written by proxy on startup)
+ *   3. DEFAULT_PROXY_BASE (http://127.0.0.1:8989)
  */
 function getProxyUrl() {
+  if (process.env.EP_SESSION_PORT) {
+    return `http://127.0.0.1:${process.env.EP_SESSION_PORT}`
+  }
   try {
     if (fs.existsSync(mcpFile)) {
       const data = JSON.parse(fs.readFileSync(mcpFile, 'utf8'))
@@ -51,6 +68,14 @@ function waitForProxyUrl(timeoutMs = 5000) {
     const interval = 50
     const check = () => {
       try {
+        if (process.env.EP_SESSION_PORT) {
+          // For --session mode, poll the HTTP endpoint directly.
+          const port = process.env.EP_SESSION_PORT
+          fetch(`http://127.0.0.1:${port}/api/mocks`, { method: 'GET', signal: AbortSignal.timeout(500) })
+            .then((r) => { if (r.ok) resolve(`http://127.0.0.1:${port}`); else retry() })
+            .catch(() => retry())
+          return
+        }
         if (fs.existsSync(mcpFile)) {
           const data = JSON.parse(fs.readFileSync(mcpFile, 'utf8'))
           if (data.proxyUrl) {
@@ -58,6 +83,9 @@ function waitForProxyUrl(timeoutMs = 5000) {
           }
         }
       } catch (_) {}
+      retry()
+    }
+    function retry() {
       if (Date.now() - start > timeoutMs) {
         return reject(new Error('等待代理启动超时'))
       }

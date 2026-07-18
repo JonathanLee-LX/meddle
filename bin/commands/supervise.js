@@ -3,9 +3,9 @@
  */
 
 const fs = require('fs')
-const os = require('os')
 const path = require('path')
 const { spawn } = require('child_process')
+const { resolveEpHome } = require('../lib/ep-home')
 
 const rawArgs = process.argv.slice(3)
 const daemonFlag = rawArgs.includes('--daemon')
@@ -68,7 +68,7 @@ function supervise() {
 
 function startDaemon() {
   const args = rawArgs.filter(arg => arg !== '--daemon')
-  const epDir = path.resolve(os.homedir(), '.ep')
+  const epDir = resolveEpHome()
   fs.mkdirSync(epDir, { recursive: true })
   const logFd = fs.openSync(path.join(epDir, 'supervisor.log'), 'a')
   const binPath = path.join(__dirname, '..', 'index')

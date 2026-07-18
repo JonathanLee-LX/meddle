@@ -6,10 +6,10 @@
 
 const fs = require('fs')
 const path = require('path')
-const os = require('os')
 const chalk = require('chalk')
+const { resolveEpHome } = require('./lib/ep-home')
 
-const epDir = path.resolve(os.homedir(), '.ep')
+const epDir = resolveEpHome()
 const settingsPath = path.resolve(epDir, 'settings.json')
 const routeRulesDir = path.resolve(epDir, 'route-rules')
 const defaultMocksPath = path.resolve(epDir, 'mocks.json')
