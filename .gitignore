@@ -18,5 +18,6 @@ helpers.d.ts
 helpers.*.map
 cert.js
 cert.d.ts
-cert.*.mapserver.log
+cert.*.map
+server.log
 .ghfs

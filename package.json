@@ -1,13 +1,14 @@
 {
   "name": "easy-dev-proxy",
-  "version": "1.1.0",
-  "description": "",
+  "version": "0.0.1",
+  "description": "A simple development proxy server with custom routing rules, mock responses, HTTPS interception, and a plugin system",
   "main": "index.js",
   "scripts": {
     "build": "tsc",
     "build:watch": "tsc --watch",
     "prebuild": "rm -rf dist",
     "prepack": "npm run build:web && npm run build",
+    "prepublishOnly": "npm run build && npm run test",
     "start": "npm run build && node index.js",
     "start:plugin:off": "EP_PLUGIN_MODE=off npm start",
     "start:plugin:shadow": "EP_PLUGIN_MODE=shadow npm start",
@@ -21,13 +22,12 @@
     "test:watch": "vitest",
     "test:refactor": "npm run build && node -c index.js && npm test",
     "bench:logs": "node scripts/log-performance-benchmark.js",
-    "prepublish": "npm run build && npm run test",
     "start:open": "npm run build && node index.js --open",
     "doctor": "node bin/doctor.js",
     "mcp": "node mcp-server.js",
     "build:web": "cd web && pnpm run build",
     "dev:web": "cd web && pnpm run dev",
-    "postinstall": "cd web && pnpm install && pnpm run build"
+    "setup:web": "cd web && pnpm install"
   },
   "bin": {
     "ep": "bin/index"
@@ -37,14 +37,10 @@
     "dist/",
     "web/dist/",
     "index.js",
-    "proxy-handler.js",
-    "proxy-connect.js",
-    "proxy-bootstrap.js",
     "mcp-server.js",
-    "helpers.js",
     "plugins/",
     "docs/",
-    "CLAUDE.md",
+    "LICENSE",
     "CONFIG_STRUCTURE.md",
     "README.md"
   ],
