@@ -1,6 +1,6 @@
 {
   "name": "easy-dev-proxy",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A simple development proxy server with custom routing rules, mock responses, HTTPS interception, and a plugin system",
   "main": "index.js",
   "scripts": {
