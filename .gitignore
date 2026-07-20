@@ -1,0 +1,54 @@
+# Dependencies
+node_modules
+web/node_modules
+
+# Build outputs
+dist
+web/dist
+core/**/*.js
+core/**/*.d.ts
+core/**/*.map
+plugins/**/*.js
+plugins/**/*.d.ts
+plugins/**/*.map
+tests/**/*.js
+tests/**/*.d.ts
+tests/**/*.map
+
+# Generated JS files
+helpers.js
+helpers.d.ts
+helpers.*.map
+cert.js
+cert.d.ts
+cert.*.map
+
+# Runtime files
+*.log
+server.log
+.ghfs
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Certificates
+*.key
+*.pem
+*.crt
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# npm artifacts
+*.tgz
+.playwright-mcp/
+
+# Misc
+solution-*.png
