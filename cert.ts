@@ -2,7 +2,7 @@ const EasyCert = require('node-easy-cert');
 import * as os from 'os';
 const inquirer = require('inquirer');
 import { execSync } from 'child_process';
-import { stat, mkdirSync } from 'fs';
+import { stat, mkdirSync, existsSync } from 'fs';
 import * as path from 'path';
 
 // 证书存储在 .meddle/ca 目录下（保持独立）
@@ -66,9 +66,7 @@ export async function getCAStatus(): Promise<CAStatus> {
         return result;
     } else {
         result.exist = true;
-        if (!/^win/.test(process.platform)) {
-            result.trusted = easyCert.ifRootCATrusted;
-        }
+        result.trusted = checkCATrusted();
         return result;
     }
 }
@@ -122,18 +120,77 @@ async function trustRootCA(): Promise<void> {
         return;
     }
 
-    if (platform === 'darwin' && answer.trustCA === 'auto') {
-        try {
-            execSync(`sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "${rootCAPath}"`, {
-                stdio: 'inherit'
-            });
-            console.log('根证书已成功添加到系统信任。');
-        } catch (err) {
-            console.error('自动添加失败，正在打开证书文件供手动添加...');
+    if (answer.trustCA === 'auto') {
+        if (platform === 'darwin') {
+            try {
+                execSync(`sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "${rootCAPath}"`, {
+                    stdio: 'inherit'
+                });
+                console.log('根证书已成功添加到系统信任。');
+            } catch (err) {
+                console.error('自动添加失败，正在打开证书文件供手动添加...');
+                openCertForUser(rootCAPath);
+            }
+        } else if (platform === 'win32') {
             openCertForUser(rootCAPath);
+        } else if (platform === 'linux') {
+            const certName = 'meddle-root-ca.crt';
+            const isDebian = existsSync('/usr/local/share/ca-certificates');
+            const isRhel = existsSync('/etc/pki/ca-trust/source/anchors');
+            try {
+                if (isDebian) {
+                    const dest = `/usr/local/share/ca-certificates/${certName}`;
+                    execSync(`sudo cp "${rootCAPath}" "${dest}" && sudo update-ca-certificates`, {
+                        stdio: 'inherit'
+                    });
+                    console.log('根证书已成功添加到系统信任。');
+                } else if (isRhel) {
+                    const dest = `/etc/pki/ca-trust/source/anchors/${certName}`;
+                    execSync(`sudo cp "${rootCAPath}" "${dest}" && sudo update-ca-trust`, {
+                        stdio: 'inherit'
+                    });
+                    console.log('根证书已成功添加到系统信任。');
+                } else {
+                    console.log('未识别的 Linux 发行版，请手动安装证书。');
+                    openCertForUser(rootCAPath);
+                }
+            } catch (err) {
+                console.error('自动添加失败，正在打开证书文件供手动添加...');
+                openCertForUser(rootCAPath);
+            }
         }
-    } else if (platform === 'win32' && answer.trustCA === 'auto') {
-        openCertForUser(rootCAPath);
+    }
+}
+
+export function checkCATrusted(): boolean {
+    const rootCAPath = crtMgr.getRootCAFilePath();
+    if (!rootCAPath) return false;
+    const platform = os.platform();
+    try {
+        if (platform === 'darwin') {
+            execSync(`security find-certificate -c "meddle" /Library/Keychains/System.keychain`, {
+                stdio: 'pipe'
+            });
+            return true;
+        } else if (platform === 'linux') {
+            const caBundles = [
+                '/etc/ssl/certs/ca-certificates.crt',
+                '/etc/pki/tls/certs/ca-bundle.crt',
+            ];
+            for (const bundle of caBundles) {
+                if (existsSync(bundle)) {
+                    execSync(`openssl verify -CAfile "${bundle}" "${rootCAPath}"`, {
+                        stdio: 'pipe'
+                    });
+                    return true;
+                }
+            }
+            return false;
+        } else {
+            return false;
+        }
+    } catch {
+        return false;
     }
 }
 
@@ -143,12 +200,7 @@ export async function ensureRootCA(): Promise<void> {
         console.log('根证书已生成:', keyPath, crtPath);
     }
 
-    const isTrusted = await new Promise<boolean>((resolve) => {
-        crtMgr.ifRootCATrusted((err: Error, trusted: boolean) => {
-            if (err) resolve(false);
-            else resolve(trusted);
-        });
-    });
+    const isTrusted = checkCATrusted();
 
     if (!isTrusted && !process.env.MEDDLE_HEADLESS && !process.env.MEDDLE_MCP) {
         await trustRootCA();
