@@ -31,6 +31,7 @@ const commands = {
   'supervise': './commands/supervise.js',
   'url': './commands/url.js',
   'status': './commands/status.js',
+  'version': './commands/version.js',
   'session': './commands/session/index.js',
   'mock': './commands/mock/index.js',
   'route': './commands/route/index.js'
@@ -68,6 +69,7 @@ Meddle - 开发代理工具
   meddle doctor                   检查配置文件健康状况
   meddle url                      获取代理 URL
   meddle status                   查看代理状态
+  meddle version                  查看版本信息
 
 Session 命令 (多实例隔离，预览功能):
   meddle session create [--name <label>] [--port <port>]
