@@ -106,6 +106,7 @@ const { createMockHandler } = require('./dist/core/mock-handler')
 const { handleMapLocalRequest } = require('./dist/core/map-local')
 const { createRouteLoader } = require('./dist/core/route-loader')
 const { createPluginIntercept } = require('./dist/core/plugin-intercept')
+const { isStreamingResponse } = require('./dist/core/streaming-response')
 const { createPluginBootstrapRunner } = require('./dist/core/plugin-bootstrap-runner')
 const { openBrowserWithProxy } = require('./dist/core/browser')
 const { handleLocalRequest } = require('./dist/core/static-server')
@@ -382,10 +383,11 @@ const proxyServer = http.createServer(async (req, res) => {
         const url = new URL(target.startsWith('http') ? target : req.url, 'http://' + req.headers.host)
         const routeChanged = source !== url.href
         const startTime = Date.now()
-        const intercepting = pluginIntercept.shouldInterceptResponse()
-
         const proxyReq = http.request(url, { method: req.method, headers: stripProxyHeaders(req.headers) }, (proxyRes) => {
             const resChunks = []
+            const pluginResponseInterception = pluginIntercept.shouldInterceptResponse()
+            const streamingResponse = isStreamingResponse(proxyRes.headers)
+            const intercepting = pluginResponseInterception && !streamingResponse
             let proxyResponseSettled = false
             const handleProxyResponseError = (err) => {
                 if (proxyResponseSettled) return
@@ -426,7 +428,7 @@ const proxyServer = http.createServer(async (req, res) => {
                     duration: Date.now() - startTime,
                     ...clientIdentity,
                 }
-                if (!intercepting) pluginIntercept.emitLegacyResponseToPlugins(logData)
+                if (!pluginResponseInterception) pluginIntercept.emitLegacyResponseToPlugins(logData)
                 const responseEncoding = proxyRes.headers && proxyRes.headers['content-encoding']
                 // 获取 inspection 信息
                 const inspectionStages = routeDecision.meta?._inspectionStages || []
@@ -624,10 +626,12 @@ proxyServer.on('connect', async (req, socket, head) => {
 
                         const routeChanged = source !== target
                         const startTime = Date.now()
-                        const intercepting = pluginIntercept.shouldInterceptResponse()
                         try {
                             const proxyRes = await makeProxyRequest(target, req.method, stripProxyHeaders(req.headers), reqBody)
                             const resChunks = []
+                            const pluginResponseInterception = pluginIntercept.shouldInterceptResponse()
+                            const streamingResponse = isStreamingResponse(proxyRes.headers)
+                            const intercepting = pluginResponseInterception && !streamingResponse
                             let proxyResponseSettled = false
                             const handleProxyResponseError = (err) => {
                                 if (proxyResponseSettled) return
@@ -669,7 +673,7 @@ proxyServer.on('connect', async (req, socket, head) => {
                                     statusCode: proxyRes.statusCode, duration: Date.now() - startTime,
                                     ...requestClientIdentity,
                                 }
-                                if (!intercepting) pluginIntercept.emitLegacyResponseToPlugins(logData)
+                                if (!pluginResponseInterception) pluginIntercept.emitLegacyResponseToPlugins(logData)
                                 const responseEncoding = proxyRes.headers && proxyRes.headers['content-encoding']
                                 // 获取 inspection 信息
                                 const inspectionStages = routeDecision.meta?._inspectionStages || []
