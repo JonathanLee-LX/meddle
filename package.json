@@ -53,6 +53,7 @@
     "plugin"
   ],
   "author": "JonathanLee-LX",
+  "packageManager": "pnpm@10.34.5",
   "license": "MIT",
   "repository": {
     "type": "git",
