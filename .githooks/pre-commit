@@ -1,0 +1,13 @@
+#!/bin/bash
+
+NEW_VERSION=$(git diff --cached package.json | grep '^+[[:space:]]*"version"' | sed 's/^+[[:space:]]*"version": "\(.*\)",$/\1/')
+if [ -z "$NEW_VERSION" ]; then
+    exit 0
+fi
+
+CHANGELOG_STAGED=$(git diff --cached --name-only | grep -cx 'CHANGELOG.md')
+if [ "$CHANGELOG_STAGED" -ne 1 ]; then
+    echo "Error: version changed to $NEW_VERSION but CHANGELOG.md is not updated."
+    echo "Please add a CHANGELOG.md entry before committing."
+    exit 1
+fi

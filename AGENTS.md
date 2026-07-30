@@ -50,9 +50,10 @@ Follow [semver](https://semver.org/) (npm convention):
 Bump workflow:
 
 1. Update `"version"` in `package.json`
-2. Commit: `git commit -m "<new-version>"`
-3. Tag: `git tag v<new-version>`
-4. Push both: `git push origin main && git push origin v<new-version>`
+2. Add entry in `CHANGELOG.md` (date, added/fixed/changed sections)
+3. Commit both: `git commit -m "<new-version>"`
+4. Tag: `git tag v<new-version>`
+5. Push both: `git push origin main && git push origin v<new-version>`
 
 The `v*` tag triggers CI publish to npm. Never publish without a tag.
 
@@ -64,3 +65,4 @@ The `v*` tag triggers CI publish to npm. Never publish without a tag.
 - `cert.ts` uses `node-easy-cert` but bypasses its unreliable `ifRootCATrusted` with a custom `checkCATrusted()` (macOS: `security find-certificate`, Linux: `openssl verify`).
 - Config dir: `~/.meddle/`. Env vars: `MEDDLE_*`. CLI command: `meddle`.
 - Network to GitHub from this environment is intermittently unreachable; pushes may need retries.
+- `.githooks/pre-commit` validates that version bumps include a CHANGELOG.md update. Run `git config core.hooksPath .githooks` after clone to enable it.
