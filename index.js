@@ -491,6 +491,7 @@ localWSServer.on('connection', (client, req) => {})
     const port = await getFreePort()
     proxyServer.listen(port, remoteAccess.bindHost, () => {
         const proxyUrl = `http://127.0.0.1:${port}`
+        console.log(chalk.green('代理服务器已启动:'), chalk.cyan(proxyUrl))
         proxyDebug('proxy-server start on ' + chalk.green(proxyUrl))
         proxyDebug('plugin pipeline mode: ' + chalk.cyan(ctx.requestPipeline.mode))
         if (ctx.requestPipeline.mode === 'on') {
