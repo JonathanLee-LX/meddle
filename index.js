@@ -8,7 +8,7 @@ const { resolveTargetUrl, getFreePort } = require('./dist/helpers')
 const { crtMgr, ensureRootCA, getRootCAPath } = require('./dist/cert')
 const { decideRoute } = require('./dist/core/route-decision')
 const { sendShortResponse } = require('./dist/core/short-response')
-const { safeBodyToDetail } = require('./dist/core/body-utils')
+const { safeBodyToDetailAsync } = require('./dist/core/body-utils')
 const {
     establishConnectTunnel,
     isExpectedSocketError,
@@ -433,8 +433,8 @@ const proxyServer = http.createServer(async (req, res) => {
                 // 获取 inspection 信息
                 const inspectionStages = routeDecision.meta?._inspectionStages || []
                 const _detailBodyLimit = ctx.resolveDetailBodySizeBytes()
-                const _reqBodyDetail = safeBodyToDetail(reqBody, _detailBodyLimit)
-                const _resBodyDetail = safeBodyToDetail(resBody, _detailBodyLimit, responseEncoding)
+                const _reqBodyDetail = await safeBodyToDetailAsync(reqBody, _detailBodyLimit)
+                const _resBodyDetail = await safeBodyToDetailAsync(resBody, _detailBodyLimit, responseEncoding)
                 const detail = {
                     requestHeaders: req.headers,
                     requestBody: _reqBodyDetail.text,
@@ -686,8 +686,8 @@ proxyServer.on('connect', async (req, socket, head) => {
                                 // 获取 inspection 信息
                                 const inspectionStages = routeDecision.meta?._inspectionStages || []
                                 const _detailBodyLimit = ctx.resolveDetailBodySizeBytes()
-                                const _reqBodyDetail = safeBodyToDetail(reqBody, _detailBodyLimit)
-                                const _resBodyDetail = safeBodyToDetail(resBody, _detailBodyLimit, responseEncoding)
+                                const _reqBodyDetail = await safeBodyToDetailAsync(reqBody, _detailBodyLimit)
+                                const _resBodyDetail = await safeBodyToDetailAsync(resBody, _detailBodyLimit, responseEncoding)
                                 const detail = {
                                     requestHeaders: req.headers,
                                     requestBody: _reqBodyDetail.text,
