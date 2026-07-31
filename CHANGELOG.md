@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-07-31
+
+### Added
+
+- Configurable `detailBodySizeKB` setting (default `256KB`) to cap request/response body size stored in log details, with structured `requestBodyTruncated` / `responseBodyTruncated` / `requestBodyOriginalBytes` / `responseBodyOriginalBytes` markers for truncated bodies
+- Per-session inheritance for `detailBodySizeKB`: session settings → default session settings → `MEDDLE_MAX_DETAIL_BODY_KB` env → default 256KB
+
+### Fixed
+
+- Memory leak via unbounded detail body storage (proxy records stored up to 5MB bodies x 200 details, causing RSS to exceed the watchdog threshold)
+- Memory leak via unbounded HTTP/2 session pool; sessions are now capped (default 32, configurable via `MEDDLE_MAX_H2_SESSIONS`) with LRU eviction
+
 ## [0.1.2] - 2026-07-30
 
 ### Added

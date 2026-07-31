@@ -36,6 +36,79 @@ const INITIAL_PLUGIN_MODE = resolveInitialPluginMode()
 const MAX_RECORD_SIZE = process.env.MAX_RECORD_SIZE ? parseInt(process.env.MAX_RECORD_SIZE) : 10000
 const MAX_DETAIL_SIZE = 200
 const MAX_BODY_SIZE = 5 * 1024 * 1024
+const MAX_DETAIL_BODY_SIZE = (process.env.MEDDLE_MAX_DETAIL_BODY_KB ? parseInt(process.env.MEDDLE_MAX_DETAIL_BODY_KB) : 256) * 1024
+
+// Resolve the effective detail body size limit (mtime-cached to avoid
+// per-request file I/O on the hot proxy path). Precedence:
+//   1. session settings.json  -> detailBodySizeKB
+//   2. default session settings.json -> detailBodySizeKB (inherited only
+//      by non-default sessions following the <defaultHome>/sessions/<id> layout)
+//   3. env MEDDLE_MAX_DETAIL_BODY_KB (folded into fallbackBytes)
+//   4. default 256KB (folded into fallbackBytes)
+export function createDetailBodyLimitResolver(settingsPath: string, meddleDir: string, fallbackBytes: number): () => number {
+    // Detect the "default session" home. Sessions live under
+    // <defaultHome>/sessions/<id>, so the default home is two levels up — but
+    // only when meddleDir actually follows this layout (basename(parent) ===
+    // 'sessions'). A custom MEDDLE_HOME that is not a session is treated as
+    // the default session itself (no inheritance).
+    const parentDir = path.dirname(meddleDir)
+    const isSession = path.basename(parentDir) === 'sessions'
+    const defaultSettingsPath = isSession ? path.resolve(parentDir, '..', 'settings.json') : null
+    const sameAsDefault = defaultSettingsPath === null || path.resolve(settingsPath) === defaultSettingsPath
+
+    let cachedBytes = fallbackBytes
+    let lastSessionMtime = -1
+    let lastDefaultMtime = -1
+
+    return function resolveDetailBodySizeBytes(): number {
+        try {
+            const sessionMtime = getFileMtime(settingsPath)
+            const defaultMtime = sameAsDefault ? sessionMtime : getFileMtime(defaultSettingsPath as string)
+            if (sessionMtime === lastSessionMtime && defaultMtime === lastDefaultMtime) {
+                return cachedBytes
+            }
+            lastSessionMtime = sessionMtime
+            lastDefaultMtime = defaultMtime
+
+            const sessionKB = readDetailBodyKB(settingsPath)
+            if (sessionKB !== null) {
+                cachedBytes = sessionKB * 1024
+                return cachedBytes
+            }
+            if (!sameAsDefault && defaultSettingsPath) {
+                const defaultKB = readDetailBodyKB(defaultSettingsPath)
+                if (defaultKB !== null) {
+                    cachedBytes = defaultKB * 1024
+                    return cachedBytes
+                }
+            }
+            cachedBytes = fallbackBytes
+            return cachedBytes
+        } catch (_) {
+            return fallbackBytes
+        }
+    }
+}
+
+function getFileMtime(filePath: string): number {
+    try {
+        if (!fs.existsSync(filePath)) return 0
+        return fs.statSync(filePath).mtimeMs
+    } catch (_) {
+        return 0
+    }
+}
+
+function readDetailBodyKB(filePath: string): number | null {
+    try {
+        if (!fs.existsSync(filePath)) return null
+        const settings = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { detailBodySizeKB?: unknown }
+        const kb = settings.detailBodySizeKB
+        return (typeof kb === 'number' && Number.isFinite(kb) && kb >= 1) ? Math.floor(kb) : null
+    } catch (_) {
+        return null
+    }
+}
 
 const pluginManager = new PluginManager({ logger: console })
 const hookDispatcher = new HookDispatcher(pluginManager, { logger: console })
@@ -69,6 +142,8 @@ export function createProxyContext(): ProxyContext {
         MAX_RECORD_SIZE,
         MAX_DETAIL_SIZE,
         MAX_BODY_SIZE,
+        MAX_DETAIL_BODY_SIZE,
+        resolveDetailBodySizeBytes: createDetailBodyLimitResolver(settingsPath, meddleDir, MAX_DETAIL_BODY_SIZE),
         SHADOW_WARN_MIN_SAMPLES: REFACTOR_CONFIG.shadowWarnMinSamples,
         SHADOW_WARN_DIFF_RATE: REFACTOR_CONFIG.shadowWarnDiffRate,
         PLUGIN_ON_HOSTS: REFACTOR_CONFIG.pluginOnHosts,

@@ -4,6 +4,7 @@ import _debug from 'debug'
 import { getMimeType } from './map-local'
 import { appendProxyRecord } from './proxy-record'
 import { getRequestClientIdentity } from './client-identity'
+import { safeBodyToDetail } from './body-utils'
 import type { ProxyContext, MockHandler, MockRuleEntry } from './types'
 
 const proxyDebug = _debug('proxy')
@@ -215,9 +216,15 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
                     mockRuleId: rule.id,
                     mockRuleName: rule.name,
                 }
+                const _mdLimit = ctx.resolveDetailBodySizeBytes()
+                const _mdResBody = Buffer.isBuffer(responseBody) ? responseBody : Buffer.from(typeof responseBody === 'string' ? responseBody : '', 'utf8')
+                const _mdRes = safeBodyToDetail(_mdResBody, _mdLimit)
                 const detail: ProxyContext['proxyRecordDetailMap'] extends Map<number, infer T> ? T : never = {
                     requestHeaders: req.headers || {}, requestBody: '',
-                    responseHeaders, responseBody, statusCode: finalStatusCode,
+                    requestBodyTruncated: false, requestBodyOriginalBytes: 0,
+                    responseHeaders, responseBody: _mdRes.text,
+                    responseBodyTruncated: _mdRes.truncated, responseBodyOriginalBytes: _mdRes.originalBytes,
+                    statusCode: finalStatusCode,
                     statusMessage, method: logInfo.method, url: logInfo.source,
                     // 添加 mock 相关的 inspection 信息
                     inspection: {

@@ -546,8 +546,12 @@ export interface ProxyRecord {
 export interface ProxyRecordDetail {
     requestHeaders: Record<string, string | string[] | undefined>;
     requestBody?: string;
+    requestBodyTruncated?: boolean;
+    requestBodyOriginalBytes?: number;
     responseHeaders: Record<string, string | string[] | undefined>;
     responseBody?: string;
+    responseBodyTruncated?: boolean;
+    responseBodyOriginalBytes?: number;
     statusCode: number;
     statusMessage?: string;
     method: string;
@@ -565,6 +569,8 @@ export interface ProxyContext {
     MAX_RECORD_SIZE: number;
     MAX_DETAIL_SIZE: number;
     MAX_BODY_SIZE: number;
+    MAX_DETAIL_BODY_SIZE: number;
+    resolveDetailBodySizeBytes: () => number;
     SHADOW_WARN_MIN_SAMPLES: number;
     SHADOW_WARN_DIFF_RATE: number;
     PLUGIN_ON_HOSTS: Set<string>;

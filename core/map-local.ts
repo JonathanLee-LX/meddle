@@ -3,6 +3,7 @@ import * as path from 'path'
 import type { ProxyContext } from './types'
 import { appendProxyRecord } from './proxy-record'
 import { getRequestClientIdentity } from './client-identity'
+import { safeBodyToDetail } from './body-utils'
 import { testRulePattern } from '../helpers'
 
 const MIME_TYPES: Record<string, string> = {
@@ -107,11 +108,16 @@ export function handleMapLocalRequest(ctx: ProxyContext, req: any, res: any, sou
         }
         res.writeHead(200, headers)
         res.end(fileContent)
-        appendProxyRecord(ctx, makeLogData(200, duration), {
+        appendProxyRecord(ctx, makeLogData(200, duration), (() => {
+            const _mdLimit = ctx.resolveDetailBodySizeBytes()
+            const _isText = mimeType.startsWith('text/') || mimeType === 'application/json'
+            const _mdRes = _isText ? safeBodyToDetail(fileContent, _mdLimit) : { text: `(binary, ${fileContent.length} bytes)`, truncated: false, originalBytes: fileContent.length }
+            return {
             requestHeaders: req.headers || {}, requestBody: '',
+            requestBodyTruncated: false, requestBodyOriginalBytes: 0,
             responseHeaders: headers,
-            responseBody: mimeType.startsWith('text/') || mimeType === 'application/json'
-                ? fileContent.toString('utf8') : `(binary, ${fileContent.length} bytes)`,
+            responseBody: _mdRes.text,
+            responseBodyTruncated: _mdRes.truncated, responseBodyOriginalBytes: _mdRes.originalBytes,
             statusCode: 200, statusMessage: 'OK', method: req.method, url: source,
             inspection: {
                 url: source,
@@ -132,7 +138,9 @@ export function handleMapLocalRequest(ctx: ProxyContext, req: any, res: any, sou
                 ],
                 totalDuration: duration,
             },
-        })
+        }
+        })()
+    )
     } catch (err: any) {
         const duration = Date.now() - startTime
         const body = 'Error reading file: ' + err.message

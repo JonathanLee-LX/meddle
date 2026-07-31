@@ -7,7 +7,20 @@ import type { ProxyResponse } from './types'
 const proxyDebug = _debug('proxy')
 
 const h2SessionPool = new Map<string, http2.ClientHttp2Session>()
+const MAX_H2_SESSIONS = process.env.MEDDLE_MAX_H2_SESSIONS ? parseInt(process.env.MEDDLE_MAX_H2_SESSIONS) : 32
 const UPSTREAM_REQUEST_TIMEOUT_MS = 60000
+
+function evictOldestH2SessionIfNeeded(): void {
+    while (h2SessionPool.size >= MAX_H2_SESSIONS) {
+        const oldestKey = h2SessionPool.keys().next().value
+        if (oldestKey === undefined) break
+        const oldest = h2SessionPool.get(oldestKey)
+        h2SessionPool.delete(oldestKey)
+        if (oldest && !oldest.destroyed) {
+            try { oldest.close() } catch (_) { try { oldest.destroy() } catch (_) {} }
+        }
+    }
+}
 
 const HOP_BY_HOP_HEADERS = new Set([
     'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
@@ -45,6 +58,7 @@ function getOrCreateH2Session(origin: string, servername?: string): Promise<http
 
         session.once('connect', () => {
             clearTimeout(timeout)
+            evictOldestH2SessionIfNeeded()
             h2SessionPool.set(poolKey, session)
             resolve(session)
         })

@@ -12,6 +12,7 @@ export interface SystemSettings {
   theme: 'light' | 'dark' | 'system'
   accentColor: AccentColor
   fontSize: string
+  detailBodySizeKB?: number
   aiConfig: AIConfig
   mocksFilePath?: string
   pluginMode?: 'off' | 'shadow' | 'on'
@@ -22,6 +23,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   theme: 'system',
   accentColor: 'auto',
   fontSize: 'medium',
+  detailBodySizeKB: 256,
   aiConfig: {
     enabled: false,
     provider: 'openai',

@@ -55,6 +55,8 @@ describe('map-local handleMapLocalRequest', () => {
             meddleDir: tmpDir, certDir: tmpDir, settingsPath: '', AUTO_OPEN: false,
             REFACTOR_CONFIG: {}, INITIAL_PLUGIN_MODE: 'off', MAX_RECORD_SIZE: 100,
             MAX_DETAIL_SIZE: 50, MAX_BODY_SIZE: 1024 * 1024,
+            MAX_DETAIL_BODY_SIZE: 1024 * 1024,
+            resolveDetailBodySizeBytes: () => 1024 * 1024,
             SHADOW_WARN_MIN_SAMPLES: 10, SHADOW_WARN_DIFF_RATE: 0.5,
             PLUGIN_ON_HOSTS: new Set(), ENABLE_BUILTIN_ROUTER_PLUGIN: false,
             ENABLE_BUILTIN_LOGGER_PLUGIN: false, ENABLE_BUILTIN_MOCK_PLUGIN: false,

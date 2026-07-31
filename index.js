@@ -8,7 +8,7 @@ const { resolveTargetUrl, getFreePort } = require('./dist/helpers')
 const { crtMgr, ensureRootCA, getRootCAPath } = require('./dist/cert')
 const { decideRoute } = require('./dist/core/route-decision')
 const { sendShortResponse } = require('./dist/core/short-response')
-const { safeBodyToString } = require('./dist/core/body-utils')
+const { safeBodyToDetail } = require('./dist/core/body-utils')
 const {
     establishConnectTunnel,
     isExpectedSocketError,
@@ -432,11 +432,18 @@ const proxyServer = http.createServer(async (req, res) => {
                 const responseEncoding = proxyRes.headers && proxyRes.headers['content-encoding']
                 // 获取 inspection 信息
                 const inspectionStages = routeDecision.meta?._inspectionStages || []
+                const _detailBodyLimit = ctx.resolveDetailBodySizeBytes()
+                const _reqBodyDetail = safeBodyToDetail(reqBody, _detailBodyLimit)
+                const _resBodyDetail = safeBodyToDetail(resBody, _detailBodyLimit, responseEncoding)
                 const detail = {
                     requestHeaders: req.headers,
-                    requestBody: safeBodyToString(reqBody, ctx.MAX_BODY_SIZE),
+                    requestBody: _reqBodyDetail.text,
+                    requestBodyTruncated: _reqBodyDetail.truncated,
+                    requestBodyOriginalBytes: _reqBodyDetail.originalBytes,
                     responseHeaders: proxyRes.headers,
-                    responseBody: safeBodyToString(resBody, ctx.MAX_BODY_SIZE, responseEncoding),
+                    responseBody: _resBodyDetail.text,
+                    responseBodyTruncated: _resBodyDetail.truncated,
+                    responseBodyOriginalBytes: _resBodyDetail.originalBytes,
                     statusCode: proxyRes.statusCode, statusMessage: proxyRes.statusMessage,
                     method: req.method, url: source,
                     inspection: inspectionStages.length > 0 ? {
@@ -678,11 +685,18 @@ proxyServer.on('connect', async (req, socket, head) => {
                                 const responseEncoding = proxyRes.headers && proxyRes.headers['content-encoding']
                                 // 获取 inspection 信息
                                 const inspectionStages = routeDecision.meta?._inspectionStages || []
+                                const _detailBodyLimit = ctx.resolveDetailBodySizeBytes()
+                                const _reqBodyDetail = safeBodyToDetail(reqBody, _detailBodyLimit)
+                                const _resBodyDetail = safeBodyToDetail(resBody, _detailBodyLimit, responseEncoding)
                                 const detail = {
                                     requestHeaders: req.headers,
-                                    requestBody: safeBodyToString(reqBody, ctx.MAX_BODY_SIZE),
+                                    requestBody: _reqBodyDetail.text,
+                                    requestBodyTruncated: _reqBodyDetail.truncated,
+                                    requestBodyOriginalBytes: _reqBodyDetail.originalBytes,
                                     responseHeaders: proxyRes.headers,
-                                    responseBody: safeBodyToString(resBody, ctx.MAX_BODY_SIZE, responseEncoding),
+                                    responseBody: _resBodyDetail.text,
+                                    responseBodyTruncated: _resBodyDetail.truncated,
+                                    responseBodyOriginalBytes: _resBodyDetail.originalBytes,
                                     statusCode: proxyRes.statusCode, statusMessage: proxyRes.statusMessage,
                                     method: req.method, url: source,
                                     inspection: inspectionStages.length > 0 ? {

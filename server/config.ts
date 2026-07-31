@@ -44,6 +44,7 @@ export function registerConfigRoutes(app: Application, ctx: ServerContext): void
                     theme: 'system',
                     accentColor: 'auto',
                     fontSize: 'medium',
+                    detailBodySizeKB: 256,
                     aiConfig: {
                         enabled: false,
                         provider: 'openai',
