@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.2] - 2026-07-31
+
+### Fixed
+
+- Event loop starvation (watchdog `eventLoopDelay` critical) caused by synchronous zlib decompression of large compressed upstream responses on the proxy hot path; bodies are now decompressed asynchronously off the event loop and oversized compressed inputs are refused instead of decompressed
+
 ## [0.2.1] - 2026-07-31
 
 ### Added
