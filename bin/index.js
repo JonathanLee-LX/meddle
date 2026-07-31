@@ -43,6 +43,12 @@ if (command === '--help' || command === '-h' || command === 'help') {
   process.exit(0)
 }
 
+// Check for --version / -v flag
+if (command === '--version' || command === '-v') {
+  require('./commands/version.js')
+  process.exit(0)
+}
+
 // Handle nested commands (mock/route/session)
 if (command === 'mock' || command === 'route' || command === 'session') {
   require(commands[command])
@@ -70,6 +76,7 @@ Meddle - 开发代理工具
   meddle url                      获取代理 URL
   meddle status                   查看代理状态
   meddle version                  查看版本信息
+  meddle --version, -v            查看版本信息 (快捷别名)
 
 Session 命令 (多实例隔离，预览功能):
   meddle session create [--name <label>] [--port <port>]
@@ -101,6 +108,7 @@ Route 命令:
 
 全局选项:
   --help, -h                  显示帮助信息
+  --version, -v               显示版本信息
   --session <id>              指定目标 session（与 MEDDLE_HOME 互斥）
   --json                      JSON 格式输出 (用于 list/show/preview 命令)
   --open                      启动后自动打开浏览器
