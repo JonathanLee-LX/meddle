@@ -6,6 +6,10 @@ on:
       - 'v*'
   workflow_dispatch:
     inputs:
+      tag:
+        description: 'Release tag (e.g. v0.3.0)'
+        required: true
+        type: string
       dry-run:
         description: 'Dry run (skip release upload)'
         required: false
@@ -117,7 +121,8 @@ jobs:
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: release-assets/*
           generate_release_notes: true
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(inputs.tag || github.ref_name, '-') }}
