@@ -46,7 +46,7 @@ curl -fSL --retry 3 -o "${TMP}/${ASSET}" "$URL"
 echo "Verifying checksum..."
 if curl -fsSL --retry 3 -o "${TMP}/${ASSET}.sha256" "$SHA_URL" 2>/dev/null; then
     cd "$TMP"
-    sha256sum -c "${ASSET}.sha256" --quiet 2>/dev/null || shasum -a 256 -c "${ASSET}.sha256" --quiet
+    sha256sum -c "${ASSET}.sha256" --quiet 2>/dev/null || shasum -a 256 -c "${ASSET}.sha256" >/dev/null
     cd - >/dev/null
     echo "Checksum OK"
 else

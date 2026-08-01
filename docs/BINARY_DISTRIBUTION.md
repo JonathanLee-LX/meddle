@@ -138,7 +138,7 @@ PoC 脚本与产物：`/tmp/opencode/mitm-poc/mitm-poc.cjs`（复用为后续冒
 | Linux | arm64 | `aarch64-unknown-linux-gnu` | `meddle-<v>-linux-arm64` |
 | Windows | x64 | `x86_64-pc-windows-msvc` | `meddle-<v>-windows-x64.exe` |
 
-> 注：`deno compile` **不支持 windows-arm64**（无目标）；如确有需求，用 Bun 补该单目标——留作后续。
+> 注：`deno compile` 支持 `aarch64-pc-windows-msvc`（Windows ARM64）；如确有需求可纳入矩阵。
 
 ### 6.2 编译命令模板
 ```sh

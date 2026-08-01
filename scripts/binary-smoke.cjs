@@ -32,6 +32,23 @@ function fetch(url, opts = {}) {
     })
 }
 
+function fetchViaProxy(proxyPort, targetUrl) {
+    return new Promise((resolve, reject) => {
+        const req = http.get({
+            host: '127.0.0.1',
+            port: proxyPort,
+            path: targetUrl,
+            headers: { Host: new URL(targetUrl).host },
+        }, (res) => {
+            let body = ''
+            res.on('data', (c) => (body += c))
+            res.on('end', () => resolve({ status: res.statusCode, body }))
+        })
+        req.on('error', reject)
+        req.setTimeout(5000, () => { req.destroy(); reject(new Error('timeout')) })
+    })
+}
+
 async function main() {
     console.log(`Smoke test: ${bin}\n`)
 
@@ -48,6 +65,13 @@ async function main() {
     assert('meddle --help exits 0', () => {
         execSync(`"${bin}" --help`, { encoding: 'utf8', timeout: 10000 })
     })
+
+    const origin = http.createServer((req, res) => {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, path: req.url }))
+    })
+    await new Promise((r) => origin.listen(0, '127.0.0.1', r))
+    const originPort = origin.address().port
 
     const port = 19876 + Math.floor(Math.random() * 100)
     const child = spawn(bin, ['start'], {
@@ -72,17 +96,17 @@ async function main() {
             if (!dashRes.body.includes('<!doctype html>')) throw new Error('not HTML')
         })
 
-        const proxyRes = await fetch('http://httpbin.org/get', {
-            headers: { Host: 'httpbin.org' },
-            agent: new http.Agent(),
-        })
+        const proxyRes = await fetchViaProxy(port, `http://127.0.0.1:${originPort}/smoke-test`)
         assert('proxy forwards HTTP requests', () => {
             if (proxyRes.status !== 200) throw new Error(`status ${proxyRes.status}`)
+            const data = JSON.parse(proxyRes.body)
+            if (!data.ok) throw new Error('unexpected response body')
         })
     } finally {
         child.kill('SIGTERM')
         await new Promise((r) => setTimeout(r, 500))
         if (child.exitCode === null) child.kill('SIGKILL')
+        origin.close()
     }
 
     console.log(`\n${passed} passed, ${failed} failed`)
