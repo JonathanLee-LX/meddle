@@ -31,8 +31,8 @@ export function useMocks() {
     }
   }, [])
 
-  // 应用启动时预加载（Mock tab 挂载时也会 refetch，与 CLI/MCP 等外部变更对齐）
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: fetch on mount
     void fetchMocks()
   }, [fetchMocks])
 

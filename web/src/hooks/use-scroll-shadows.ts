@@ -42,6 +42,7 @@ export function useScrollShadows<T extends HTMLElement>() {
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: measure DOM on mount
     update()
 
     const onScroll = () => update()

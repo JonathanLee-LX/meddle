@@ -113,7 +113,7 @@ function fixMissingBrackets(code: string): string {
 function fixMissingQuotes(code: string): string {
   // 这是一个简化的实现,实际中很难准确判断
   let fixed = code
-  let quoteCount = { '"': 0, "'": 0, '`': 0 }
+  const quoteCount = { '"': 0, "'": 0, '`': 0 }
   
   for (const char of code) {
     if (char === '"' || char === "'" || char === '`') {
@@ -409,7 +409,7 @@ function cleanAIResponse(text: string): string {
   
   // 移除可能的解释性文本
   const lines = cleaned.split('\n')
-  if (lines.length > 0 && !lines[0].trim().match(/^[{<\[a-z@]/i)) {
+  if (lines.length > 0 && !lines[0].trim().match(/^[{<[a-z@]/i)) {
     // 如果第一行不像代码,移除它
     lines.shift()
     cleaned = lines.join('\n').trim()

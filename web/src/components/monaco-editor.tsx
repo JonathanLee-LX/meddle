@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useMemo } from 'react'
 import Editor, { DiffEditor, type OnMount, type Monaco } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import { useTheme } from './theme-provider'
@@ -40,37 +40,16 @@ export function MonacoEditor({
 }: MonacoEditorProps) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<Monaco | null>(null)
-  const [detectedLanguage, setDetectedLanguage] = useState(language)
   const { resolvedTheme } = useTheme()
 
-  // 自动检测语言类型
-  useEffect(() => {
-    if (!value.trim()) {
-      setDetectedLanguage(language)
-      return
-    }
+  const detectedLanguage = useMemo(() => {
+    if (!value.trim()) return language
 
     const trimmed = value.trim()
-    
-    // 检测 JSON
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-      setDetectedLanguage('json')
-      return
-    }
-    
-    // 检测 HTML
-    if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html') || trimmed.match(/^<\w+/)) {
-      setDetectedLanguage('html')
-      return
-    }
-    
-    // 检测 CSS
-    if (trimmed.match(/^[.#@]?[\w-]+\s*\{/) || trimmed.includes('/*') && trimmed.includes('*/')) {
-      setDetectedLanguage('css')
-      return
-    }
-    
-    // 检测 JavaScript
+
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) return 'json'
+    if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html') || trimmed.match(/^<\w+/)) return 'html'
+    if (trimmed.match(/^[.#@]?[\w-]+\s*\{/) || trimmed.includes('/*') && trimmed.includes('*/')) return 'css'
     if (
       trimmed.startsWith('function') ||
       trimmed.startsWith('const ') ||
@@ -79,13 +58,9 @@ export function MonacoEditor({
       trimmed.startsWith('import ') ||
       trimmed.startsWith('export ') ||
       trimmed.includes('=>')
-    ) {
-      setDetectedLanguage('javascript')
-      return
-    }
-    
-    // 默认使用传入的语言
-    setDetectedLanguage(language)
+    ) return 'javascript'
+
+    return language
   }, [value, language])
 
   const handleEditorDidMount: OnMount = (editor, monaco) => {

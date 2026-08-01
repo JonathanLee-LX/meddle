@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getRuleRowOrder, reorderItemsByRowIds } from './rule-config'
+import { getRuleRowOrder, reorderItemsByRowIds } from '@/lib/rule-order'
 
 describe('rule table drag ordering', () => {
   it('moves the active row id to the hovered row position', () => {

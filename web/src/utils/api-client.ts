@@ -2,7 +2,7 @@
  * Centralized API client with consistent error handling
  */
 
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   status: string
   data?: T
   error?: string
@@ -46,7 +46,7 @@ export async function apiGet<T>(url: string): Promise<T> {
  */
 export async function apiPost<T>(
   url: string,
-  body?: any,
+  body?: unknown,
   contentType: string = 'application/json'
 ): Promise<T> {
   return apiRequest<T>(url, {
@@ -61,7 +61,7 @@ export async function apiPost<T>(
  */
 export async function apiPut<T>(
   url: string,
-  body?: any,
+  body?: unknown,
   contentType: string = 'application/json'
 ): Promise<T> {
   return apiRequest<T>(url, {

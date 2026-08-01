@@ -33,6 +33,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { getRuleRowOrder, reorderItemsByRowIds } from '@/lib/rule-order'
 import { CSS } from '@dnd-kit/utilities'
 import { buildRuleGraph } from '@/utils/rule-graph'
 import { RouteCanvas } from '@/components/route-canvas'
@@ -91,29 +92,6 @@ const RULE_ROW_HIGHLIGHT_CLASS = 'bg-primary/10 shadow-[inset_3px_0_0_var(--prim
 
 function sameRowOrder(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((item, index) => item === b[index])
-}
-
-export function getRuleRowOrder(rowIds: string[], activeId: string | number, overId: string | number | null | undefined): string[] {
-  if (overId == null) return rowIds
-
-  const activeKey = String(activeId)
-  const overKey = String(overId)
-  if (activeKey === overKey) return rowIds
-
-  const oldIndex = rowIds.indexOf(activeKey)
-  const newIndex = rowIds.indexOf(overKey)
-  if (oldIndex < 0 || newIndex < 0) return rowIds
-
-  return arrayMove(rowIds, oldIndex, newIndex)
-}
-
-export function reorderItemsByRowIds<T>(items: T[], rowIds: string[], orderedRowIds: string[]): T[] {
-  if (items.length !== rowIds.length || rowIds.length !== orderedRowIds.length) return items
-
-  const itemById = new Map(rowIds.map((id, index) => [id, items[index]]))
-  if (orderedRowIds.some((id) => !itemById.has(id))) return items
-
-  return orderedRowIds.map((id) => itemById.get(id) as T)
 }
 
 function parseExclusionsInput(value: string): string[] {

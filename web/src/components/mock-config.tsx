@@ -94,21 +94,17 @@ export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, dele
     return contentTypes[ext] || 'text/plain'
   }
 
-  // 检测建议的 Content-Type
-  const getSuggestedContentType = (filename: string): string | null => {
+  const getSuggestedContentType = useCallback((filename: string): string | null => {
     const contentType = getContentType(filename)
     const currentHeaders = editForm.headers || {}
-    // 如果当前没有 Content-Type，返回建议值
     if (!currentHeaders['Content-Type']) {
       return contentType
     }
     return null
-  }
+  }, [editForm.headers])
 
-  // 读取文件内容（图片转Base64，文本直接读取）
-  const readFileContent = async (file: File): Promise<string> => {
+  const readFileContent = useCallback(async (file: File): Promise<string> => {
     if (isImageType(file)) {
-      // 图片转Base64
       return new Promise((resolve) => {
         const reader = new FileReader()
         reader.onload = (e) => {
@@ -117,10 +113,9 @@ export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, dele
         reader.readAsDataURL(file)
       })
     } else {
-      // 文本直接读取
       return await file.text()
     }
-  }
+  }, [])
 
   // 使用系统文件选择器选择文件
   const handleSelectFile = useCallback(async () => {
@@ -155,7 +150,7 @@ export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, dele
     }
     // 回退：使用传统文件选择器
     fileInputRef.current?.click()
-  }, [])
+  }, [getSuggestedContentType, readFileContent, updateField])
 
   // 处理传统文件 input 的选择
   const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -168,7 +163,7 @@ export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, dele
     }
     // 重置 input 以便可以再次选择相同文件
     e.target.value = ''
-  }, [])
+  }, [getSuggestedContentType, readFileContent, updateField])
 
   useEffect(() => {
     void fetchMocks()
@@ -311,14 +306,13 @@ export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, dele
     [deleteMock],
   )
 
-  const updateField = <K extends keyof Omit<MockRule, 'id'>>(field: K, value: Omit<MockRule, 'id'>[K]) => {
+  const updateField = useCallback(<K extends keyof Omit<MockRule, 'id'>>(field: K, value: Omit<MockRule, 'id'>[K]) => {
     setEditForm((prev) => ({ ...prev, [field]: value }))
 
-    // 当更新body时进行实时验证
     if (field === 'body' && typeof value === 'string') {
       validateBody(value)
     }
-  }
+  }, [validateBody])
 
   // 自动格式化 body（使用 Prettier）
   const formatBody = useCallback(async () => {
@@ -334,9 +328,8 @@ export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, dele
     } finally {
       setFormatting(false)
     }
-  }, [editForm.body])
+  }, [editForm.body, updateField])
 
-  // AI自动修复语法错误
   const fixBodyErrors = useCallback(async () => {
     setFixing(true)
     try {
@@ -356,7 +349,7 @@ export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, dele
     } finally {
       setFixing(false)
     }
-  }, [editForm.body])
+  }, [editForm.body, updateField])
 
   return (
     <div className="app-page-stack">
