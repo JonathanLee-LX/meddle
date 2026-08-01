@@ -83,7 +83,7 @@ jobs:
         run: node scripts/binary-smoke.cjs dist-bin/${{ matrix.name }}
 
       - name: Generate SHA256
-        run: sha256sum dist-bin/${{ matrix.name }} > dist-bin/${{ matrix.name }}.sha256
+        run: cd dist-bin && sha256sum ${{ matrix.name }} > ${{ matrix.name }}.sha256
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
