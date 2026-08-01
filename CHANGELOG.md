@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-08-01
+
+### Added
+
+- Binary distribution via `deno compile`: single-file executables for 6 platforms (linux-x64/arm64, darwin-x64/arm64, windows-x64/arm64), no Node.js required
+- Single-entry dispatch (`bin/main.js`) routing proxy/mcp/cli via `MEDDLE_ENTRY` env var
+- CI workflow (`.github/workflows/build-binary.yml`): v* tag triggers 6-target cross-compilation with smoke test and SHA256 release upload
+- Install scripts: `scripts/install-binary.sh` (macOS/Linux) and `scripts/install-binary.ps1` (Windows) with checksum verification
+- Automated binary smoke test (`scripts/binary-smoke.cjs`) using local origin server
+
+### Changed
+
+- Self-spawn (mcp-server, supervise, session create) now uses env-based dispatch instead of script paths
+- Binary size optimized from 477MB to 133MB by excluding devDependencies, puppeteer-core, and web/node_modules
+
+### Removed
+
+- Dead code `core/plugin-compiler.ts` (unused esbuild dependency)
+
 ## [0.2.2] - 2026-07-31
 
 ### Fixed
