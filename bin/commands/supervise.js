@@ -6,6 +6,7 @@ const fs = require('fs')
 const path = require('path')
 const { spawn } = require('child_process')
 const { resolveMeddleHome } = require('../lib/meddle-home')
+const { buildProxySpawn, buildCliSpawn, getReentryArgv } = require('../lib/spawn-proxy')
 
 const rawArgs = process.argv.slice(3)
 const daemonFlag = rawArgs.includes('--daemon')
@@ -20,9 +21,13 @@ if (daemonFlag) {
 }
 
 function supervise() {
-  const indexPath = path.join(__dirname, '..', '..', 'index.js')
   const proxyArgs = stripSupervisorArgs(rawArgs)
-  const childEnv = { ...process.env, DEBUG: process.env.DEBUG || '', MEDDLE_SUPERVISED: '1' }
+  const { args: spawnArgs, options: spawnOptions } = buildProxySpawn({
+    baseEnv: process.env,
+    reentryArgv: getReentryArgv(),
+    extraArgv: proxyArgs,
+    extraEnv: { DEBUG: process.env.DEBUG || '', MEDDLE_SUPERVISED: '1' },
+  })
 
   let child = null
   let stopping = false
@@ -37,9 +42,9 @@ function supervise() {
   process.on('SIGTERM', () => stop('SIGTERM'))
 
   const start = () => {
-    child = spawn(process.execPath, [indexPath, ...proxyArgs], {
+    child = spawn(process.execPath, spawnArgs, {
       cwd: process.cwd(),
-      env: childEnv,
+      env: spawnOptions.env,
       stdio: 'inherit',
     })
 
@@ -71,12 +76,16 @@ function startDaemon() {
   const meddleDir = resolveMeddleHome()
   fs.mkdirSync(meddleDir, { recursive: true })
   const logFd = fs.openSync(path.join(meddleDir, 'supervisor.log'), 'a')
-  const binPath = path.join(__dirname, '..', 'index')
-  const child = spawn(process.execPath, [binPath, 'supervise', ...args], {
+  const { args: spawnArgs, options: spawnOptions } = buildCliSpawn({
+    baseEnv: process.env,
+    reentryArgv: getReentryArgv(),
+    extraArgv: ['supervise', ...args],
+  })
+  const child = spawn(process.execPath, spawnArgs, {
     cwd: process.cwd(),
     detached: true,
     stdio: ['ignore', logFd, logFd],
-    env: process.env,
+    env: spawnOptions.env,
   })
   child.unref()
   console.log(`Supervisor started: pid=${child.pid}, log=${path.join(meddleDir, 'supervisor.log')}`)

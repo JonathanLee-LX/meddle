@@ -1,0 +1,118 @@
+name: Build Binary
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Dry run (skip release upload)'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-binary:
+    runs-on: ubuntu-latest
+    if: github.repository == 'JonathanLee-LX/meddle'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            name: meddle-linux-x64
+          - target: aarch64-unknown-linux-gnu
+            name: meddle-linux-arm64
+          - target: x86_64-apple-darwin
+            name: meddle-darwin-x64
+          - target: aarch64-apple-darwin
+            name: meddle-darwin-arm64
+          - target: x86_64-pc-windows-msvc
+            name: meddle-windows-x64.exe
+          - target: aarch64-pc-windows-msvc
+            name: meddle-windows-arm64.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install production dependencies
+        run: pnpm install --frozen-lockfile --prod --ignore-scripts
+
+      - name: Install web dependencies
+        run: cd web && pnpm install --frozen-lockfile
+
+      - name: Build (main)
+        run: npx tsc
+
+      - name: Build (web)
+        run: pnpm run build:web
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Compile binary
+        run: |
+          deno compile \
+            --target ${{ matrix.target }} \
+            --output dist-bin/${{ matrix.name }} \
+            --include web/dist \
+            --include bin \
+            --include dist \
+            --include plugins \
+            --include index.js --include mcp-server.js --include package.json \
+            --include node_modules \
+            --app-name meddle \
+            -A --no-check --unsafe-proto \
+            bin/main.js
+
+      - name: Smoke test (linux-x64 only)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: node scripts/binary-smoke.cjs dist-bin/${{ matrix.name }}
+
+      - name: Generate SHA256
+        run: cd dist-bin && sha256sum ${{ matrix.name }} > ${{ matrix.name }}.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            dist-bin/${{ matrix.name }}
+            dist-bin/${{ matrix.name }}.sha256
+
+  release:
+    needs: build-binary
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.dry-run }}
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f -exec mv {} release-assets/ \;
+          ls -lh release-assets/
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
