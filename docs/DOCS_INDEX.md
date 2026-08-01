@@ -93,6 +93,15 @@
 - **[ADR-003: 迁移回滚](./plugin/ADR-003-migration-rollback.md)**
   - 迁移与回滚机制
 
+## 二进制分发文档
+
+- **[RFC：二进制分发方案](./BINARY_DISTRIBUTION.md)**
+  - 背景与目标 / 双轨并行（npm + 二进制）
+  - 选型与 PoC 实测结论（Deno vs Bun vs Node SEA vs pkg）
+  - 单入口分派 / 自派生改造 / web/dist 嵌入 / 插件运行时加载
+  - deno.json 配置 / 构建产物矩阵 / CI workflow / 安装脚本
+  - 版本与发布联动 / 风险与缓解 / 里程碑 / 待评审决策
+
 ## 架构重构文档
 
 - **[架构重构 README](./refactor/README_ARCH_REFACTOR.md)**

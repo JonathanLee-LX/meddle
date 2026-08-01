@@ -1,0 +1,6 @@
+{
+  "//": "Configuration for `deno compile` binary distribution of meddle. See docs/BINARY_DISTRIBUTION.md. Permissions are passed via CLI (-A) at compile time.",
+  "compile": {
+    "exclude": ["**/*.spec.ts", "deno.json", "web/node_modules"]
+  }
+}

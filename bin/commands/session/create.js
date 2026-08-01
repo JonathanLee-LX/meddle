@@ -30,6 +30,7 @@ const {
 } = require('../../lib/sessions')
 const { resolveMeddleHome } = require('../../lib/meddle-home')
 const { GLOBAL_DEFAULT_PORT } = require('../../lib/session-args')
+const { buildProxySpawn, getReentryArgv } = require('../../lib/spawn-proxy')
 
 function parseArgs(argv) {
     const args = argv.slice(4) // after 'meddle' 'session' 'create'
@@ -88,24 +89,26 @@ async function main() {
     // via its existing startup logic. We only ensure the root exists.
 
     // 3. spawn child
-    const indexPath = path.join(__dirname, '..', '..', '..', 'index.js')
-    const childEnv = {
-        ...process.env,
-        MEDDLE_HOME: meddleHome,
-        PORT: String(port),
-        MEDDLE_SESSION_ID: id,
-        // Suppress the CA trust prompt — sessions reuse the shared CA
-        // from ~/.meddle/ca which the user already trusted when setting up
-        // the default session. Also avoid interactive prompts blocking
-        // a non-interactive agent spawn.
-        MEDDLE_HEADLESS: '1',
-        // Disable MCP file discovery for non-default sessions; the MCP
-        // proxy-url file is only meaningful for the default session.
-        MEDDLE_MCP: '',
-    }
-    const child = spawn(process.execPath, [indexPath], {
+    const { args: spawnArgs, options: spawnOptions } = buildProxySpawn({
+        baseEnv: process.env,
+        reentryArgv: getReentryArgv(),
+        extraEnv: {
+            MEDDLE_HOME: meddleHome,
+            PORT: String(port),
+            MEDDLE_SESSION_ID: id,
+            // Suppress the CA trust prompt — sessions reuse the shared CA
+            // from ~/.meddle/ca which the user already trusted when setting up
+            // the default session. Also avoid interactive prompts blocking
+            // a non-interactive agent spawn.
+            MEDDLE_HEADLESS: '1',
+            // Disable MCP file discovery for non-default sessions; the MCP
+            // proxy-url file is only meaningful for the default session.
+            MEDDLE_MCP: '',
+        },
+    })
+    const child = spawn(process.execPath, spawnArgs, {
         cwd: process.cwd(),
-        env: childEnv,
+        env: spawnOptions.env,
         stdio: 'inherit',
         detached: false,
     })

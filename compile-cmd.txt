@@ -1,0 +1,12 @@
+deno compile \
+  --target x86_64-unknown-linux-gnu \
+  --output dist-bin/meddle \
+  --include web/dist \
+  --include bin \
+  --include dist \
+  --include plugins \
+  --include index.js --include mcp-server.js --include package.json \
+  --include node_modules \
+  --app-name meddle \
+  -A --no-check --unsafe-proto \
+  bin/main.js

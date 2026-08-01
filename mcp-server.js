@@ -16,6 +16,7 @@ const {
     deleteSession, isPidAlive, allocatePort, generateId, sessionDir, readRegistry
 } = require('./bin/lib/sessions')
 const { GLOBAL_DEFAULT_PORT } = require('./bin/lib/session-args')
+const { buildProxySpawn, getReentryArgv } = require('./bin/lib/spawn-proxy')
 
 const meddleDir = resolveMeddleHome()
 const mcpFile = path.join(meddleDir, 'mcp-proxy-url.json')
@@ -208,12 +209,15 @@ mcpServer.registerTool('start_proxy', {
     }
     proxyProcess = null
     cachedProxyUrl = null
-    const indexPath = path.join(__dirname, 'index.js')
-    const spawnEnv = { ...process.env, MEDDLE_MCP: '1', DEBUG: process.env.DEBUG || '' }
-    const child = spawn(process.execPath, [indexPath], {
-        env: spawnEnv,
+    const { args, options } = buildProxySpawn({
+        baseEnv: process.env,
+        reentryArgv: getReentryArgv(),
+        extraEnv: { MEDDLE_MCP: '1', DEBUG: process.env.DEBUG || '' },
+    })
+    const child = spawn(process.execPath, args, {
+        ...options,
         stdio: ['ignore', 'pipe', 'pipe'],
-        cwd: process.cwd()
+        cwd: process.cwd(),
     })
     proxyProcess = child
     child.stdout?.on('data', (d) => process.stderr.write(d))
@@ -278,17 +282,19 @@ mcpServer.registerTool('create_session', {
     fs.mkdirSync(sDir, { recursive: true })
 
     // 3. spawn child
-    const indexPath = path.join(__dirname, 'index.js')
-    const childEnv = {
-        ...process.env,
-        MEDDLE_HOME: sDir,
-        PORT: String(targetPort),
-        MEDDLE_SESSION_ID: id,
-        MEDDLE_HEADLESS: '1',
-        MEDDLE_MCP: '1',
-    }
-    const child = spawn(process.execPath, [indexPath], {
-        env: childEnv,
+    const { args, options } = buildProxySpawn({
+        baseEnv: process.env,
+        reentryArgv: getReentryArgv(),
+        extraEnv: {
+            MEDDLE_HOME: sDir,
+            PORT: String(targetPort),
+            MEDDLE_SESSION_ID: id,
+            MEDDLE_HEADLESS: '1',
+            MEDDLE_MCP: '1',
+        },
+    })
+    const child = spawn(process.execPath, args, {
+        ...options,
         stdio: ['ignore', 'ignore', 'ignore'],
         cwd: process.cwd(),
         detached: false,
