@@ -52,7 +52,7 @@ export async function apiPost<T>(
   return apiRequest<T>(url, {
     method: 'POST',
     headers: contentType ? { 'Content-Type': contentType } : undefined,
-    body: contentType === 'application/json' ? JSON.stringify(body) : body,
+    body: contentType === 'application/json' ? JSON.stringify(body) : body as BodyInit,
   })
 }
 
@@ -67,7 +67,7 @@ export async function apiPut<T>(
   return apiRequest<T>(url, {
     method: 'PUT',
     headers: contentType ? { 'Content-Type': contentType } : undefined,
-    body: contentType === 'application/json' ? JSON.stringify(body) : body,
+    body: contentType === 'application/json' ? JSON.stringify(body) : body as BodyInit,
   })
 }
 

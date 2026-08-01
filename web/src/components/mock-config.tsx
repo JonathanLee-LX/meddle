@@ -117,6 +117,28 @@ export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, dele
     }
   }, [])
 
+  const validateBody = useCallback((body: string) => {
+    if (!body.trim()) {
+      setValidationError(null)
+      return
+    }
+
+    const result = validateContent(body)
+    if (!result.valid) {
+      setValidationError(result.error || '内容格式错误')
+    } else {
+      setValidationError(null)
+    }
+  }, [])
+
+  const updateField = useCallback(<K extends keyof Omit<MockRule, 'id'>>(field: K, value: Omit<MockRule, 'id'>[K]) => {
+    setEditForm((prev) => ({ ...prev, [field]: value }))
+
+    if (field === 'body' && typeof value === 'string') {
+      validateBody(value)
+    }
+  }, [validateBody])
+
   // 使用系统文件选择器选择文件
   const handleSelectFile = useCallback(async () => {
     // 优先尝试使用 File System Access API
@@ -196,21 +218,6 @@ export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, dele
       setFormatError(null)
     }
   }, [editOpen])
-
-  // 验证body内容
-  const validateBody = useCallback((body: string) => {
-    if (!body.trim()) {
-      setValidationError(null)
-      return
-    }
-
-    const result = validateContent(body)
-    if (!result.valid) {
-      setValidationError(result.error || '内容格式错误')
-    } else {
-      setValidationError(null)
-    }
-  }, [])
 
   const openCreate = useCallback(() => {
     window.dispatchEvent(
@@ -305,14 +312,6 @@ export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, dele
     },
     [deleteMock],
   )
-
-  const updateField = useCallback(<K extends keyof Omit<MockRule, 'id'>>(field: K, value: Omit<MockRule, 'id'>[K]) => {
-    setEditForm((prev) => ({ ...prev, [field]: value }))
-
-    if (field === 'body' && typeof value === 'string') {
-      validateBody(value)
-    }
-  }, [validateBody])
 
   // 自动格式化 body（使用 Prettier）
   const formatBody = useCallback(async () => {
