@@ -5,7 +5,36 @@
 
 ## 使用
 
+### 方式一：npm 安装
+
 全局安装 `npm install @jonathanleelx/meddle -g`，会创建一个 `meddle` 命令。
+
+### 方式二：二进制安装（无需 Node.js）
+
+**macOS / Linux：**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JonathanLee-LX/meddle/main/scripts/install-binary.sh | bash
+```
+
+**Windows (PowerShell)：**
+
+```powershell
+irm https://raw.githubusercontent.com/JonathanLee-LX/meddle/main/scripts/install-binary.ps1 | iex
+```
+
+**支持平台：**
+
+| 平台 | 产物 |
+|---|---|
+| Linux x64 | `meddle-linux-x64` |
+| Linux ARM64 | `meddle-linux-arm64` |
+| macOS Intel | `meddle-darwin-x64` |
+| macOS Apple Silicon | `meddle-darwin-arm64` |
+| Windows x64 | `meddle-windows-x64.exe` |
+| Windows ARM64 | `meddle-windows-arm64.exe` |
+
+二进制产物随 [GitHub Release](https://github.com/JonathanLee-LX/meddle/releases) 发布，也可手动下载。安装目录默认 `~/.meddle/bin`，可通过 `MEDDLE_BIN_DIR` 环境变量自定义。
 
 ### 命令
 
