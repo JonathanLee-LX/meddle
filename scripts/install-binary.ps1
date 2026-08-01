@@ -21,8 +21,8 @@ $Asset = "meddle-windows-$Arch.exe"
 
 if ($Version -eq "latest") {
     Write-Host "Fetching latest release..."
-    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -UseBasicParsing
-    $Version = $release.tag_name -replace '^v', ''
+    $response = Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest" -MaximumRedirection 0 -ErrorAction SilentlyContinue -UseBasicParsing
+    $Version = $response.Headers.Location -replace '.*/tag/v', ''
 }
 
 $Tag = "v$Version"

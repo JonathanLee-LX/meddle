@@ -24,7 +24,7 @@ ASSET="meddle-${OS_TAG}-${ARCH_TAG}"
 
 if [ "$VERSION" = "latest" ]; then
     echo "Fetching latest release..."
-    VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/')
+    VERSION=$(curl -s -o /dev/null -w '%{redirect_url}' "https://github.com/${REPO}/releases/latest" | sed 's|.*/tag/v||')
     if [ -z "$VERSION" ]; then
         echo "Error: could not determine latest version"; exit 1
     fi
