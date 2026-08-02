@@ -21,6 +21,7 @@ const {
     pluginClientIdentity,
 } = require('./dist/core/client-identity')
 const { createApplicationIdentityResolver } = require('./dist/core/application-identity')
+const { runAsyncUpdateCheck } = require('./bin/lib/update-check')
 const {
     authorizeProxyClient,
     buildRemoteAccessConfig,
@@ -493,6 +494,8 @@ localWSServer.on('connection', (client, req) => {})
 
 // ===== 启动 =====
 ;(async () => {
+    // 非阻塞异步版本检查：不会阻塞启动，失败静默，1.5s 后发起且 timer unref
+    runAsyncUpdateCheck({ current: require('./package.json').version })
     await ensureRootCA()
     await pluginBoot.bootstrapBuiltinPlugins()
     const port = await getFreePort()

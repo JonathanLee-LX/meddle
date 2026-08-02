@@ -32,6 +32,7 @@ const commands = {
   'url': './commands/url.js',
   'status': './commands/status.js',
   'version': './commands/version.js',
+  'update': './commands/update.js',
   'session': './commands/session/index.js',
   'mock': './commands/mock/index.js',
   'route': './commands/route/index.js'
@@ -77,6 +78,9 @@ Meddle - 开发代理工具
   meddle status                   查看代理状态
   meddle version                  查看版本信息
   meddle --version, -v            查看版本信息 (快捷别名)
+  meddle update                   检查并升级到最新版本
+  meddle update --check           仅检查更新
+  meddle update --auto on|off     启用/禁用自动更新 (默认关闭)
 
 Session 命令 (多实例隔离，预览功能):
   meddle session create [--name <label>] [--port <port>]
