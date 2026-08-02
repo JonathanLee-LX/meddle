@@ -100,7 +100,7 @@ function compareVersions(a, b) {
  */
 async function getLatestVersionNpm({ fetchImpl, registryUrl, timeoutMs } = {}) {
     const doFetch = fetchImpl || fetch
-    const url = registryUrl || DEFAULT_NPM_REGISTRY_URL
+    const url = registryUrl || process.env.MEDDLE_NPM_REGISTRY_URL || DEFAULT_NPM_REGISTRY_URL
     const response = await doFetch(url, { signal: AbortSignal.timeout(timeoutMs || DEFAULT_TIMEOUT_MS) })
     if (!response.ok) throw new Error(`npm registry responded ${response.status}`)
     const data = await response.json()
@@ -116,7 +116,7 @@ async function getLatestVersionNpm({ fetchImpl, registryUrl, timeoutMs } = {}) {
  */
 async function getLatestVersionGithub({ fetchImpl, latestUrl, timeoutMs } = {}) {
     const doFetch = fetchImpl || fetch
-    const url = latestUrl || DEFAULT_GITHUB_LATEST_URL
+    const url = latestUrl || process.env.MEDDLE_GITHUB_LATEST_URL || DEFAULT_GITHUB_LATEST_URL
     const response = await doFetch(url, {
         redirect: 'manual',
         signal: AbortSignal.timeout(timeoutMs || DEFAULT_TIMEOUT_MS),
