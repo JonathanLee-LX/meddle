@@ -368,6 +368,40 @@ describe('downloadBinaryAsset', () => {
         ).rejects.toThrow()
         expect(fs.existsSync(destFile)).toBe(false)
     })
+
+    it('restores the backup and throws a clear error when the replace fails', async () => {
+        const { s } = await makeFixture()
+        const dir = makeTmpDir()
+        const destFile = path.join(dir, 'meddle')
+        fs.writeFileSync(destFile, 'old-binary')
+        const fsImpl = {
+            ...fs,
+            renameSync: (from: string, to: string) => {
+                if (from.includes('.tmp')) {
+                    throw Object.assign(new Error('EPERM: running binary is locked'), { code: 'EPERM' })
+                }
+                return fs.renameSync(from, to)
+            },
+        }
+        await expect(
+            downloadBinaryAsset({
+                version: '1.2.3',
+                destFile,
+                platform: 'linux',
+                arch: 'x64',
+                baseUrl: s.url,
+                fsImpl,
+            }),
+        ).rejects.toThrow(/替换二进制失败/)
+        expect(fs.readFileSync(destFile).toString()).toBe('old-binary')
+        expect(fs.existsSync(`${destFile}.bak`)).toBe(false)
+        expect(fs.readdirSync(dir).some((f) => f.includes('.tmp'))).toBe(false)
+    })
+
+    it('uses a generous timeout for the binary payload download', async () => {
+        const { DEFAULT_DOWNLOAD_TIMEOUT_MS } = await import('../bin/lib/update-check')
+        expect(DEFAULT_DOWNLOAD_TIMEOUT_MS).toBeGreaterThanOrEqual(60_000)
+    })
 })
 
 describe('auto-update setting', () => {
@@ -430,19 +464,21 @@ describe('runAsyncUpdateCheck', () => {
     it('never throws when the network fails', async () => {
         const home = makeTmpDir()
         let notified = 0
+        let fetchCalled = false
         runAsyncUpdateCheck({
             home,
             installMethod: 'npm',
             current: '0.3.1',
             delayMs: 0,
             fetchImpl: async () => {
+                fetchCalled = true
                 throw new Error('network down')
             },
             onOutdated: () => {
                 notified++
             },
         })
-        await waitFor(() => notified === 0, 200)
+        await waitFor(() => fetchCalled)
         expect(notified).toBe(0)
     })
 
@@ -481,5 +517,43 @@ describe('runAsyncUpdateCheck', () => {
         })
         await waitFor(() => notified.autoUpdated === true)
         expect(fs.readFileSync(path.join(binDir, 'meddle'))).toEqual(payload)
+    })
+
+    it('skips auto-download when the running executable differs from the install dir', async () => {
+        const home = makeTmpDir()
+        const binDir = path.join(home, 'bin')
+        fs.mkdirSync(binDir, { recursive: true })
+        setAutoUpdate(home, true)
+        let downloadAttempted = false
+        const s = await jsonServer((req, res) => {
+            if (req.url === '/JonathanLee-LX/meddle/releases/latest') {
+                res.statusCode = 302
+                res.setHeader('location', '/JonathanLee-LX/meddle/releases/tag/v0.4.0')
+                res.end()
+            } else if (req.url && req.url.includes('releases/download')) {
+                downloadAttempted = true
+                res.statusCode = 404
+                res.end()
+            } else {
+                res.statusCode = 404
+                res.end()
+            }
+        })
+        let notified: Record<string, unknown> = {}
+        runAsyncUpdateCheck({
+            home,
+            installMethod: 'binary',
+            current: '0.3.1',
+            delayMs: 0,
+            binDir,
+            execPath: '/custom/path/meddle',
+            fetchImpl: fetchImpl(s.url),
+            onOutdated: (info) => {
+                notified = info
+            },
+        })
+        await waitFor(() => notified.latest === '0.4.0')
+        expect(downloadAttempted).toBe(false)
+        expect(notified.autoUpdated).toBeUndefined()
     })
 })

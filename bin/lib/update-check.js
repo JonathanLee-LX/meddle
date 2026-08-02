@@ -24,6 +24,7 @@ const DEFAULT_GITHUB_LATEST_URL = `https://github.com/${REPO}/releases/latest`
 const DEFAULT_DOWNLOAD_BASE_URL = `https://github.com/${REPO}/releases/download`
 const DEFAULT_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const DEFAULT_TIMEOUT_MS = 5000
+const DEFAULT_DOWNLOAD_TIMEOUT_MS = 120 * 1000
 
 const VERSION_RE = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/
 
@@ -234,24 +235,30 @@ function sha256Hex(buffer) {
 
 /**
  * Download a release binary, verify its SHA256 sidecar and atomically replace
- * the existing binary. The previous binary is kept as `<destFile>.bak`.
+ * the existing binary. The previous binary is kept as `<destFile>.bak`. When
+ * the final replace fails the backup is restored and a descriptive error is
+ * thrown (Windows commonly fails with EPERM on a running binary).
  * @param {{ version: string, destFile: string, platform: string, arch: string,
- *           baseUrl?: string, fetchImpl?: Function, timeoutMs?: number }} opts
+ *           baseUrl?: string, fetchImpl?: Function, timeoutMs?: number,
+ *           fsImpl?: object }} opts
  * @returns {Promise<{ installed: string, backup: string, version: string }>}
  */
 async function downloadBinaryAsset(opts) {
     const { version, destFile, platform, arch } = opts
     const baseUrl = opts.baseUrl || DEFAULT_DOWNLOAD_BASE_URL
     const doFetch = opts.fetchImpl || fetch
-    const timeoutMs = opts.timeoutMs || DEFAULT_TIMEOUT_MS
+    const fsImpl = opts.fsImpl || fs
+    const payloadTimeout = opts.timeoutMs || DEFAULT_DOWNLOAD_TIMEOUT_MS
 
     const asset = getAssetName({ platform, arch })
     const assetUrl = `${baseUrl}/v${version}/${asset}`
     const shaUrl = `${assetUrl}.sha256`
 
+    // The binary is large (100MB+); the checksum sidecar is tiny. Use a long
+    // timeout for the payload and the regular timeout for the metadata fetch.
     const [binaryResponse, shaResponse] = await Promise.all([
-        doFetch(assetUrl, { signal: AbortSignal.timeout(timeoutMs) }),
-        doFetch(shaUrl, { signal: AbortSignal.timeout(timeoutMs) }),
+        doFetch(assetUrl, { signal: AbortSignal.timeout(payloadTimeout) }),
+        doFetch(shaUrl, { signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS) }),
     ])
     if (!binaryResponse.ok) throw new Error(`download failed (${binaryResponse.status})`)
     if (!shaResponse.ok) throw new Error(`checksum sidecar missing (${shaResponse.status})`)
@@ -265,25 +272,33 @@ async function downloadBinaryAsset(opts) {
     }
 
     const dir = path.dirname(destFile)
-    fs.mkdirSync(dir, { recursive: true })
+    fsImpl.mkdirSync(dir, { recursive: true })
 
     const tmpFile = `${destFile}.tmp-${process.pid}`
-    fs.writeFileSync(tmpFile, payload)
-    if (platform !== 'win32') fs.chmodSync(tmpFile, 0o755)
+    fsImpl.writeFileSync(tmpFile, payload)
+    if (platform !== 'win32') fsImpl.chmodSync(tmpFile, 0o755)
 
     const backup = `${destFile}.bak`
     try {
-        if (fs.existsSync(backup)) fs.unlinkSync(backup)
-        if (fs.existsSync(destFile)) fs.renameSync(destFile, backup)
+        if (fsImpl.existsSync(backup)) fsImpl.unlinkSync(backup)
+        if (fsImpl.existsSync(destFile)) fsImpl.renameSync(destFile, backup)
     } catch (_) {}
     try {
-        fs.renameSync(tmpFile, destFile)
+        fsImpl.renameSync(tmpFile, destFile)
     } catch (err) {
-        fs.unlinkSync(tmpFile)
-        throw err
+        try {
+            if (fsImpl.existsSync(backup) && !fsImpl.existsSync(destFile)) {
+                fsImpl.renameSync(backup, destFile)
+            }
+        } catch (_) {}
+        try { fsImpl.unlinkSync(tmpFile) } catch (_) {}
+        const hint = process.platform === 'win32'
+            ? 'Windows 下无法替换运行中的 meddle.exe，请先停止 meddle 再运行 meddle update'
+            : '替换二进制失败，请检查文件权限'
+        throw new Error(`${hint}: ${(err && err.code) || (err && err.message) || err}`)
     }
 
-    return { installed: destFile, backup: fs.existsSync(backup) ? backup : null, version }
+    return { installed: destFile, backup: fsImpl.existsSync(backup) ? backup : null, version }
 }
 
 /**
@@ -337,17 +352,30 @@ function printUpdateNotice(info) {
 /**
  * Fire-and-forget startup check. Never blocks, never throws, never keeps the
  * process alive. When auto-update is enabled (binary installs) the new binary
- * is downloaded and verified on disk; npm installs only get a notice.
+ * is downloaded and verified on disk — but only when the running executable
+ * actually matches the install dir, otherwise the download would land where it
+ * can never take effect. npm installs only get a notice.
  * @param {{ home?: string, installMethod?: string, current: string,
- *           binDir?: string, delayMs?: number, fetchImpl?: Function,
- *           onOutdated?: Function }} opts
+ *           binDir?: string, execPath?: string, delayMs?: number,
+ *           fetchImpl?: Function, onOutdated?: Function }} opts
  * @returns {void}
  */
+function resolveRealPath(p) {
+    try { return fs.realpathSync(p) } catch (_) { return path.resolve(p) }
+}
+
+function isSameBinary(a, b) {
+    return resolveRealPath(a) === resolveRealPath(b)
+}
+
 function runAsyncUpdateCheck(opts) {
     const home = opts.home || resolveMeddleHome()
     const installMethod = opts.installMethod || getInstallMethod({ moduleDir: __dirname })
     const binDir = opts.binDir || process.env.MEDDLE_BIN_DIR || path.join(home, 'bin')
     const delayMs = opts.delayMs === undefined ? 1500 : opts.delayMs
+    const execPath = opts.execPath || process.execPath
+    const exeBase = path.basename(execPath).toLowerCase()
+    const isMeddleExecutable = exeBase === 'meddle' || exeBase === 'meddle.exe'
 
     const timer = setTimeout(() => {
         ;(async () => {
@@ -361,18 +389,25 @@ function runAsyncUpdateCheck(opts) {
             let finalInfo = info
             if (getAutoUpdate(home) && installMethod === 'binary') {
                 const destFile = path.join(binDir, os.platform() === 'win32' ? 'meddle.exe' : 'meddle')
-                try {
-                    await downloadBinaryAsset({
-                        version: info.latest,
-                        destFile,
-                        platform: os.platform(),
-                        arch: os.arch(),
-                        baseUrl: opts.baseUrl,
-                        fetchImpl: opts.fetchImpl,
-                    })
-                    finalInfo = { ...info, autoUpdated: true, destFile }
-                } catch (err) {
-                    finalInfo = { ...info, autoUpdateFailed: err && err.message ? err.message : String(err) }
+                if (isMeddleExecutable && !isSameBinary(destFile, execPath)) {
+                    finalInfo = {
+                        ...info,
+                        skipAutoUpdate: '安装路径与当前运行路径不一致，跳过自动更新',
+                    }
+                } else {
+                    try {
+                        await downloadBinaryAsset({
+                            version: info.latest,
+                            destFile,
+                            platform: os.platform(),
+                            arch: os.arch(),
+                            baseUrl: opts.baseUrl,
+                            fetchImpl: opts.fetchImpl,
+                        })
+                        finalInfo = { ...info, autoUpdated: true, destFile }
+                    } catch (err) {
+                        finalInfo = { ...info, autoUpdateFailed: err && err.message ? err.message : String(err) }
+                    }
                 }
             }
             if (opts.onOutdated) {
@@ -399,4 +434,5 @@ module.exports = {
     getAutoUpdate,
     setAutoUpdate,
     runAsyncUpdateCheck,
+    DEFAULT_DOWNLOAD_TIMEOUT_MS,
 }
