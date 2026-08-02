@@ -95,9 +95,16 @@ async function installVersion(version) {
     output.info(`正在通过 npm 升级 ${PACKAGE_NAME}@${version}...`)
     const child = spawnSync('npm', ['install', '-g', `${PACKAGE_NAME}@${version}`], {
         stdio: 'inherit',
+        // On Windows `npm` resolves to npm.cmd which Node cannot spawn directly
+        // unless run through a shell (Node >=18.20.2/20.12.2/22.3.0: EINVAL; older: ENOENT).
+        shell: os.platform() === 'win32',
     })
+    if (child.error) {
+        output.error(`npm 升级失败: ${child.error.message}`)
+        process.exit(1)
+    }
     if (child.status !== 0) {
-        output.error('npm 升级失败')
+        output.error(`npm 升级失败 (exit ${child.status})`)
         process.exit(child.status || 1)
     }
     output.success(`已升级到 ${PACKAGE_NAME}@${version}`)
@@ -131,7 +138,13 @@ async function run() {
             process.exit(1)
         }
         setAutoUpdate(home, value === 'on')
-        output.success(`自动更新已${value === 'on' ? '启用' : '关闭'}${value === 'on' ? '（重启 meddle 后生效）' : ''}`)
+        if (value === 'on' && isNpmInstall()) {
+            output.success('自动更新已启用（npm 安装下仅启动时提示，仍需要运行 meddle update 升级）')
+        } else {
+            output.success(
+                `自动更新已${value === 'on' ? '启用' : '关闭'}${value === 'on' ? '（重启 meddle 后生效）' : ''}`,
+            )
+        }
         return
     }
 
