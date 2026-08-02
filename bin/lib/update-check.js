@@ -245,7 +245,7 @@ function sha256Hex(buffer) {
  */
 async function downloadBinaryAsset(opts) {
     const { version, destFile, platform, arch } = opts
-    const baseUrl = opts.baseUrl || DEFAULT_DOWNLOAD_BASE_URL
+    const baseUrl = opts.baseUrl || process.env.MEDDLE_UPDATE_BASE_URL || DEFAULT_DOWNLOAD_BASE_URL
     const doFetch = opts.fetchImpl || fetch
     const fsImpl = opts.fsImpl || fs
     const payloadTimeout = opts.timeoutMs || DEFAULT_DOWNLOAD_TIMEOUT_MS
