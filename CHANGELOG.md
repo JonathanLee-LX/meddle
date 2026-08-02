@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0-beta.1] - 2026-08-02
+
+### Added
+
+- Auto-update: `meddle update` command (check / upgrade / `--version <x.y.z>` / `--auto on|off` / `status`)
+- Non-blocking async version check on proxy startup (24h cache, never blocks boot)
+- Binary installs: SHA256-verified download + `.bak` backup + atomic replace; auto-update downloads on startup when enabled (default off)
+- npm installs: `meddle update` runs `npm install -g`
+
+### Fixed
+
+- Windows: `spawnSync('npm')` now uses shell (npm.cmd); replace failure restores backup with a clear error
+- Binary download timeout raised to 120s for large payloads
+- Auto-update skips download when the running executable path differs from the install dir (session / custom PATH)
+
 ## [0.3.1] - 2026-08-02
 
 ### Fixed

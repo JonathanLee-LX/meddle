@@ -60,7 +60,12 @@ jobs:
 
       - name: Publish to npm
         if: ${{ !inputs.dry-run }}
-        run: npm publish --access public
+        run: |
+          if [[ "${{ github.ref_name }}" == *-* ]]; then
+            npm publish --access public --tag beta
+          else
+            npm publish --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
