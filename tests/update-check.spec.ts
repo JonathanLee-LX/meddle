@@ -316,6 +316,88 @@ describe('beta channel', () => {
     })
 })
 
+describe('channel switching', () => {
+    it('explicit stable channel lets a beta install switch down to stable', async () => {
+        const home = makeTmpDir()
+        const s = await jsonServer((_req, res) => {
+            res.statusCode = 302
+            res.setHeader('location', '/JonathanLee-LX/meddle/releases/tag/v0.3.1')
+            res.end()
+        })
+        const result = await checkForUpdate({
+            home,
+            installMethod: 'binary',
+            current: '0.4.0-beta.8',
+            now: 1_000_000,
+            ttlMs: 86_400_000,
+            channel: 'stable',
+            explicitChannel: true,
+            fetchImpl: fetchImpl(s.url),
+        })
+        expect(result.latest).toBe('0.3.1')
+        expect(result.outdated).toBe(true)
+    })
+
+    it('explicit beta channel lets a stable install switch up to beta', async () => {
+        const home = makeTmpDir()
+        const s = await jsonServer((_req, res) => {
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ version: '0.4.0-beta.9' }))
+        })
+        const result = await checkForUpdate({
+            home,
+            installMethod: 'npm',
+            current: '0.3.1',
+            now: 1_000_000,
+            ttlMs: 86_400_000,
+            channel: 'beta',
+            explicitChannel: true,
+            fetchImpl: fetchImpl(s.url),
+        })
+        expect(result.latest).toBe('0.4.0-beta.9')
+        expect(result.outdated).toBe(true)
+    })
+
+    it('inferred channel never switches channels on its own', async () => {
+        const home = makeTmpDir()
+        const s = await jsonServer((_req, res) => {
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ version: '0.3.1' }))
+        })
+        const result = await checkForUpdate({
+            home,
+            installMethod: 'npm',
+            current: '0.3.1',
+            now: 1_000_000,
+            ttlMs: 86_400_000,
+            fetchImpl: fetchImpl(s.url),
+        })
+        expect(result.channel).toBe('stable')
+        expect(result.outdated).toBe(false)
+    })
+
+    it('a cached stable result still switches a beta install', async () => {
+        const home = makeTmpDir()
+        fs.mkdirSync(path.join(home, '.cache'), { recursive: true })
+        fs.writeFileSync(
+            path.join(home, '.cache/update-check.json'),
+            JSON.stringify({ version: '0.3.1', checkedAt: 1_000_000, channel: 'stable' }),
+        )
+        const result = await checkForUpdate({
+            home,
+            installMethod: 'npm',
+            current: '0.4.0-beta.8',
+            now: 1_000_000,
+            ttlMs: 86_400_000,
+            channel: 'stable',
+            explicitChannel: true,
+            fetchImpl: async () => null as never,
+        })
+        expect(result.fromCache).toBe(true)
+        expect(result.outdated).toBe(true)
+    })
+})
+
 describe('getInstallMethod', () => {
     it('detects npm installation from node_modules path', () => {
         expect(

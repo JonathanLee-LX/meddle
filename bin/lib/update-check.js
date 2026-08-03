@@ -166,10 +166,22 @@ function inferChannel(current) {
 }
 
 /**
+ * Decide whether the install should move to `latest`. Explicit channel flags
+ * (--beta/--stable) mean "switch channels", so a different channel always
+ * triggers the move (even a downgrade); the inferred channel only upgrades.
+ * @param {{ latest: string, current: string, channel: string, explicitChannel: boolean }} opts
+ * @returns {boolean}
+ */
+function outdatedByChannel({ latest, current, channel, explicitChannel }) {
+    if (explicitChannel && channel !== inferChannel(current)) return true
+    return compareVersions(latest, current) > 0
+}
+
+/**
  * @param {{ home: string, fetchImpl?: Function, installMethod: string, current: string,
  *           now?: number, ttlMs?: number, force?: boolean,
  *           registryUrl?: string, latestUrl?: string, timeoutMs?: number,
- *           channel?: string }} opts
+ *           channel?: string, explicitChannel?: boolean }} opts
  * @returns {Promise<{ current: string, latest: string, outdated: boolean, fromCache: boolean, checkedAt: number, channel: string }>}
  */
 async function checkForUpdate(opts) {
@@ -185,6 +197,7 @@ async function checkForUpdate(opts) {
         latestUrl,
         timeoutMs,
         channel = inferChannel(current),
+        explicitChannel = false,
     } = opts
 
     const cacheFile = updateCachePath(home)
@@ -199,7 +212,7 @@ async function checkForUpdate(opts) {
             return {
                 current,
                 latest: cached.version,
-                outdated: compareVersions(cached.version, current) > 0,
+                outdated: outdatedByChannel({ latest: cached.version, current, channel, explicitChannel }),
                 fromCache: true,
                 checkedAt: cached.checkedAt,
                 channel,
@@ -226,7 +239,7 @@ async function checkForUpdate(opts) {
     return {
         current,
         latest,
-        outdated: compareVersions(latest, current) > 0,
+        outdated: outdatedByChannel({ latest, current, channel, explicitChannel }),
         fromCache: false,
         checkedAt,
         channel,

@@ -186,25 +186,44 @@ async function main() {
         assert.ok(code === 0 || code === 2, `unexpected exit ${code}`)
     })
 
-    await test('--stable with a prerelease current shows the channel latest version', async () => {
-        // Current is 0.4.0-beta.x (prerelease); stable channel latest is 0.3.1,
-        // which is BELOW the current version. Not outdated — but the output must
-        // name the stable channel's latest instead of echoing the current version.
+    await test('--stable with a newer prerelease current downgrades to the stable version', async () => {
+        // Current is 0.4.0-beta.x (prerelease); stable channel latest is 0.3.1.
+        // An explicit --stable must switch channels — including downgrading —
+        // instead of reporting "已是最新版本 (beta)".
+        const downgradePayload = Buffer.from('stable-binary-v0.3.1')
         const olderServer = await startFixtureServer({
             latestVersion: '0.3.1',
-            latestBetaVersion: '0.4.0-beta.6',
+            latestBetaVersion: '0.4.0-beta.9',
+            assets: {
+                '0.3.1/meddle-linux-x64': downgradePayload,
+                '0.3.1/meddle-linux-x64.sha256': `${sha256(downgradePayload)}  meddle-linux-x64\n`,
+            },
         })
         const olderHome = makeTmpDir('meddle-e2e-older-')
-        const { code, stdout } = await run(['update', '--check', '--stable'], {
+        const check = await run(['update', '--check', '--stable'], {
             ...baseEnv,
             MEDDLE_HOME: olderHome,
             MEDDLE_GITHUB_LATEST_URL: `${olderServer.base}/releases/latest`,
         })
+        assert.equal(check.code, 2, `expected exit 2, got ${check.code}\n${check.stdout}`)
+        assert.match(check.stdout, /0\.3\.1/)
+        assert.doesNotMatch(check.stdout, /已是最新版本 \(0\.4\.0-beta/)
+        assert.doesNotMatch(check.stdout, /已超过/)
+
+        const destFile = path.join(binDir, 'meddle')
+        fs.writeFileSync(destFile, oldBinary)
+        const upgrade = await run(['update', '--stable'], {
+            ...baseEnv,
+            MEDDLE_HOME: olderHome,
+            MEDDLE_BIN_DIR: binDir,
+            MEDDLE_GITHUB_LATEST_URL: `${olderServer.base}/releases/latest`,
+            MEDDLE_UPDATE_BASE_URL: `${olderServer.base}/releases/download`,
+        })
         olderServer.server.close()
         fs.rmSync(olderHome, { recursive: true, force: true })
-        assert.equal(code, 0, `exit ${code}\n${stdout}`)
-        assert.match(stdout, /0\.3\.1/)
-        assert.doesNotMatch(stdout, /已是最新版本 \(0\.4\.0-beta/)
+        assert.equal(upgrade.code, 0, `exit ${upgrade.code}\n${upgrade.stdout}`)
+        assert.match(upgrade.stdout, /0\.3\.1/)
+        assert.equal(fs.readFileSync(destFile).toString(), downgradePayload.toString())
     })
 
     // ── update --version (binary download + replace) ──

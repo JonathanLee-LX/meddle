@@ -47,8 +47,8 @@ meddle update - 检查并升级 meddle
 
 用法:
   meddle update                   检查并升级（beta 版本默认走 beta 频道）
-  meddle update --beta            强制使用 beta 测试频道
-  meddle update --stable          强制使用稳定频道
+  meddle update --beta            切换到 beta 频道并升级到最新 beta 版本
+  meddle update --stable          切换到稳定频道并升级到最新稳定版本（可降级）
   meddle update --check           仅检查，提示可用版本 (有新版本时退出码为 2)
   meddle update --check --beta    仅检查 beta 版本
   meddle update --version <x.y.z> 安装指定版本
@@ -58,13 +58,14 @@ meddle update - 检查并升级 meddle
 `)
 }
 
-async function resolveLatest({ force = false, notify = true, channel = 'stable' } = {}) {
+async function resolveLatest({ force = false, notify = true, channel = 'stable', explicitChannel = false } = {}) {
     const info = await checkForUpdate({
         home,
         installMethod,
         current,
         force,
         channel,
+        explicitChannel,
     })
     if (notify) {
         if (info.outdated) {
@@ -123,6 +124,7 @@ async function run() {
     const flag = args.find((a) => a === '--check' || a === 'status' || a === '--help' || a === '-h')
     const versionFlagIndex = args.indexOf('--version')
     const autoFlagIndex = args.indexOf('--auto')
+    const explicitChannel = args.includes('--beta') || args.includes('--stable')
     const channel = args.includes('--beta') ? 'beta' : args.includes('--stable') ? 'stable' : inferChannel(current)
 
     if (flag === '--help' || flag === '-h') {
@@ -131,7 +133,7 @@ async function run() {
     }
 
     if (flag === 'status') {
-        const info = await resolveLatest({ notify: false, channel })
+        const info = await resolveLatest({ notify: false, channel, explicitChannel })
         output.header('Meddle Update Status')
         output.kv('Install method', installMethod)
         output.kv('Channel', channel)
@@ -181,13 +183,13 @@ async function run() {
     }
 
     if (flag === '--check') {
-        const info = await resolveLatest({ channel })
+        const info = await resolveLatest({ channel, explicitChannel })
         if (info.outdated) process.exit(2)
         return
     }
 
     // default: check + upgrade
-    const info = await resolveLatest({ channel })
+    const info = await resolveLatest({ channel, explicitChannel })
     if (!info.outdated) return
     await installVersion(info.latest)
 }
