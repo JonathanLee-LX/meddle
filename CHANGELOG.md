@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-08-03
+
+### Added
+
+- Auto-update system: `meddle update` command (`--check`, `--version`, `--auto on|off`, `status`) and a non-blocking async startup version check (24h cache)
+- Update channels: `--beta` / `--stable` switch channels (including downgrades); installs without a flag auto-infer the channel from the current version (prerelease → beta)
+- Beta channel resolves via the npm registry `beta` dist-tag (`MEDDLE_NPM_BETA_REGISTRY_URL` to mirror)
+- Binary downloads: SHA256 verification, `.bak` backup, atomic replace, progress bar (percent + bytes), retry with backoff on connection drops, 5min timeout
+- Offline e2e test suite for the update flow (`pnpm run test:e2e:update`)
+- `MEDDLE_UPDATE_BASE_URL` / `MEDDLE_NPM_REGISTRY_URL` / `MEDDLE_GITHUB_LATEST_URL` env vars for mirror/offline testing
+
+### Fixed
+
+- MITM HTTPS server port conflict (`EADDRINUSE`) no longer crashes the whole proxy — `listenWithRetry` retries with a fresh port
+- Update check reports the channel's latest version instead of echoing the current one when the current version is newer than the channel
+
 ## [0.4.0-beta.10] - 2026-08-03
 
 ### Added
