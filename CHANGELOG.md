@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0-beta.5] - 2026-08-03
+
+### Added
+
+- `meddle update` now auto-infers the update channel from the current version: prerelease installs (e.g. `0.4.0-beta.4`) default to the beta channel, releases default to stable. Explicit `--beta` / `--stable` flags override the inference.
+
 ## [0.4.0-beta.4] - 2026-08-03
 
 ### Added
