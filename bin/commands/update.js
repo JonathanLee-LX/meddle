@@ -25,6 +25,7 @@ const {
     getAutoUpdate,
     setAutoUpdate,
     inferChannel,
+    resolveUpdateBinDir,
 } = require('../lib/update-check')
 
 const PACKAGE_NAME = '@jonathanleelx/meddle'
@@ -103,7 +104,7 @@ async function resolveLatest({ force = false, notify = true, channel = 'stable',
 
 async function installVersion(version) {
     if (!isNpmInstall()) {
-        const binDir = process.env.MEDDLE_BIN_DIR || path.join(home, 'bin')
+        const binDir = resolveUpdateBinDir({ home })
         const destFile = path.join(binDir, os.platform() === 'win32' ? 'meddle.exe' : 'meddle')
         output.info(`下载 meddle ${version} (${os.platform()}/${os.arch()})...`)
         let progressShown = false

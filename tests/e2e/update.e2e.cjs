@@ -20,6 +20,8 @@ const { spawn } = require('node:child_process')
 
 const projectRoot = path.resolve(__dirname, '../..')
 const CLI = path.join(projectRoot, 'bin', 'index.js')
+const CURRENT_VERSION = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8')).version
+const CURRENT_IS_PRERELEASE = /-/.test(CURRENT_VERSION)
 
 // ── helpers ──────────────────────────────────────────────────────────
 
@@ -172,10 +174,11 @@ async function main() {
         assert.match(stdout, /2\.0\.0/)
     })
 
-    await test('--check auto-infers beta for a prerelease current version', async () => {
+    await test('--check auto-infers channel from the current version', async () => {
         const { code, stdout } = await run(['update', '--check'], baseEnv)
         assert.equal(code, 2, `expected exit 2, got ${code}\n${stdout}`)
-        assert.match(stdout, /2\.1\.0-beta\.1/)
+        const expected = CURRENT_IS_PRERELEASE ? /2\.1\.0-beta\.1/ : /2\.0\.0/
+        assert.match(stdout, expected)
     })
 
     await test('--check --stable reports up-to-date (exit 0) when versions match', async () => {
@@ -186,17 +189,17 @@ async function main() {
         assert.ok(code === 0 || code === 2, `unexpected exit ${code}`)
     })
 
-    await test('--stable with a newer prerelease current downgrades to the stable version', async () => {
-        // Current is 0.4.0-beta.x (prerelease); stable channel latest is 0.3.1.
-        // An explicit --stable must switch channels — including downgrading —
-        // instead of reporting "已是最新版本 (beta)".
-        const downgradePayload = Buffer.from('stable-binary-v0.3.1')
+    await test('--stable switches a prerelease current to the stable version', async () => {
+        // Prerelease current: explicit --stable switches channels (downgrades).
+        // Stable current: --stable is a normal stable update (upgrade).
+        const stableLatest = CURRENT_IS_PRERELEASE ? '0.3.1' : '99.0.0'
+        const stablePayload = Buffer.from(`stable-binary-v${stableLatest}`)
         const olderServer = await startFixtureServer({
-            latestVersion: '0.3.1',
-            latestBetaVersion: '0.4.0-beta.9',
+            latestVersion: stableLatest,
+            latestBetaVersion: '99.1.0-beta.1',
             assets: {
-                '0.3.1/meddle-linux-x64': downgradePayload,
-                '0.3.1/meddle-linux-x64.sha256': `${sha256(downgradePayload)}  meddle-linux-x64\n`,
+                [`${stableLatest}/meddle-linux-x64`]: stablePayload,
+                [`${stableLatest}/meddle-linux-x64.sha256`]: `${sha256(stablePayload)}  meddle-linux-x64\n`,
             },
         })
         const olderHome = makeTmpDir('meddle-e2e-older-')
@@ -206,8 +209,8 @@ async function main() {
             MEDDLE_GITHUB_LATEST_URL: `${olderServer.base}/releases/latest`,
         })
         assert.equal(check.code, 2, `expected exit 2, got ${check.code}\n${check.stdout}`)
-        assert.match(check.stdout, /0\.3\.1/)
-        assert.doesNotMatch(check.stdout, /已是最新版本 \(0\.4\.0-beta/)
+        assert.match(check.stdout, new RegExp(stableLatest.replace(/\./g, '\\.')))
+        assert.doesNotMatch(check.stdout, /已是最新版本/)
         assert.doesNotMatch(check.stdout, /已超过/)
 
         const destFile = path.join(binDir, 'meddle')
@@ -222,8 +225,8 @@ async function main() {
         olderServer.server.close()
         fs.rmSync(olderHome, { recursive: true, force: true })
         assert.equal(upgrade.code, 0, `exit ${upgrade.code}\n${upgrade.stdout}`)
-        assert.match(upgrade.stdout, /0\.3\.1/)
-        assert.equal(fs.readFileSync(destFile).toString(), downgradePayload.toString())
+        assert.match(upgrade.stdout, new RegExp(stableLatest.replace(/\./g, '\\.')))
+        assert.equal(fs.readFileSync(destFile).toString(), stablePayload.toString())
     })
 
     // ── update --version (binary download + replace) ──
@@ -342,7 +345,7 @@ async function main() {
         assert.ok(fs.existsSync(destFile + '.bak'), 'expected .bak backup')
     })
 
-    await test('default update auto-infers beta for a prerelease current version', async () => {
+    await test('default update auto-infers channel from the current version', async () => {
         const destFile = path.join(binDir, 'meddle')
         fs.writeFileSync(destFile, oldBinary)
 
@@ -351,8 +354,10 @@ async function main() {
             MEDDLE_BIN_DIR: binDir,
         })
         assert.equal(code, 0, `exit ${code}\n${stdout}`)
-        assert.match(stdout, /2\.1\.0-beta\.1/)
-        assert.equal(fs.readFileSync(destFile).toString(), betaBinary.toString())
+        const expectedVersion = CURRENT_IS_PRERELEASE ? '2.1.0-beta.1' : '2.0.0'
+        const expectedPayload = CURRENT_IS_PRERELEASE ? betaBinary : newBinary
+        assert.match(stdout, new RegExp(expectedVersion.replace(/\./g, '\\.')))
+        assert.equal(fs.readFileSync(destFile).toString(), expectedPayload.toString())
     })
 
     // ── cleanup ──

@@ -34,7 +34,7 @@ irm https://raw.githubusercontent.com/JonathanLee-LX/meddle/main/scripts/install
 | Windows x64 | `meddle-windows-x64.exe` |
 | Windows ARM64 | `meddle-windows-arm64.exe` |
 
-二进制产物随 [GitHub Release](https://github.com/JonathanLee-LX/meddle/releases) 发布，也可手动下载。安装目录默认 `~/.meddle/bin`，可通过 `MEDDLE_BIN_DIR` 环境变量自定义。
+二进制产物随 [GitHub Release](https://github.com/JonathanLee-LX/meddle/releases) 发布，也可手动下载。安装目录默认 `~/.local/bin`（已有 `~/.meddle/bin` 旧安装时原地升级），可通过 `MEDDLE_BIN_DIR` 环境变量自定义。`meddle update` 始终更新到当前运行二进制所在目录。
 
 ### 命令
 

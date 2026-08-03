@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.1-beta.1] - 2026-08-03
+
+### Changed
+
+- Binary install location: the install script now defaults to `~/.local/bin` (POSIX convention); existing `~/.meddle/bin` installs are upgraded in place. `meddle update` installs into the directory of the RUNNING binary, so legacy installs stay where they are.
+
+### Fixed
+
+- Download timeout is now an IDLE timeout (reset per received chunk) instead of a total wall-time budget: a slow-but-steady 131MB download that finishes at 100% no longer fails with "operation aborted due to timeout". Genuinely stalled transfers still abort and retry.
+
 ## [0.4.0] - 2026-08-03
 
 ### Added

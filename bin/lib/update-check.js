@@ -25,7 +25,7 @@ const DEFAULT_GITHUB_LATEST_URL = `https://github.com/${REPO}/releases/latest`
 const DEFAULT_DOWNLOAD_BASE_URL = `https://github.com/${REPO}/releases/download`
 const DEFAULT_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const DEFAULT_TIMEOUT_MS = 5000
-const DEFAULT_DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000
+const DEFAULT_DOWNLOAD_TIMEOUT_MS = 120 * 1000
 
 const VERSION_RE = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/
 
@@ -305,8 +305,10 @@ async function downloadBinaryAsset(opts) {
     const assetUrl = `${baseUrl}/v${version}/${asset}`
     const shaUrl = `${assetUrl}.sha256`
 
-    // The binary is large (100MB+); the checksum sidecar is tiny. Use a long
-    // timeout for the payload and the regular timeout for the metadata fetch.
+    // The binary is large (100MB+); the checksum sidecar is tiny. Use an IDLE
+    // timeout for the payload (reset on every received chunk — a slow-but-steady
+    // transfer is never killed by a total wall-time budget) and the regular
+    // timeout for the metadata fetch.
     const fetchPayload = async () => {
         let lastError = null
         for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
@@ -314,8 +316,18 @@ async function downloadBinaryAsset(opts) {
                 await new Promise((r) => setTimeout(r, retryDelayMs * (attempt - 1)))
             }
             onAttempt(attempt, maxRetries + 1)
+            let idleTimer = null
+            const controller = new AbortController()
+            const resetIdle = () => {
+                if (idleTimer) clearTimeout(idleTimer)
+                idleTimer = setTimeout(() => {
+                    controller.abort(new Error('download stalled (idle timeout)'))
+                }, payloadTimeout)
+                if (typeof idleTimer.unref === 'function') idleTimer.unref()
+            }
+            resetIdle()
             try {
-                const response = await doFetch(assetUrl, { signal: AbortSignal.timeout(payloadTimeout) })
+                const response = await doFetch(assetUrl, { signal: controller.signal })
                 if (!response.ok) throw new Error(`download failed (${response.status})`)
                 const total = Number(response.headers.get('content-length')) || 0
                 const chunks = []
@@ -323,6 +335,7 @@ async function downloadBinaryAsset(opts) {
                 if (response.body && typeof response.body.getReader === 'function') {
                     const reader = response.body.getReader()
                     for (;;) {
+                        resetIdle()
                         const { done, value } = await reader.read()
                         if (done) break
                         chunks.push(Buffer.from(value))
@@ -330,13 +343,16 @@ async function downloadBinaryAsset(opts) {
                         onProgress({ received, total })
                     }
                 } else {
+                    resetIdle()
                     const buf = Buffer.from(await response.arrayBuffer())
                     chunks.push(buf)
                     received = buf.length
                     onProgress({ received, total })
                 }
+                if (idleTimer) clearTimeout(idleTimer)
                 return Buffer.concat(chunks)
             } catch (err) {
+                if (idleTimer) clearTimeout(idleTimer)
                 lastError = err
                 if (attempt > maxRetries) break
             }
@@ -434,6 +450,24 @@ function printUpdateNotice(info) {
 }
 
 /**
+ * Resolve where `meddle update` should install the new binary.
+ *   1. MEDDLE_BIN_DIR env (explicit override)
+ *   2. the directory of the RUNNING binary — in-place updates, so installs on
+ *      legacy (~/.meddle/bin) or custom paths stay where they are
+ *   3. <home>/bin fallback (npm installs / no running binary)
+ * @param {{ home: string, execPath?: string, platform?: string }} opts
+ * @returns {string}
+ */
+function resolveUpdateBinDir({ home, execPath = process.execPath, platform = os.platform() } = {}) {
+    if (process.env.MEDDLE_BIN_DIR) return process.env.MEDDLE_BIN_DIR
+    const p = platform === 'win32' ? path.win32 : path
+    const exeName = p.basename(execPath).toLowerCase()
+    const expected = platform === 'win32' ? 'meddle.exe' : 'meddle'
+    if (exeName === expected) return p.dirname(execPath)
+    return p.join(home, 'bin')
+}
+
+/**
  * Fire-and-forget startup check. Never blocks, never throws, never keeps the
  * process alive. When auto-update is enabled (binary installs) the new binary
  * is downloaded and verified on disk — but only when the running executable
@@ -455,7 +489,7 @@ function isSameBinary(a, b) {
 function runAsyncUpdateCheck(opts) {
     const home = opts.home || resolveMeddleHome()
     const installMethod = opts.installMethod || getInstallMethod({ moduleDir: __dirname })
-    const binDir = opts.binDir || process.env.MEDDLE_BIN_DIR || path.join(home, 'bin')
+    const binDir = opts.binDir || resolveUpdateBinDir({ home, execPath: opts.execPath || process.execPath })
     const delayMs = opts.delayMs === undefined ? 1500 : opts.delayMs
     const execPath = opts.execPath || process.execPath
     const exeBase = path.basename(execPath).toLowerCase()
@@ -518,6 +552,7 @@ module.exports = {
     downloadBinaryAsset,
     getAutoUpdate,
     setAutoUpdate,
+    resolveUpdateBinDir,
     runAsyncUpdateCheck,
     DEFAULT_DOWNLOAD_TIMEOUT_MS,
 }

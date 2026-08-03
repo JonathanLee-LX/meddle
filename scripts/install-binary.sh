@@ -2,7 +2,17 @@
 set -euo pipefail
 
 REPO="JonathanLee-LX/meddle"
-INSTALL_DIR="${MEDDLE_BIN_DIR:-$HOME/.meddle/bin}"
+# Default: ~/.local/bin (POSIX user bin convention). Explicit MEDDLE_BIN_DIR wins;
+# an existing ~/.meddle/bin install is upgraded in place so the binary stays
+# where it already lives (keeps PATH and `meddle update` consistent).
+LEGACY_DIR="$HOME/.meddle/bin"
+if [ -n "${MEDDLE_BIN_DIR:-}" ]; then
+    INSTALL_DIR="$MEDDLE_BIN_DIR"
+elif [ -x "${LEGACY_DIR}/meddle" ]; then
+    INSTALL_DIR="$LEGACY_DIR"
+else
+    INSTALL_DIR="$HOME/.local/bin"
+fi
 VERSION="${MEDDLE_VERSION:-latest}"
 
 OS="$(uname -s)"

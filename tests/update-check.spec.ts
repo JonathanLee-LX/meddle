@@ -17,6 +17,7 @@ import {
     getAutoUpdate,
     setAutoUpdate,
     runAsyncUpdateCheck,
+    resolveUpdateBinDir,
 } from '../bin/lib/update-check'
 
 const servers: http.Server[] = []
@@ -738,6 +739,93 @@ describe('downloadBinaryAsset', () => {
         expect(last.total).toBe(payload.length)
     })
 
+    it('uses an idle timeout per chunk, not a total timeout', async () => {
+        // A slow-but-steady download must NOT be aborted: each chunk arrives
+        // within the idle budget, but the TOTAL wall time exceeds the budget.
+        // With a total timeout this would be killed mid-way; an idle timeout
+        // (reset on every chunk) lets it finish.
+        const payload = Buffer.alloc(30 * 4096, 9) // 30 chunks
+        const hash = crypto.createHash('sha256').update(payload).digest('hex')
+        const dir = makeTmpDir()
+        const destFile = path.join(dir, 'meddle')
+        fs.writeFileSync(destFile, 'old-binary')
+
+        const s = await jsonServer((req, res) => {
+            if (req.url === '/v1.2.3/meddle-linux-x64') {
+                res.setHeader('content-length', String(payload.length))
+                const chunkSize = 4096
+                let offset = 0
+                const timer = setInterval(() => {
+                    const chunk = payload.slice(offset, offset + chunkSize)
+                    offset += chunkSize
+                    res.write(chunk)
+                    if (offset >= payload.length) {
+                        clearInterval(timer)
+                        res.end()
+                    }
+                }, 100) // 30 chunks x 100ms = ~3s total, each chunk within 2s idle
+                req.on('close', () => clearInterval(timer))
+            } else if (req.url === '/v1.2.3/meddle-linux-x64.sha256') {
+                res.end(`${hash}  meddle-linux-x64\n`)
+            } else {
+                res.statusCode = 404
+                res.end()
+            }
+        })
+
+        const result = await downloadBinaryAsset({
+            version: '1.2.3',
+            destFile,
+            platform: 'linux',
+            arch: 'x64',
+            baseUrl: s.url,
+            timeoutMs: 2000, // total budget 2s < ~3s transfer; idle budget 2s > 100ms/chunk
+        })
+
+        expect(result.installed).toBe(destFile)
+        expect(fs.readFileSync(destFile)).toEqual(payload)
+    }, 30000)
+
+    it('aborts when no chunk arrives within the idle timeout and retries', async () => {
+        const payload = Buffer.alloc(64, 1)
+        const hash = crypto.createHash('sha256').update(payload).digest('hex')
+        const dir = makeTmpDir()
+        const destFile = path.join(dir, 'meddle')
+        fs.writeFileSync(destFile, 'old-binary')
+
+        let binaryAttempts = 0
+        const s = await jsonServer((req, res) => {
+            if (req.url === '/v1.2.3/meddle-linux-x64') {
+                binaryAttempts++
+                if (binaryAttempts === 1) {
+                    // Hang after headers: no body chunk ever arrives → idle abort.
+                    res.writeHead(200, { 'content-length': '64' })
+                    return
+                }
+                res.end(payload)
+            } else if (req.url === '/v1.2.3/meddle-linux-x64.sha256') {
+                res.end(`${hash}  meddle-linux-x64\n`)
+            } else {
+                res.statusCode = 404
+                res.end()
+            }
+        })
+
+        const result = await downloadBinaryAsset({
+            version: '1.2.3',
+            destFile,
+            platform: 'linux',
+            arch: 'x64',
+            baseUrl: s.url,
+            timeoutMs: 300,
+            retries: 2,
+            retryDelayMs: 0,
+        })
+
+        expect(binaryAttempts).toBe(2)
+        expect(fs.readFileSync(destFile)).toEqual(payload)
+    }, 30000)
+
     it('gives up after exhausting retries', async () => {
         const dir = makeTmpDir()
         const destFile = path.join(dir, 'meddle')
@@ -840,6 +928,45 @@ describe('auto-update setting', () => {
     })
 })
 
+describe('resolveUpdateBinDir', () => {
+    const savedBinDir = process.env.MEDDLE_BIN_DIR
+
+    afterEach(() => {
+        if (savedBinDir === undefined) delete process.env.MEDDLE_BIN_DIR
+        else process.env.MEDDLE_BIN_DIR = savedBinDir
+    })
+
+    it('prefers MEDDLE_BIN_DIR env when set', () => {
+        process.env.MEDDLE_BIN_DIR = '/custom/bin'
+        expect(resolveUpdateBinDir({ home: '/h', execPath: '/h/.local/bin/meddle' })).toBe('/custom/bin')
+    })
+
+    it('uses the running binary directory for existing installs (in-place update)', () => {
+        delete process.env.MEDDLE_BIN_DIR
+        expect(resolveUpdateBinDir({ home: '/h', execPath: '/h/.meddle/bin/meddle' })).toBe('/h/.meddle/bin')
+        expect(resolveUpdateBinDir({ home: '/h', execPath: '/usr/local/bin/meddle' })).toBe('/usr/local/bin')
+    })
+
+    it('maps meddle.exe on windows to its directory', () => {
+        delete process.env.MEDDLE_BIN_DIR
+        expect(resolveUpdateBinDir({
+            home: '/h',
+            execPath: 'C:\\Users\\u\\.local\\bin\\meddle.exe',
+            platform: 'win32',
+        })).toBe('C:\\Users\\u\\.local\\bin')
+    })
+
+    it('falls back to the home bin dir when nothing is running', () => {
+        delete process.env.MEDDLE_BIN_DIR
+        expect(resolveUpdateBinDir({ home: '/h' })).toBe(path.join('/h', 'bin'))
+    })
+
+    it('falls back when the running executable is not meddle', () => {
+        delete process.env.MEDDLE_BIN_DIR
+        expect(resolveUpdateBinDir({ home: '/h', execPath: '/usr/bin/node' })).toBe(path.join('/h', 'bin'))
+    })
+})
+
 describe('runAsyncUpdateCheck', () => {
     it('notifies onOutdated when a newer version exists', async () => {
         const home = makeTmpDir()
@@ -921,8 +1048,7 @@ describe('runAsyncUpdateCheck', () => {
         expect(fs.readFileSync(path.join(binDir, 'meddle'))).toEqual(payload)
     })
 
-    it('skips auto-download when the running executable differs from the install dir', async () => {
-        const home = makeTmpDir()
+    it('skips auto-download when the running executable differs from the install dir', async () => {        const home = makeTmpDir()
         const binDir = path.join(home, 'bin')
         fs.mkdirSync(binDir, { recursive: true })
         setAutoUpdate(home, true)
