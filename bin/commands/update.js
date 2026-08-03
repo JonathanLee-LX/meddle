@@ -3,6 +3,7 @@
  *
  * Usage:
  *   meddle update                    check and upgrade to the latest version
+ *   meddle update --beta             check and upgrade to the latest beta version
  *   meddle update --check            only check, print the available version
  *   meddle update --version <x.y.z>  install a specific version
  *   meddle update --auto on|off      enable/disable auto-update (default off)
@@ -45,7 +46,9 @@ meddle update - 检查并升级 meddle
 
 用法:
   meddle update                   检查并升级到最新版本
+  meddle update --beta            检查并升级到最新的 beta 测试版本
   meddle update --check           仅检查，提示可用版本 (有新版本时退出码为 2)
+  meddle update --check --beta    仅检查 beta 版本
   meddle update --version <x.y.z> 安装指定版本
   meddle update --auto on|off     启用/禁用自动更新 (默认关闭)
   meddle update status            查看安装方式、当前版本和自动更新开关
@@ -53,12 +56,13 @@ meddle update - 检查并升级 meddle
 `)
 }
 
-async function resolveLatest({ force = false, notify = true } = {}) {
+async function resolveLatest({ force = false, notify = true, channel = 'stable' } = {}) {
     const info = await checkForUpdate({
         home,
         installMethod,
         current,
         force,
+        channel,
     })
     if (notify) {
         if (info.outdated) {
@@ -114,6 +118,7 @@ async function run() {
     const flag = args.find((a) => a === '--check' || a === 'status' || a === '--help' || a === '-h')
     const versionFlagIndex = args.indexOf('--version')
     const autoFlagIndex = args.indexOf('--auto')
+    const channel = args.includes('--beta') ? 'beta' : 'stable'
 
     if (flag === '--help' || flag === '-h') {
         showHelp()
@@ -121,9 +126,10 @@ async function run() {
     }
 
     if (flag === 'status') {
-        const info = await resolveLatest({ notify: false })
+        const info = await resolveLatest({ notify: false, channel })
         output.header('Meddle Update Status')
         output.kv('Install method', installMethod)
+        output.kv('Channel', channel)
         output.kv('Current', info.current)
         output.kv('Latest', info.latest)
         output.kv('Auto-update', getAutoUpdate(home) ? 'on' : 'off')
@@ -170,13 +176,13 @@ async function run() {
     }
 
     if (flag === '--check') {
-        const info = await resolveLatest()
+        const info = await resolveLatest({ channel })
         if (info.outdated) process.exit(2)
         return
     }
 
     // default: check + upgrade
-    const info = await resolveLatest()
+    const info = await resolveLatest({ channel })
     if (!info.outdated) return
     await installVersion(info.latest)
 }

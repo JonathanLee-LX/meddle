@@ -64,7 +64,13 @@ function jsonServer(handler: (req: http.IncomingMessage, res: http.ServerRespons
 }
 
 const fetchImpl = (serverUrl: string) => (url: string, init?: RequestInit) =>
-    fetch(url.replace('https://registry.npmjs.org', serverUrl).replace('https://github.com', serverUrl), init)
+    fetch(
+        url
+            .replace('https://registry.npmjs.org', serverUrl)
+            .replace('https://api.github.com', serverUrl)
+            .replace('https://github.com', serverUrl),
+        init,
+    )
 
 describe('compareVersions', () => {
     it('returns 0 for identical versions', () => {
@@ -157,6 +163,95 @@ describe('getLatestVersionGithub', () => {
     })
 })
 
+describe('beta channel', () => {
+    it('npm: fetches the beta dist-tag instead of latest', async () => {
+        let requestedPath = ''
+        const s = await jsonServer((req, res) => {
+            requestedPath = req.url || ''
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ version: '0.4.0-beta.3' }))
+        })
+        const version = await getLatestVersionNpm({
+            fetchImpl: fetchImpl(s.url),
+            distTag: 'beta',
+        })
+        expect(version).toBe('0.4.0-beta.3')
+        expect(requestedPath).toBe('/@jonathanleelx/meddle/beta')
+    })
+
+    it('binary: lists GitHub releases and picks the highest prerelease', async () => {
+        let requestedPath = ''
+        const s = await jsonServer((req, res) => {
+            requestedPath = req.url || ''
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify([
+                { tag_name: 'v0.4.0', prerelease: false },
+                { tag_name: 'v0.4.0-beta.1', prerelease: true },
+                { tag_name: 'v0.4.0-beta.3', prerelease: true },
+            ]))
+        })
+        const version = await getLatestVersionGithub({
+            fetchImpl: fetchImpl(s.url),
+            includePrerelease: true,
+        })
+        expect(version).toBe('0.4.0-beta.3')
+        expect(requestedPath).toContain('/releases')
+    })
+
+    it('checkForUpdate honors channel=beta through both install methods', async () => {
+        const home = makeTmpDir()
+        const s = await jsonServer((_req, res) => {
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ version: '0.4.0-beta.3' }))
+        })
+        const npmResult = await checkForUpdate({
+            home,
+            installMethod: 'npm',
+            current: '0.4.0-beta.2',
+            now: 1_000_000,
+            ttlMs: 86_400_000,
+            channel: 'beta',
+            fetchImpl: fetchImpl(s.url),
+        })
+        expect(npmResult.latest).toBe('0.4.0-beta.3')
+        expect(npmResult.outdated).toBe(true)
+
+        const ghResult = await checkForUpdate({
+            home,
+            installMethod: 'binary',
+            current: '0.4.0-beta.2',
+            now: 1_000_000,
+            ttlMs: 86_400_000,
+            channel: 'beta',
+            fetchImpl: fetchImpl(s.url),
+        })
+        expect(ghResult.latest).toBe('0.4.0-beta.3')
+    })
+
+    it('checkForUpdate falls back to stable when channel is not beta', async () => {
+        const home = makeTmpDir()
+        const s = await jsonServer((req, res) => {
+            if ((req.url || '').includes('/releases?') || (req.url || '').endsWith('/releases')) {
+                res.setHeader('content-type', 'application/json')
+                res.end(JSON.stringify([{ tag_name: 'v0.4.0', prerelease: false }]))
+            } else {
+                res.statusCode = 302
+                res.setHeader('location', '/JonathanLee-LX/meddle/releases/tag/v0.4.0')
+                res.end()
+            }
+        })
+        const result = await checkForUpdate({
+            home,
+            installMethod: 'binary',
+            current: '0.3.1',
+            now: 1_000_000,
+            ttlMs: 86_400_000,
+            fetchImpl: fetchImpl(s.url),
+        })
+        expect(result.latest).toBe('0.4.0')
+    })
+})
+
 describe('getInstallMethod', () => {
     it('detects npm installation from node_modules path', () => {
         expect(
@@ -198,6 +293,7 @@ describe('checkForUpdate (cache)', () => {
             outdated: true,
             fromCache: true,
             checkedAt: 1_000_000,
+            channel: 'stable',
         })
         expect(fetches).toBe(0)
     })

@@ -66,7 +66,7 @@ function run(args, env) {
 
 // ── fixture server ───────────────────────────────────────────────────
 
-function startFixtureServer({ latestVersion, assets }) {
+function startFixtureServer({ latestVersion, latestBetaVersion, assets, releases }) {
     return new Promise((resolve) => {
         const server = http.createServer((req, res) => {
             const url = req.url || ''
@@ -75,6 +75,20 @@ function startFixtureServer({ latestVersion, assets }) {
             if (url === '/@jonathanleelx/meddle/latest') {
                 res.setHeader('content-type', 'application/json')
                 res.end(JSON.stringify({ version: latestVersion }))
+                return
+            }
+
+            // npm registry beta dist-tag: GET /@jonathanleelx/meddle/beta
+            if (url === '/@jonathanleelx/meddle/beta') {
+                res.setHeader('content-type', 'application/json')
+                res.end(JSON.stringify({ version: latestBetaVersion || latestVersion }))
+                return
+            }
+
+            // GitHub releases API (beta channel): GET /releases
+            if (url === '/releases' && releases) {
+                res.setHeader('content-type', 'application/json')
+                res.end(JSON.stringify(releases))
                 return
             }
 
@@ -262,8 +276,51 @@ async function main() {
         assert.match(stdout, /--auto/)
     })
 
+    // ── update --beta ──
+
+    const betaServer = await startFixtureServer({
+        latestVersion: '2.0.0',
+        latestBetaVersion: '2.1.0-beta.1',
+        assets: {
+            '2.1.0-beta.1/meddle-linux-x64': newBinary,
+            '2.1.0-beta.1/meddle-linux-x64.sha256': `${sha256(newBinary)}  meddle-linux-x64\n`,
+        },
+        releases: [
+            { tag_name: 'v2.0.0', prerelease: false },
+            { tag_name: 'v2.1.0-beta.1', prerelease: true },
+        ],
+    })
+    const betaEnv = {
+        ...baseEnv,
+        MEDDLE_NPM_REGISTRY_URL: `${betaServer.base}/@jonathanleelx/meddle/latest`,
+        MEDDLE_GITHUB_LATEST_URL: `${betaServer.base}/releases/latest`,
+        MEDDLE_GITHUB_RELEASES_URL: `${betaServer.base}/releases`,
+        MEDDLE_UPDATE_BASE_URL: `${betaServer.base}/releases/download`,
+    }
+
+    await test('--beta --check finds the prerelease version', async () => {
+        const { code, stdout } = await run(['update', '--check', '--beta'], betaEnv)
+        assert.equal(code, 2, `expected exit 2, got ${code}\n${stdout}`)
+        assert.match(stdout, /2\.1\.0-beta\.1/)
+    })
+
+    await test('--beta installs the prerelease binary over the current one', async () => {
+        const destFile = path.join(binDir, 'meddle')
+        fs.writeFileSync(destFile, oldBinary)
+
+        const { code, stdout } = await run(['update', '--beta'], {
+            ...betaEnv,
+            MEDDLE_BIN_DIR: binDir,
+        })
+        assert.equal(code, 0, `exit ${code}\n${stdout}`)
+        assert.match(stdout, /2\.1\.0-beta\.1/)
+        assert.equal(fs.readFileSync(destFile).toString(), newBinary.toString())
+        assert.ok(fs.existsSync(destFile + '.bak'), 'expected .bak backup')
+    })
+
     // ── cleanup ──
 
+    betaServer.server.close()
     server.close()
     fs.rmSync(home, { recursive: true, force: true })
     fs.rmSync(binDir, { recursive: true, force: true })

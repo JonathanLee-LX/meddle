@@ -20,7 +20,9 @@ const { resolveMeddleHome } = require('./meddle-home')
 const PACKAGE_NAME = '@jonathanleelx/meddle'
 const REPO = 'JonathanLee-LX/meddle'
 const DEFAULT_NPM_REGISTRY_URL = `https://registry.npmjs.org/${PACKAGE_NAME}/latest`
+const DEFAULT_NPM_BETA_URL = `https://registry.npmjs.org/${PACKAGE_NAME}/beta`
 const DEFAULT_GITHUB_LATEST_URL = `https://github.com/${REPO}/releases/latest`
+const DEFAULT_GITHUB_RELEASES_URL = `https://api.github.com/repos/${REPO}/releases`
 const DEFAULT_DOWNLOAD_BASE_URL = `https://github.com/${REPO}/releases/download`
 const DEFAULT_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const DEFAULT_TIMEOUT_MS = 5000
@@ -95,12 +97,14 @@ function compareVersions(a, b) {
 
 /**
  * Fetch the latest version from the npm registry.
- * @param {{ fetchImpl?: Function, registryUrl?: string, timeoutMs?: number }} opts
+ * @param {{ fetchImpl?: Function, registryUrl?: string, timeoutMs?: number, distTag?: string }} opts
  * @returns {Promise<string>}
  */
-async function getLatestVersionNpm({ fetchImpl, registryUrl, timeoutMs } = {}) {
+async function getLatestVersionNpm({ fetchImpl, registryUrl, timeoutMs, distTag } = {}) {
     const doFetch = fetchImpl || fetch
-    const url = registryUrl || process.env.MEDDLE_NPM_REGISTRY_URL || DEFAULT_NPM_REGISTRY_URL
+    const url = registryUrl
+        || process.env.MEDDLE_NPM_REGISTRY_URL
+        || (distTag === 'beta' ? DEFAULT_NPM_BETA_URL : DEFAULT_NPM_REGISTRY_URL)
     const response = await doFetch(url, { signal: AbortSignal.timeout(timeoutMs || DEFAULT_TIMEOUT_MS) })
     if (!response.ok) throw new Error(`npm registry responded ${response.status}`)
     const data = await response.json()
@@ -110,24 +114,42 @@ async function getLatestVersionNpm({ fetchImpl, registryUrl, timeoutMs } = {}) {
 }
 
 /**
- * Fetch the latest version from the GitHub releases/latest redirect.
- * @param {{ fetchImpl?: Function, latestUrl?: string, timeoutMs?: number }} opts
+ * Fetch the latest version from GitHub. For stable, follow the releases/latest
+ * redirect (prereleases excluded). For includePrerelease, list releases via the
+ * GitHub API and pick the highest version.
+ * @param {{ fetchImpl?: Function, latestUrl?: string, timeoutMs?: number, includePrerelease?: boolean, releasesUrl?: string }} opts
  * @returns {Promise<string>}
  */
-async function getLatestVersionGithub({ fetchImpl, latestUrl, timeoutMs } = {}) {
+async function getLatestVersionGithub({ fetchImpl, latestUrl, timeoutMs, includePrerelease = false, releasesUrl } = {}) {
     const doFetch = fetchImpl || fetch
-    const url = latestUrl || process.env.MEDDLE_GITHUB_LATEST_URL || DEFAULT_GITHUB_LATEST_URL
+    if (!includePrerelease) {
+        const url = latestUrl || process.env.MEDDLE_GITHUB_LATEST_URL || DEFAULT_GITHUB_LATEST_URL
+        const response = await doFetch(url, {
+            redirect: 'manual',
+            signal: AbortSignal.timeout(timeoutMs || DEFAULT_TIMEOUT_MS),
+        })
+        if (response.status < 300 || response.status >= 400) {
+            throw new Error(`GitHub latest release did not redirect (${response.status})`)
+        }
+        const location = response.headers.get('location') || ''
+        const match = /\/tag\/(v?[\d][\w.-]*)$/.exec(location)
+        if (!match) throw new Error(`Could not resolve latest release tag`)
+        return match[1].replace(/^v/, '')
+    }
+
+    const url = releasesUrl || process.env.MEDDLE_GITHUB_RELEASES_URL || DEFAULT_GITHUB_RELEASES_URL
     const response = await doFetch(url, {
-        redirect: 'manual',
         signal: AbortSignal.timeout(timeoutMs || DEFAULT_TIMEOUT_MS),
     })
-    if (response.status < 300 || response.status >= 400) {
-        throw new Error(`GitHub latest release did not redirect (${response.status})`)
-    }
-    const location = response.headers.get('location') || ''
-    const match = /\/tag\/(v?[\d][\w.-]*)$/.exec(location)
-    if (!match) throw new Error(`Could not resolve latest release tag`)
-    return match[1].replace(/^v/, '')
+    if (!response.ok) throw new Error(`GitHub releases API responded ${response.status}`)
+    const data = await response.json()
+    const versions = (Array.isArray(data) ? data : [])
+        .filter((r) => r && typeof r === 'object' && r.prerelease === true && typeof r.tag_name === 'string')
+        .map((r) => r.tag_name.replace(/^v/, ''))
+        .filter(isValidVersion)
+    if (versions.length === 0) throw new Error(`No prerelease found on GitHub releases`)
+    versions.sort((a, b) => compareVersions(b, a))
+    return versions[0]
 }
 
 /**
@@ -152,8 +174,9 @@ function updateCachePath(home) {
 /**
  * @param {{ home: string, fetchImpl?: Function, installMethod: string, current: string,
  *           now?: number, ttlMs?: number, force?: boolean,
- *           registryUrl?: string, latestUrl?: string, timeoutMs?: number }} opts
- * @returns {Promise<{ current: string, latest: string, outdated: boolean, fromCache: boolean, checkedAt: number }>}
+ *           registryUrl?: string, latestUrl?: string, timeoutMs?: number,
+ *           channel?: string }} opts
+ * @returns {Promise<{ current: string, latest: string, outdated: boolean, fromCache: boolean, checkedAt: number, channel: string }>}
  */
 async function checkForUpdate(opts) {
     const {
@@ -167,6 +190,7 @@ async function checkForUpdate(opts) {
         registryUrl,
         latestUrl,
         timeoutMs,
+        channel = 'stable',
     } = opts
 
     const cacheFile = updateCachePath(home)
@@ -175,7 +199,8 @@ async function checkForUpdate(opts) {
         cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'))
     } catch (_) {}
 
-    if (!force && cached && typeof cached.version === 'string' && typeof cached.checkedAt === 'number') {
+    if (!force && cached && typeof cached.version === 'string' && typeof cached.checkedAt === 'number'
+        && (cached.channel || 'stable') === channel) {
         if (now - cached.checkedAt < ttlMs) {
             return {
                 current,
@@ -183,18 +208,19 @@ async function checkForUpdate(opts) {
                 outdated: compareVersions(cached.version, current) > 0,
                 fromCache: true,
                 checkedAt: cached.checkedAt,
+                channel,
             }
         }
     }
 
     const latest = installMethod === 'binary'
-        ? await getLatestVersionGithub({ fetchImpl, latestUrl, timeoutMs })
-        : await getLatestVersionNpm({ fetchImpl, registryUrl, timeoutMs })
+        ? await getLatestVersionGithub({ fetchImpl, latestUrl, timeoutMs, includePrerelease: channel === 'beta' })
+        : await getLatestVersionNpm({ fetchImpl, registryUrl, timeoutMs, distTag: channel })
 
     const checkedAt = now
     try {
         fs.mkdirSync(path.dirname(cacheFile), { recursive: true })
-        fs.writeFileSync(cacheFile, JSON.stringify({ version: latest, checkedAt }), 'utf8')
+        fs.writeFileSync(cacheFile, JSON.stringify({ version: latest, checkedAt, channel }), 'utf8')
     } catch (_) {}
 
     return {
@@ -203,6 +229,7 @@ async function checkForUpdate(opts) {
         outdated: compareVersions(latest, current) > 0,
         fromCache: false,
         checkedAt,
+        channel,
     }
 }
 
