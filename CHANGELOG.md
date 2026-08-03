@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0-beta.7] - 2026-08-03
+
+### Fixed
+
+- `meddle update --check --stable` (or `--beta`) on a prerelease install no longer echoes the current version as "已是最新版本". It now reports the channel's actual latest version, e.g. `当前 0.4.0-beta.6 已超过稳定频道最新版本 0.3.1`.
+
 ## [0.4.0-beta.6] - 2026-08-03
 
 ### Added
