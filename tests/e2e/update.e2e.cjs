@@ -186,6 +186,27 @@ async function main() {
         assert.ok(code === 0 || code === 2, `unexpected exit ${code}`)
     })
 
+    await test('--stable with a prerelease current shows the channel latest version', async () => {
+        // Current is 0.4.0-beta.x (prerelease); stable channel latest is 0.3.1,
+        // which is BELOW the current version. Not outdated — but the output must
+        // name the stable channel's latest instead of echoing the current version.
+        const olderServer = await startFixtureServer({
+            latestVersion: '0.3.1',
+            latestBetaVersion: '0.4.0-beta.6',
+        })
+        const olderHome = makeTmpDir('meddle-e2e-older-')
+        const { code, stdout } = await run(['update', '--check', '--stable'], {
+            ...baseEnv,
+            MEDDLE_HOME: olderHome,
+            MEDDLE_GITHUB_LATEST_URL: `${olderServer.base}/releases/latest`,
+        })
+        olderServer.server.close()
+        fs.rmSync(olderHome, { recursive: true, force: true })
+        assert.equal(code, 0, `exit ${code}\n${stdout}`)
+        assert.match(stdout, /0\.3\.1/)
+        assert.doesNotMatch(stdout, /已是最新版本 \(0\.4\.0-beta/)
+    })
+
     // ── update --version (binary download + replace) ──
 
     await test('--version downloads, verifies SHA256, replaces binary, creates .bak', async () => {

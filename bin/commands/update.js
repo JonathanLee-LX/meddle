@@ -69,8 +69,11 @@ async function resolveLatest({ force = false, notify = true, channel = 'stable' 
     if (notify) {
         if (info.outdated) {
             output.info(`发现新版本 ${info.latest} (当前 ${info.current})`)
-        } else {
+        } else if (info.latest === info.current) {
             output.success(`已是最新版本 (${info.current})`)
+        } else {
+            const channelLabel = info.channel === 'beta' ? 'beta' : '稳定'
+            output.info(`当前 ${info.current} 已超过${channelLabel}频道最新版本 ${info.latest}`)
         }
     }
     return info
