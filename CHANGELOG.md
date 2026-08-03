@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0-beta.3] - 2026-08-03
+
+### Fixed
+
+- MITM HTTPS server port conflict (`EADDRINUSE`) no longer crashes the whole proxy: `listenWithRetry` retries with a fresh port instead of letting the async listen error escape to `uncaughtException` and `process.exit(1)`
+
 ## [0.4.0-beta.2] - 2026-08-02
 
 ### Added
