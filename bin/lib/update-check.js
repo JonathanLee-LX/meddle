@@ -25,7 +25,7 @@ const DEFAULT_GITHUB_LATEST_URL = `https://github.com/${REPO}/releases/latest`
 const DEFAULT_DOWNLOAD_BASE_URL = `https://github.com/${REPO}/releases/download`
 const DEFAULT_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const DEFAULT_TIMEOUT_MS = 5000
-const DEFAULT_DOWNLOAD_TIMEOUT_MS = 120 * 1000
+const DEFAULT_DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000
 
 const VERSION_RE = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/
 
@@ -280,10 +280,13 @@ function sha256Hex(buffer) {
  * thrown (Windows commonly fails with EPERM on a running binary).
  *
  * The payload download is retried (default 3 attempts) because binaries are
- * large (100MB+) and flaky connections drop mid-body.
+ * large (100MB+) and flaky connections drop mid-body. Progress is reported
+ * via `onProgress` while streaming (received/total bytes), and `onAttempt`
+ * fires before each attempt (skipping retries is visible to callers).
  * @param {{ version: string, destFile: string, platform: string, arch: string,
  *           baseUrl?: string, fetchImpl?: Function, timeoutMs?: number,
  *           retries?: number, retryDelayMs?: number,
+ *           onProgress?: Function, onAttempt?: Function,
  *           fsImpl?: object }} opts
  * @returns {Promise<{ installed: string, backup: string, version: string }>}
  */
@@ -295,6 +298,8 @@ async function downloadBinaryAsset(opts) {
     const payloadTimeout = opts.timeoutMs || DEFAULT_DOWNLOAD_TIMEOUT_MS
     const maxRetries = opts.retries === undefined ? 3 : opts.retries
     const retryDelayMs = opts.retryDelayMs === undefined ? 1000 : opts.retryDelayMs
+    const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : () => {}
+    const onAttempt = typeof opts.onAttempt === 'function' ? opts.onAttempt : () => {}
 
     const asset = getAssetName({ platform, arch })
     const assetUrl = `${baseUrl}/v${version}/${asset}`
@@ -304,16 +309,36 @@ async function downloadBinaryAsset(opts) {
     // timeout for the payload and the regular timeout for the metadata fetch.
     const fetchPayload = async () => {
         let lastError = null
-        for (let attempt = 0; attempt <= maxRetries; attempt++) {
-            if (attempt > 0 && retryDelayMs > 0) {
-                await new Promise((r) => setTimeout(r, retryDelayMs * attempt))
+        for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+            if (attempt > 1 && retryDelayMs > 0) {
+                await new Promise((r) => setTimeout(r, retryDelayMs * (attempt - 1)))
             }
+            onAttempt(attempt, maxRetries + 1)
             try {
                 const response = await doFetch(assetUrl, { signal: AbortSignal.timeout(payloadTimeout) })
                 if (!response.ok) throw new Error(`download failed (${response.status})`)
-                return Buffer.from(await response.arrayBuffer())
+                const total = Number(response.headers.get('content-length')) || 0
+                const chunks = []
+                let received = 0
+                if (response.body && typeof response.body.getReader === 'function') {
+                    const reader = response.body.getReader()
+                    for (;;) {
+                        const { done, value } = await reader.read()
+                        if (done) break
+                        chunks.push(Buffer.from(value))
+                        received += value.byteLength
+                        onProgress({ received, total })
+                    }
+                } else {
+                    const buf = Buffer.from(await response.arrayBuffer())
+                    chunks.push(buf)
+                    received = buf.length
+                    onProgress({ received, total })
+                }
+                return Buffer.concat(chunks)
             } catch (err) {
                 lastError = err
+                if (attempt > maxRetries) break
             }
         }
         throw lastError || new Error(`download failed for ${assetUrl}`)

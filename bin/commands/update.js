@@ -41,6 +41,27 @@ function isNpmInstall() {
     return installMethod === 'npm'
 }
 
+function formatBytes(bytes) {
+    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${bytes} B`
+}
+
+const PROGRESS_WIDTH = 40
+
+function drawProgressBar({ received, total, attempt, maxAttempts }) {
+    const label = attempt > 1 ? ` (第 ${attempt}/${maxAttempts} 次尝试)` : ''
+    if (total > 0) {
+        const ratio = Math.min(1, received / total)
+        const filled = Math.round(PROGRESS_WIDTH * ratio)
+        const bar = '#'.repeat(filled) + '-'.repeat(PROGRESS_WIDTH - filled)
+        const line = `    [${bar}] ${(ratio * 100).toFixed(1)}% ${formatBytes(received)}/${formatBytes(total)}${label}`
+        process.stdout.write(`\r${line}`)
+    } else {
+        process.stdout.write(`\r    下载中 ${formatBytes(received)}${label}...`)
+    }
+}
+
 function showHelp() {
     output.plain(`
 meddle update - 检查并升级 meddle
@@ -85,17 +106,32 @@ async function installVersion(version) {
         const binDir = process.env.MEDDLE_BIN_DIR || path.join(home, 'bin')
         const destFile = path.join(binDir, os.platform() === 'win32' ? 'meddle.exe' : 'meddle')
         output.info(`下载 meddle ${version} (${os.platform()}/${os.arch()})...`)
+        let progressShown = false
+        const showProgress = output.isJsonMode() ? () => {} : drawProgressBar
         try {
             const result = await downloadBinaryAsset({
                 version,
                 destFile,
                 platform: os.platform(),
                 arch: os.arch(),
+                onAttempt: (attempt, maxAttempts) => {
+                    if (attempt > 1) {
+                        process.stdout.write('\n')
+                        progressShown = false
+                        output.info(`连接中断，正在重试 (${attempt}/${maxAttempts})...`)
+                    }
+                },
+                onProgress: (p) => {
+                    showProgress(p)
+                    progressShown = true
+                },
             })
+            if (progressShown) process.stdout.write('\n')
             output.success(`已安装 meddle ${version} 到 ${result.installed}`)
             if (result.backup) output.info(`旧版本已备份到 ${result.backup}`)
             output.info('重启 meddle 后新版本生效')
         } catch (err) {
+            if (progressShown) process.stdout.write('\n')
             output.error(`升级失败: ${err && err.message ? err.message : err}`)
             process.exit(1)
         }

@@ -675,6 +675,7 @@ describe('downloadBinaryAsset', () => {
             }
         })
 
+        const attempts: Array<{ attempt: number; maxRetries: number }> = []
         const result = await downloadBinaryAsset({
             version: '1.2.3',
             destFile,
@@ -683,10 +684,58 @@ describe('downloadBinaryAsset', () => {
             baseUrl: s.url,
             retries: 2,
             retryDelayMs: 0,
+            onAttempt: (attempt: number, maxRetries: number) => attempts.push({ attempt, maxRetries }),
         })
 
         expect(binaryAttempts).toBe(2)
+        expect(attempts).toEqual([
+            { attempt: 1, maxRetries: 3 },
+            { attempt: 2, maxRetries: 3 },
+        ])
         expect(fs.readFileSync(destFile)).toEqual(payload)
+    })
+
+    it('reports download progress while streaming the payload', async () => {
+        const payload = Buffer.alloc(64 * 1024, 7)
+        const hash = crypto.createHash('sha256').update(payload).digest('hex')
+        const dir = makeTmpDir()
+        const destFile = path.join(dir, 'meddle')
+        fs.writeFileSync(destFile, 'old-binary')
+
+        const s = await jsonServer((req, res) => {
+            if (req.url === '/v1.2.3/meddle-linux-x64') {
+                res.setHeader('content-length', String(payload.length))
+                for (let i = 0; i < payload.length; i += 8192) {
+                    res.write(payload.slice(i, i + 8192))
+                }
+                res.end()
+            } else if (req.url === '/v1.2.3/meddle-linux-x64.sha256') {
+                res.end(`${hash}  meddle-linux-x64\n`)
+            } else {
+                res.statusCode = 404
+                res.end()
+            }
+        })
+
+        const events: Array<{ received: number; total: number }> = []
+        const result = await downloadBinaryAsset({
+            version: '1.2.3',
+            destFile,
+            platform: 'linux',
+            arch: 'x64',
+            baseUrl: s.url,
+            onProgress: (p: { received: number; total: number }) => events.push({ ...p }),
+        })
+
+        expect(result.installed).toBe(destFile)
+        expect(fs.readFileSync(destFile)).toEqual(payload)
+        expect(events.length).toBeGreaterThan(1)
+        for (let i = 1; i < events.length; i++) {
+            expect(events[i].received).toBeGreaterThanOrEqual(events[i - 1].received)
+        }
+        const last = events[events.length - 1]
+        expect(last.received).toBe(payload.length)
+        expect(last.total).toBe(payload.length)
     })
 
     it('gives up after exhausting retries', async () => {
