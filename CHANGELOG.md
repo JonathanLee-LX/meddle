@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0-beta.4] - 2026-08-03
+
+### Added
+
+- `meddle update --beta` — check/upgrade through the beta channel: npm installs query the `beta` dist-tag, binary installs list GitHub releases and pick the highest prerelease (`--check --beta`, `status` also support the channel)
+
 ## [0.4.0-beta.3] - 2026-08-03
 
 ### Fixed
