@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0-beta.2] - 2026-08-02
+
+### Added
+
+- Offline e2e test for `meddle update` (local HTTP fixtures, `pnpm run test:e2e:update`)
+- `MEDDLE_UPDATE_BASE_URL` / `MEDDLE_NPM_REGISTRY_URL` / `MEDDLE_GITHUB_LATEST_URL` env vars for mirror/offline testing
+
 ## [0.4.0-beta.1] - 2026-08-02
 
 ### Added
