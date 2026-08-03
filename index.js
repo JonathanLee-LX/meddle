@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const { connect } = require('net')
 const { WebSocket, WebSocketServer } = require('ws')
-const { resolveTargetUrl, getFreePort } = require('./dist/helpers')
+const { resolveTargetUrl, getFreePort, listenWithRetry } = require('./dist/helpers')
 const { crtMgr, ensureRootCA, getRootCAPath } = require('./dist/cert')
 const { decideRoute } = require('./dist/core/route-decision')
 const { sendShortResponse } = require('./dist/core/short-response')
@@ -871,7 +871,8 @@ proxyServer.on('connect', async (req, socket, head) => {
         if (!server) {
             const port = await getFreePort()
             server = await createHttpsServerByCert()
-            server.listen(port, '127.0.0.1', () => { proxyDebug('listening on ' + port) })
+            const boundPort = await listenWithRetry(server, '127.0.0.1', port)
+            proxyDebug('listening on ' + boundPort)
             ctx.httpsServerMap.set(originHost, server)
         } else {
             markMitmServerUsed(server)

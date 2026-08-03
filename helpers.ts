@@ -181,6 +181,52 @@ export async function getFreePort(): Promise<number> {
     return getPortPromise();
 }
 
+/**
+ * Listen on a port, retrying with a fresh free port when the requested one is
+ * taken. Unlike a bare `server.listen()`, a port conflict surfaces as a
+ * retryable error here instead of an async 'error' event that would escape a
+ * try/catch and crash the process via uncaughtException.
+ * @returns the port the server actually bound to
+ * @throws the last listen error when all attempts fail
+ */
+export function listenWithRetry(
+    server: { listen(port: number, host: string, cb?: () => void): unknown } & NodeJS.EventEmitter,
+    host: string,
+    port: number,
+    opts: { maxRetries?: number } = {},
+): Promise<number> {
+    const maxRetries = opts.maxRetries ?? 5;
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const settle = (fn: () => void) => {
+            if (settled) return;
+            settled = true;
+            fn();
+        };
+        const attempt = (attemptPort: number, remaining: number) => {
+            const onListening = () => {
+                server.removeListener('error', onError);
+                const addr = (server as unknown as { address(): { port: number } }).address();
+                settle(() => resolve(addr ? addr.port : attemptPort));
+            };
+            const onError = (err: Error) => {
+                server.removeListener('listening', onListening);
+                if (err && (err as NodeJS.ErrnoException).code === 'EADDRINUSE' && remaining > 0) {
+                    getFreePort()
+                        .then((nextPort) => attempt(nextPort, remaining - 1))
+                        .catch((e) => settle(() => reject(e)));
+                    return;
+                }
+                settle(() => reject(err));
+            };
+            server.once('error', onError);
+            server.once('listening', onListening);
+            server.listen(attemptPort, host);
+        };
+        attempt(port, maxRetries);
+    });
+}
+
 export const ROUTE_RULES_DIR = path.resolve(resolveMeddleHome(), 'route-rules');
 
 const FILE_PATTERN = /^file:\/\//;
