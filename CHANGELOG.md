@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0-beta.9] - 2026-08-03
+
+### Changed
+
+- Explicit `--beta` / `--stable` now *switches channels*, including downgrades: `meddle update --stable` from a beta install moves to the latest stable release (instead of reporting the beta as up-to-date). Auto-inferred runs keep the only-upgrade behavior.
+
 ## [0.4.0-beta.8] - 2026-08-03
 
 ### Fixed
