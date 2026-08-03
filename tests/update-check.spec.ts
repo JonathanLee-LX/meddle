@@ -250,6 +250,76 @@ describe('beta channel', () => {
         })
         expect(result.latest).toBe('0.4.0')
     })
+
+    it('auto-infers beta channel when the current version is a prerelease (npm)', async () => {
+        const home = makeTmpDir()
+        let requestedPath = ''
+        const s = await jsonServer((req, res) => {
+            requestedPath = req.url || ''
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify({ version: '0.4.0-beta.5' }))
+        })
+        const result = await checkForUpdate({
+            home,
+            installMethod: 'npm',
+            current: '0.4.0-beta.4',
+            now: 1_000_000,
+            ttlMs: 86_400_000,
+            fetchImpl: fetchImpl(s.url),
+        })
+        expect(result.channel).toBe('beta')
+        expect(result.latest).toBe('0.4.0-beta.5')
+        expect(requestedPath).toBe('/@jonathanleelx/meddle/beta')
+    })
+
+    it('auto-infers beta channel when the current version is a prerelease (binary)', async () => {
+        const home = makeTmpDir()
+        let requestedPath = ''
+        const s = await jsonServer((req, res) => {
+            requestedPath = req.url || ''
+            res.setHeader('content-type', 'application/json')
+            res.end(JSON.stringify([
+                { tag_name: 'v0.4.0', prerelease: false },
+                { tag_name: 'v0.4.0-beta.5', prerelease: true },
+            ]))
+        })
+        const result = await checkForUpdate({
+            home,
+            installMethod: 'binary',
+            current: '0.4.0-beta.4',
+            now: 1_000_000,
+            ttlMs: 86_400_000,
+            fetchImpl: fetchImpl(s.url),
+        })
+        expect(result.channel).toBe('beta')
+        expect(result.latest).toBe('0.4.0-beta.5')
+        expect(requestedPath).toContain('/releases')
+    })
+
+    it('explicit stable channel overrides the prerelease inference', async () => {
+        const home = makeTmpDir()
+        const s = await jsonServer((req, res) => {
+            if ((req.url || '').includes('/releases?') || (req.url || '').endsWith('/releases')) {
+                res.setHeader('content-type', 'application/json')
+                res.end(JSON.stringify([{ tag_name: 'v0.4.0', prerelease: false }]))
+            } else {
+                res.statusCode = 302
+                res.setHeader('location', '/JonathanLee-LX/meddle/releases/tag/v0.4.0')
+                res.end()
+            }
+        })
+        const result = await checkForUpdate({
+            home,
+            installMethod: 'binary',
+            current: '0.4.0-beta.4',
+            now: 1_000_000,
+            ttlMs: 86_400_000,
+            channel: 'stable',
+            fetchImpl: fetchImpl(s.url),
+        })
+        expect(result.channel).toBe('stable')
+        expect(result.latest).toBe('0.4.0')
+    })
 })
 
 describe('getInstallMethod', () => {

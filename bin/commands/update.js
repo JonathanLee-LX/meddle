@@ -24,6 +24,7 @@ const {
     downloadBinaryAsset,
     getAutoUpdate,
     setAutoUpdate,
+    inferChannel,
 } = require('../lib/update-check')
 
 const PACKAGE_NAME = '@jonathanleelx/meddle'
@@ -45,8 +46,9 @@ function showHelp() {
 meddle update - 检查并升级 meddle
 
 用法:
-  meddle update                   检查并升级到最新版本
-  meddle update --beta            检查并升级到最新的 beta 测试版本
+  meddle update                   检查并升级（beta 版本默认走 beta 频道）
+  meddle update --beta            强制使用 beta 测试频道
+  meddle update --stable          强制使用稳定频道
   meddle update --check           仅检查，提示可用版本 (有新版本时退出码为 2)
   meddle update --check --beta    仅检查 beta 版本
   meddle update --version <x.y.z> 安装指定版本
@@ -118,7 +120,7 @@ async function run() {
     const flag = args.find((a) => a === '--check' || a === 'status' || a === '--help' || a === '-h')
     const versionFlagIndex = args.indexOf('--version')
     const autoFlagIndex = args.indexOf('--auto')
-    const channel = args.includes('--beta') ? 'beta' : 'stable'
+    const channel = args.includes('--beta') ? 'beta' : args.includes('--stable') ? 'stable' : inferChannel(current)
 
     if (flag === '--help' || flag === '-h') {
         showHelp()

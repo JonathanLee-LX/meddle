@@ -172,6 +172,16 @@ function updateCachePath(home) {
 }
 
 /**
+ * Infer the update channel from the current version: prerelease versions
+ * (e.g. 0.4.0-beta.4) default to the beta channel, releases to stable.
+ * @param {string} current
+ * @returns {'stable' | 'beta'}
+ */
+function inferChannel(current) {
+    return isValidVersion(current) && parseVersion(current).prerelease.length > 0 ? 'beta' : 'stable'
+}
+
+/**
  * @param {{ home: string, fetchImpl?: Function, installMethod: string, current: string,
  *           now?: number, ttlMs?: number, force?: boolean,
  *           registryUrl?: string, latestUrl?: string, timeoutMs?: number,
@@ -190,7 +200,7 @@ async function checkForUpdate(opts) {
         registryUrl,
         latestUrl,
         timeoutMs,
-        channel = 'stable',
+        channel = inferChannel(current),
     } = opts
 
     const cacheFile = updateCachePath(home)
@@ -452,6 +462,7 @@ module.exports = {
     compareVersions,
     isValidVersion,
     parseVersion,
+    inferChannel,
     getLatestVersionNpm,
     getLatestVersionGithub,
     getInstallMethod,

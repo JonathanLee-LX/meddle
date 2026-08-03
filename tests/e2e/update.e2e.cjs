@@ -145,22 +145,31 @@ async function main() {
     // Prepare fake binary assets
     const oldBinary = Buffer.from('old-binary-v0.1.0')
     const newBinary = Buffer.from('new-binary-v2.0.0')
+    const betaBinary = Buffer.from('new-binary-v2.1.0-beta.1')
     const tamperedBinary = Buffer.from('tampered-binary')
 
     const { server, base } = await startFixtureServer({
         latestVersion: '2.0.0',
+        latestBetaVersion: '2.1.0-beta.1',
         assets: {
             '2.0.0/meddle-linux-x64': newBinary,
             '2.0.0/meddle-linux-x64.sha256': `${sha256(newBinary)}  meddle-linux-x64\n`,
+            '2.1.0-beta.1/meddle-linux-x64': betaBinary,
+            '2.1.0-beta.1/meddle-linux-x64.sha256': `${sha256(betaBinary)}  meddle-linux-x64\n`,
             '1.5.0/meddle-linux-x64': tamperedBinary,
             '1.5.0/meddle-linux-x64.sha256': `${'0'.repeat(64)}  meddle-linux-x64\n`,
         },
+        releases: [
+            { tag_name: 'v2.0.0', prerelease: false },
+            { tag_name: 'v2.1.0-beta.1', prerelease: true },
+        ],
     })
 
     const baseEnv = {
         MEDDLE_HOME: home,
         MEDDLE_NPM_REGISTRY_URL: `${base}/@jonathanleelx/meddle/latest`,
         MEDDLE_GITHUB_LATEST_URL: `${base}/releases/latest`,
+        MEDDLE_GITHUB_RELEASES_URL: `${base}/releases`,
         MEDDLE_UPDATE_BASE_URL: `${base}/releases/download`,
     }
 
@@ -168,14 +177,20 @@ async function main() {
 
     // ── update --check ──
 
-    await test('--check reports outdated (exit 2) when registry has newer version', async () => {
-        const { code, stdout } = await run(['update', '--check'], baseEnv)
+    await test('--check --stable reports outdated (exit 2) when stable has newer version', async () => {
+        const { code, stdout } = await run(['update', '--check', '--stable'], baseEnv)
         assert.equal(code, 2, `expected exit 2, got ${code}\n${stdout}`)
         assert.match(stdout, /2\.0\.0/)
     })
 
-    await test('--check reports up-to-date (exit 0) when versions match', async () => {
-        const { code, stdout } = await run(['update', '--check'], {
+    await test('--check auto-infers beta for a prerelease current version', async () => {
+        const { code, stdout } = await run(['update', '--check'], baseEnv)
+        assert.equal(code, 2, `expected exit 2, got ${code}\n${stdout}`)
+        assert.match(stdout, /2\.1\.0-beta\.1/)
+    })
+
+    await test('--check --stable reports up-to-date (exit 0) when versions match', async () => {
+        const { code, stdout } = await run(['update', '--check', '--stable'], {
             ...baseEnv,
             MEDDLE_NPM_REGISTRY_URL: `${base}/@jonathanleelx/meddle/latest`,
         })
@@ -278,28 +293,8 @@ async function main() {
 
     // ── update --beta ──
 
-    const betaServer = await startFixtureServer({
-        latestVersion: '2.0.0',
-        latestBetaVersion: '2.1.0-beta.1',
-        assets: {
-            '2.1.0-beta.1/meddle-linux-x64': newBinary,
-            '2.1.0-beta.1/meddle-linux-x64.sha256': `${sha256(newBinary)}  meddle-linux-x64\n`,
-        },
-        releases: [
-            { tag_name: 'v2.0.0', prerelease: false },
-            { tag_name: 'v2.1.0-beta.1', prerelease: true },
-        ],
-    })
-    const betaEnv = {
-        ...baseEnv,
-        MEDDLE_NPM_REGISTRY_URL: `${betaServer.base}/@jonathanleelx/meddle/latest`,
-        MEDDLE_GITHUB_LATEST_URL: `${betaServer.base}/releases/latest`,
-        MEDDLE_GITHUB_RELEASES_URL: `${betaServer.base}/releases`,
-        MEDDLE_UPDATE_BASE_URL: `${betaServer.base}/releases/download`,
-    }
-
     await test('--beta --check finds the prerelease version', async () => {
-        const { code, stdout } = await run(['update', '--check', '--beta'], betaEnv)
+        const { code, stdout } = await run(['update', '--check', '--beta'], baseEnv)
         assert.equal(code, 2, `expected exit 2, got ${code}\n${stdout}`)
         assert.match(stdout, /2\.1\.0-beta\.1/)
     })
@@ -309,18 +304,30 @@ async function main() {
         fs.writeFileSync(destFile, oldBinary)
 
         const { code, stdout } = await run(['update', '--beta'], {
-            ...betaEnv,
+            ...baseEnv,
             MEDDLE_BIN_DIR: binDir,
         })
         assert.equal(code, 0, `exit ${code}\n${stdout}`)
         assert.match(stdout, /2\.1\.0-beta\.1/)
-        assert.equal(fs.readFileSync(destFile).toString(), newBinary.toString())
+        assert.equal(fs.readFileSync(destFile).toString(), betaBinary.toString())
         assert.ok(fs.existsSync(destFile + '.bak'), 'expected .bak backup')
+    })
+
+    await test('default update auto-infers beta for a prerelease current version', async () => {
+        const destFile = path.join(binDir, 'meddle')
+        fs.writeFileSync(destFile, oldBinary)
+
+        const { code, stdout } = await run(['update'], {
+            ...baseEnv,
+            MEDDLE_BIN_DIR: binDir,
+        })
+        assert.equal(code, 0, `exit ${code}\n${stdout}`)
+        assert.match(stdout, /2\.1\.0-beta\.1/)
+        assert.equal(fs.readFileSync(destFile).toString(), betaBinary.toString())
     })
 
     // ── cleanup ──
 
-    betaServer.server.close()
     server.close()
     fs.rmSync(home, { recursive: true, force: true })
     fs.rmSync(binDir, { recursive: true, force: true })
