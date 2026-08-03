@@ -265,8 +265,12 @@ function sha256Hex(buffer) {
  * the existing binary. The previous binary is kept as `<destFile>.bak`. When
  * the final replace fails the backup is restored and a descriptive error is
  * thrown (Windows commonly fails with EPERM on a running binary).
+ *
+ * The payload download is retried (default 3 attempts) because binaries are
+ * large (100MB+) and flaky connections drop mid-body.
  * @param {{ version: string, destFile: string, platform: string, arch: string,
  *           baseUrl?: string, fetchImpl?: Function, timeoutMs?: number,
+ *           retries?: number, retryDelayMs?: number,
  *           fsImpl?: object }} opts
  * @returns {Promise<{ installed: string, backup: string, version: string }>}
  */
@@ -276,6 +280,8 @@ async function downloadBinaryAsset(opts) {
     const doFetch = opts.fetchImpl || fetch
     const fsImpl = opts.fsImpl || fs
     const payloadTimeout = opts.timeoutMs || DEFAULT_DOWNLOAD_TIMEOUT_MS
+    const maxRetries = opts.retries === undefined ? 3 : opts.retries
+    const retryDelayMs = opts.retryDelayMs === undefined ? 1000 : opts.retryDelayMs
 
     const asset = getAssetName({ platform, arch })
     const assetUrl = `${baseUrl}/v${version}/${asset}`
@@ -283,14 +289,27 @@ async function downloadBinaryAsset(opts) {
 
     // The binary is large (100MB+); the checksum sidecar is tiny. Use a long
     // timeout for the payload and the regular timeout for the metadata fetch.
-    const [binaryResponse, shaResponse] = await Promise.all([
-        doFetch(assetUrl, { signal: AbortSignal.timeout(payloadTimeout) }),
-        doFetch(shaUrl, { signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS) }),
-    ])
-    if (!binaryResponse.ok) throw new Error(`download failed (${binaryResponse.status})`)
+    const fetchPayload = async () => {
+        let lastError = null
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            if (attempt > 0 && retryDelayMs > 0) {
+                await new Promise((r) => setTimeout(r, retryDelayMs * attempt))
+            }
+            try {
+                const response = await doFetch(assetUrl, { signal: AbortSignal.timeout(payloadTimeout) })
+                if (!response.ok) throw new Error(`download failed (${response.status})`)
+                return Buffer.from(await response.arrayBuffer())
+            } catch (err) {
+                lastError = err
+            }
+        }
+        throw lastError || new Error(`download failed for ${assetUrl}`)
+    }
+
+    const shaResponse = await doFetch(shaUrl, { signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS) })
     if (!shaResponse.ok) throw new Error(`checksum sidecar missing (${shaResponse.status})`)
 
-    const payload = Buffer.from(await binaryResponse.arrayBuffer())
+    const payload = await fetchPayload()
     const shaText = await shaResponse.text()
     const expected = shaText.trim().split(/\s+/)[0]
     if (!/^[0-9a-f]{64}$/i.test(expected)) throw new Error(`invalid checksum sidecar`)

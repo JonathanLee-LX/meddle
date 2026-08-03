@@ -529,6 +529,117 @@ describe('downloadBinaryAsset', () => {
         expect(fs.existsSync(destFile)).toBe(false)
     })
 
+    it('retries the payload download when the first attempt fails mid-body', async () => {
+        const { payload, hash } = await makeFixture()
+        const dir = makeTmpDir()
+        const destFile = path.join(dir, 'meddle')
+        fs.writeFileSync(destFile, 'old-binary')
+
+        let binaryAttempts = 0
+        const s = await jsonServer((req, res) => {
+            if (req.url === '/v1.2.3/meddle-linux-x64') {
+                binaryAttempts++
+                if (binaryAttempts === 1) {
+                    // Simulate a connection drop mid-body: headers then abort.
+                    res.writeHead(200, { 'content-length': String(payload.length) })
+                    res.write(payload.slice(0, 4))
+                    res.destroy()
+                    return
+                }
+                res.end(payload)
+            } else if (req.url === '/v1.2.3/meddle-linux-x64.sha256') {
+                res.end(`${hash}  meddle-linux-x64\n`)
+            } else {
+                res.statusCode = 404
+                res.end()
+            }
+        })
+
+        const result = await downloadBinaryAsset({
+            version: '1.2.3',
+            destFile,
+            platform: 'linux',
+            arch: 'x64',
+            baseUrl: s.url,
+            retries: 2,
+            retryDelayMs: 0,
+        })
+
+        expect(binaryAttempts).toBe(2)
+        expect(fs.readFileSync(destFile)).toEqual(payload)
+        expect(result.installed).toBe(destFile)
+    })
+
+    it('retries when the first payload fetch fails with a network error', async () => {
+        const { payload, hash } = await makeFixture()
+        const dir = makeTmpDir()
+        const destFile = path.join(dir, 'meddle')
+        fs.writeFileSync(destFile, 'old-binary')
+
+        let binaryAttempts = 0
+        const s = await jsonServer((req, res) => {
+            if (req.url === '/v1.2.3/meddle-linux-x64') {
+                binaryAttempts++
+                if (binaryAttempts === 1) {
+                    res.destroy(new Error('connection reset'))
+                    return
+                }
+                res.end(payload)
+            } else if (req.url === '/v1.2.3/meddle-linux-x64.sha256') {
+                res.end(`${hash}  meddle-linux-x64\n`)
+            } else {
+                res.statusCode = 404
+                res.end()
+            }
+        })
+
+        const result = await downloadBinaryAsset({
+            version: '1.2.3',
+            destFile,
+            platform: 'linux',
+            arch: 'x64',
+            baseUrl: s.url,
+            retries: 2,
+            retryDelayMs: 0,
+        })
+
+        expect(binaryAttempts).toBe(2)
+        expect(fs.readFileSync(destFile)).toEqual(payload)
+    })
+
+    it('gives up after exhausting retries', async () => {
+        const dir = makeTmpDir()
+        const destFile = path.join(dir, 'meddle')
+        fs.writeFileSync(destFile, 'old-binary')
+        const payload = crypto.randomBytes(64)
+        const hash = crypto.createHash('sha256').update(payload).digest('hex')
+        let binaryAttempts = 0
+        const s = await jsonServer((req, res) => {
+            if (req.url === '/v1.2.3/meddle-linux-x64') {
+                binaryAttempts++
+                res.destroy(new Error('connection reset'))
+            } else if (req.url === '/v1.2.3/meddle-linux-x64.sha256') {
+                res.end(`${hash}  meddle-linux-x64\n`)
+            } else {
+                res.statusCode = 404
+                res.end()
+            }
+        })
+        await expect(
+            downloadBinaryAsset({
+                version: '1.2.3',
+                destFile,
+                platform: 'linux',
+                arch: 'x64',
+                baseUrl: s.url,
+                retries: 2,
+                retryDelayMs: 0,
+            }),
+        ).rejects.toThrow()
+        expect(binaryAttempts).toBe(3) // 1 initial + 2 retries
+        expect(fs.readFileSync(destFile).toString()).toBe('old-binary')
+    })
+
     it('restores the backup and throws a clear error when the replace fails', async () => {
         const { s } = await makeFixture()
         const dir = makeTmpDir()
