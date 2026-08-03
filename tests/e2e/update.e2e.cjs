@@ -66,7 +66,7 @@ function run(args, env) {
 
 // ── fixture server ───────────────────────────────────────────────────
 
-function startFixtureServer({ latestVersion, latestBetaVersion, assets, releases }) {
+function startFixtureServer({ latestVersion, latestBetaVersion, assets }) {
     return new Promise((resolve) => {
         const server = http.createServer((req, res) => {
             const url = req.url || ''
@@ -82,13 +82,6 @@ function startFixtureServer({ latestVersion, latestBetaVersion, assets, releases
             if (url === '/@jonathanleelx/meddle/beta') {
                 res.setHeader('content-type', 'application/json')
                 res.end(JSON.stringify({ version: latestBetaVersion || latestVersion }))
-                return
-            }
-
-            // GitHub releases API (beta channel): GET /releases
-            if (url === '/releases' && releases) {
-                res.setHeader('content-type', 'application/json')
-                res.end(JSON.stringify(releases))
                 return
             }
 
@@ -159,17 +152,13 @@ async function main() {
             '1.5.0/meddle-linux-x64': tamperedBinary,
             '1.5.0/meddle-linux-x64.sha256': `${'0'.repeat(64)}  meddle-linux-x64\n`,
         },
-        releases: [
-            { tag_name: 'v2.0.0', prerelease: false },
-            { tag_name: 'v2.1.0-beta.1', prerelease: true },
-        ],
     })
 
     const baseEnv = {
         MEDDLE_HOME: home,
         MEDDLE_NPM_REGISTRY_URL: `${base}/@jonathanleelx/meddle/latest`,
+        MEDDLE_NPM_BETA_REGISTRY_URL: `${base}/@jonathanleelx/meddle/beta`,
         MEDDLE_GITHUB_LATEST_URL: `${base}/releases/latest`,
-        MEDDLE_GITHUB_RELEASES_URL: `${base}/releases`,
         MEDDLE_UPDATE_BASE_URL: `${base}/releases/download`,
     }
 

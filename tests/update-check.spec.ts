@@ -179,23 +179,20 @@ describe('beta channel', () => {
         expect(requestedPath).toBe('/@jonathanleelx/meddle/beta')
     })
 
-    it('binary: lists GitHub releases and picks the highest prerelease', async () => {
+    it('binary: resolves the beta version from the npm registry beta dist-tag', async () => {
         let requestedPath = ''
         const s = await jsonServer((req, res) => {
             requestedPath = req.url || ''
             res.setHeader('content-type', 'application/json')
-            res.end(JSON.stringify([
-                { tag_name: 'v0.4.0', prerelease: false },
-                { tag_name: 'v0.4.0-beta.1', prerelease: true },
-                { tag_name: 'v0.4.0-beta.3', prerelease: true },
-            ]))
+            res.end(JSON.stringify({ version: '0.4.0-beta.3' }))
         })
-        const version = await getLatestVersionGithub({
+        const version = await getLatestVersionNpm({
             fetchImpl: fetchImpl(s.url),
-            includePrerelease: true,
+            distTag: 'beta',
+            registryUrl: `${s.url}/@jonathanleelx/meddle/beta`,
         })
         expect(version).toBe('0.4.0-beta.3')
-        expect(requestedPath).toContain('/releases')
+        expect(requestedPath).toBe('/@jonathanleelx/meddle/beta')
     })
 
     it('checkForUpdate honors channel=beta through both install methods', async () => {
@@ -278,10 +275,7 @@ describe('beta channel', () => {
         const s = await jsonServer((req, res) => {
             requestedPath = req.url || ''
             res.setHeader('content-type', 'application/json')
-            res.end(JSON.stringify([
-                { tag_name: 'v0.4.0', prerelease: false },
-                { tag_name: 'v0.4.0-beta.5', prerelease: true },
-            ]))
+            res.end(JSON.stringify({ version: '0.4.0-beta.5' }))
         })
         const result = await checkForUpdate({
             home,
@@ -293,7 +287,7 @@ describe('beta channel', () => {
         })
         expect(result.channel).toBe('beta')
         expect(result.latest).toBe('0.4.0-beta.5')
-        expect(requestedPath).toContain('/releases')
+        expect(requestedPath).toBe('/@jonathanleelx/meddle/beta')
     })
 
     it('explicit stable channel overrides the prerelease inference', async () => {

@@ -22,7 +22,6 @@ const REPO = 'JonathanLee-LX/meddle'
 const DEFAULT_NPM_REGISTRY_URL = `https://registry.npmjs.org/${PACKAGE_NAME}/latest`
 const DEFAULT_NPM_BETA_URL = `https://registry.npmjs.org/${PACKAGE_NAME}/beta`
 const DEFAULT_GITHUB_LATEST_URL = `https://github.com/${REPO}/releases/latest`
-const DEFAULT_GITHUB_RELEASES_URL = `https://api.github.com/repos/${REPO}/releases`
 const DEFAULT_DOWNLOAD_BASE_URL = `https://github.com/${REPO}/releases/download`
 const DEFAULT_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const DEFAULT_TIMEOUT_MS = 5000
@@ -103,8 +102,9 @@ function compareVersions(a, b) {
 async function getLatestVersionNpm({ fetchImpl, registryUrl, timeoutMs, distTag } = {}) {
     const doFetch = fetchImpl || fetch
     const url = registryUrl
-        || process.env.MEDDLE_NPM_REGISTRY_URL
-        || (distTag === 'beta' ? DEFAULT_NPM_BETA_URL : DEFAULT_NPM_REGISTRY_URL)
+        || (distTag === 'beta'
+            ? (process.env.MEDDLE_NPM_BETA_REGISTRY_URL || process.env.MEDDLE_NPM_REGISTRY_URL || DEFAULT_NPM_BETA_URL)
+            : (process.env.MEDDLE_NPM_REGISTRY_URL || DEFAULT_NPM_REGISTRY_URL))
     const response = await doFetch(url, { signal: AbortSignal.timeout(timeoutMs || DEFAULT_TIMEOUT_MS) })
     if (!response.ok) throw new Error(`npm registry responded ${response.status}`)
     const data = await response.json()
@@ -114,42 +114,26 @@ async function getLatestVersionNpm({ fetchImpl, registryUrl, timeoutMs, distTag 
 }
 
 /**
- * Fetch the latest version from GitHub. For stable, follow the releases/latest
- * redirect (prereleases excluded). For includePrerelease, list releases via the
- * GitHub API and pick the highest version.
- * @param {{ fetchImpl?: Function, latestUrl?: string, timeoutMs?: number, includePrerelease?: boolean, releasesUrl?: string }} opts
+ * Fetch the latest stable version from the GitHub releases/latest redirect
+ * (prereleases are excluded by GitHub). Beta versions resolve through the npm
+ * registry `beta` dist-tag instead — see checkForUpdate.
+ * @param {{ fetchImpl?: Function, latestUrl?: string, timeoutMs?: number }} opts
  * @returns {Promise<string>}
  */
-async function getLatestVersionGithub({ fetchImpl, latestUrl, timeoutMs, includePrerelease = false, releasesUrl } = {}) {
+async function getLatestVersionGithub({ fetchImpl, latestUrl, timeoutMs } = {}) {
     const doFetch = fetchImpl || fetch
-    if (!includePrerelease) {
-        const url = latestUrl || process.env.MEDDLE_GITHUB_LATEST_URL || DEFAULT_GITHUB_LATEST_URL
-        const response = await doFetch(url, {
-            redirect: 'manual',
-            signal: AbortSignal.timeout(timeoutMs || DEFAULT_TIMEOUT_MS),
-        })
-        if (response.status < 300 || response.status >= 400) {
-            throw new Error(`GitHub latest release did not redirect (${response.status})`)
-        }
-        const location = response.headers.get('location') || ''
-        const match = /\/tag\/(v?[\d][\w.-]*)$/.exec(location)
-        if (!match) throw new Error(`Could not resolve latest release tag`)
-        return match[1].replace(/^v/, '')
-    }
-
-    const url = releasesUrl || process.env.MEDDLE_GITHUB_RELEASES_URL || DEFAULT_GITHUB_RELEASES_URL
+    const url = latestUrl || process.env.MEDDLE_GITHUB_LATEST_URL || DEFAULT_GITHUB_LATEST_URL
     const response = await doFetch(url, {
+        redirect: 'manual',
         signal: AbortSignal.timeout(timeoutMs || DEFAULT_TIMEOUT_MS),
     })
-    if (!response.ok) throw new Error(`GitHub releases API responded ${response.status}`)
-    const data = await response.json()
-    const versions = (Array.isArray(data) ? data : [])
-        .filter((r) => r && typeof r === 'object' && r.prerelease === true && typeof r.tag_name === 'string')
-        .map((r) => r.tag_name.replace(/^v/, ''))
-        .filter(isValidVersion)
-    if (versions.length === 0) throw new Error(`No prerelease found on GitHub releases`)
-    versions.sort((a, b) => compareVersions(b, a))
-    return versions[0]
+    if (response.status < 300 || response.status >= 400) {
+        throw new Error(`GitHub latest release did not redirect (${response.status})`)
+    }
+    const location = response.headers.get('location') || ''
+    const match = /\/tag\/(v?[\d][\w.-]*)$/.exec(location)
+    if (!match) throw new Error(`Could not resolve latest release tag`)
+    return match[1].replace(/^v/, '')
 }
 
 /**
@@ -223,9 +207,15 @@ async function checkForUpdate(opts) {
         }
     }
 
-    const latest = installMethod === 'binary'
-        ? await getLatestVersionGithub({ fetchImpl, latestUrl, timeoutMs, includePrerelease: channel === 'beta' })
-        : await getLatestVersionNpm({ fetchImpl, registryUrl, timeoutMs, distTag: channel })
+    // Beta channel always resolves via the npm registry `beta` dist-tag — the
+    // GitHub releases API is rate-limited (403) for unauthenticated callers.
+    // Binary installs still download assets from GitHub, but resolve the
+    // version number from npm where it is published in lockstep with releases.
+    const latest = channel === 'beta'
+        ? await getLatestVersionNpm({ fetchImpl, registryUrl, timeoutMs, distTag: 'beta' })
+        : installMethod === 'binary'
+            ? await getLatestVersionGithub({ fetchImpl, latestUrl, timeoutMs })
+            : await getLatestVersionNpm({ fetchImpl, registryUrl, timeoutMs })
 
     const checkedAt = now
     try {
