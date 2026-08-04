@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.1-beta.2] - 2026-08-03
+
+### Fixed
+
+- `meddle update` no longer fails with "operation aborted due to timeout" right after the download reaches 100%: the SHA256 sidecar's body is now consumed immediately after fetch, before the (potentially multi-minute) binary download — previously the sidecar's timeout expired during the payload download and its unread body aborted the install.
+
 ## [0.4.1-beta.1] - 2026-08-03
 
 ### Changed

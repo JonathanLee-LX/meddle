@@ -360,11 +360,16 @@ async function downloadBinaryAsset(opts) {
         throw lastError || new Error(`download failed for ${assetUrl}`)
     }
 
+    // Fetch the tiny checksum sidecar and CONSUME its body right away. The
+    // sidecar timeout must not span the (potentially multi-minute) payload
+    // download — otherwise the sidecar body stream aborts before it is read
+    // and the whole install fails with "operation aborted" right after the
+    // payload reached 100%.
     const shaResponse = await doFetch(shaUrl, { signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS) })
     if (!shaResponse.ok) throw new Error(`checksum sidecar missing (${shaResponse.status})`)
+    const shaText = await shaResponse.text()
 
     const payload = await fetchPayload()
-    const shaText = await shaResponse.text()
     const expected = shaText.trim().split(/\s+/)[0]
     if (!/^[0-9a-f]{64}$/i.test(expected)) throw new Error(`invalid checksum sidecar`)
     if (sha256Hex(payload) !== expected.toLowerCase()) {

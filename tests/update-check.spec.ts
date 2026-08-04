@@ -826,6 +826,61 @@ describe('downloadBinaryAsset', () => {
         expect(fs.readFileSync(destFile)).toEqual(payload)
     }, 30000)
 
+    it('consumes the checksum body BEFORE the payload download', async () => {
+        // Regression: the sha sidecar was fetched but its body was only read
+        // AFTER the (potentially multi-minute) payload download. The sidecar
+        // AbortSignal had long expired by then — in Deno the lazily-read body
+        // stream aborts → "operation aborted" right after reaching 100%. The
+        // checksum body must be consumed promptly, before the payload starts.
+        const payload = Buffer.alloc(16 * 1024, 5)
+        const hash = crypto.createHash('sha256').update(payload).digest('hex')
+        const dir = makeTmpDir()
+        const destFile = path.join(dir, 'meddle')
+        fs.writeFileSync(destFile, 'old-binary')
+
+        const s = await jsonServer((req, res) => {
+            if (req.url === '/v1.2.3/meddle-linux-x64') {
+                res.end(payload)
+            } else if (req.url === '/v1.2.3/meddle-linux-x64.sha256') {
+                res.end(`${hash}  meddle-linux-x64\n`)
+            } else {
+                res.statusCode = 404
+                res.end()
+            }
+        })
+
+        const events: string[] = []
+        const realFetchImpl = fetchImpl(s.url)
+        const orderedFetchImpl = (url: string, init?: RequestInit) => {
+            if (url.includes('.sha256')) {
+                return realFetchImpl(url, init).then((res: Response) => {
+                    const originalText = res.text.bind(res)
+                    res.text = () => {
+                        events.push('sha-body-read')
+                        return originalText()
+                    }
+                    return res
+                })
+            }
+            events.push('payload-fetch')
+            return realFetchImpl(url, init)
+        }
+
+        const result = await downloadBinaryAsset({
+            version: '1.2.3',
+            destFile,
+            platform: 'linux',
+            arch: 'x64',
+            baseUrl: s.url,
+            fetchImpl: orderedFetchImpl,
+        })
+
+        expect(fs.readFileSync(destFile)).toEqual(payload)
+        expect(result.installed).toBe(destFile)
+        // The sha body must be consumed before the payload download begins.
+        expect(events.indexOf('sha-body-read')).toBeLessThan(events.indexOf('payload-fetch'))
+    })
+
     it('gives up after exhausting retries', async () => {
         const dir = makeTmpDir()
         const destFile = path.join(dir, 'meddle')
