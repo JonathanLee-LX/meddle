@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.1] - 2026-08-06
 
 ### Added
 
@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - Upstream timeouts now log a clear one-line `[proxy:upstream-timeout]` message with the target URL and elapsed seconds (e.g. `上游连接超时: 60s 内未收到 https://365.kdocs.cn/... 的响应`), instead of a generic error plus full stack trace — easier to spot and diagnose in proxy logs
+
+### Fixed
+
+- `meddle update` no longer fails with "operation aborted due to timeout" right after the download reaches 100%: the SHA256 sidecar's body is now consumed immediately after fetch, before the (potentially multi-minute) binary download — previously the sidecar's timeout expired during the payload download and its unread body aborted the install.
 
 ## [0.4.1-beta.2] - 2026-08-03
 
