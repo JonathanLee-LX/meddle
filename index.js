@@ -37,7 +37,10 @@ const chalk = require('chalk')
 const _debug = require('debug')
 
 const proxyDebug = _debug('proxy')
-const UPSTREAM_REQUEST_TIMEOUT_MS = 60000
+const UPSTREAM_REQUEST_TIMEOUT_MS = process.env.MEDDLE_UPSTREAM_TIMEOUT_MS
+    ? parseInt(process.env.MEDDLE_UPSTREAM_TIMEOUT_MS, 10)
+    : 60000
+const UPSTREAM_TIMEOUT_CODE = 'UPSTREAM_TIMEOUT'
 const MITM_SERVER_IDLE_TTL_MS = 10 * 60 * 1000
 const MITM_SERVER_SWEEP_INTERVAL_MS = 60 * 1000
 const MAX_WS_BUFFERED_MESSAGES = 1000
@@ -463,11 +466,17 @@ const proxyServer = http.createServer(async (req, res) => {
             })
         })
         proxyReq.setTimeout(UPSTREAM_REQUEST_TIMEOUT_MS, () => {
-            proxyReq.destroy(new Error('HTTP upstream request timeout'))
+            const err = new Error(`上游连接超时: ${UPSTREAM_REQUEST_TIMEOUT_MS / 1000}s 内未收到 ${url.href} 的响应`)
+            err.code = UPSTREAM_TIMEOUT_CODE
+            proxyReq.destroy(err)
         })
         proxyReq.on('error', (err) => {
             pluginIntercept.emitLegacyErrorToPlugins('onBeforeResponse', err)
-            logRuntimeError(`http:proxy-request:${getErrorKey(err)}`, 'HTTP proxy error:', getErrorMessage(err))
+            if (err && err.code === UPSTREAM_TIMEOUT_CODE) {
+                console.warn(`[proxy:upstream-timeout] ${getErrorMessage(err)}`)
+            } else {
+                logRuntimeError(`http:proxy-request:${getErrorKey(err)}`, 'HTTP proxy error:', getErrorMessage(err))
+            }
             finishResponseWithProxyError(res)
         })
         proxyReq.write(reqBody)
@@ -719,10 +728,12 @@ proxyServer.on('connect', async (req, socket, head) => {
                         } catch (err) {
                             const code = err.code || ''
                             const isConnReset = code === 'ECONNRESET' || code === 'ETIMEDOUT' || code === 'ECONNREFUSED'
-                            if (isConnReset) {
+                            if (code === UPSTREAM_TIMEOUT_CODE) {
+                                console.warn(`[proxy:upstream-timeout] ${getErrorMessage(err)} → ${originHost}${req.url}`)
+                            } else if (isConnReset) {
                                 logRuntimeError(`https:upstream:${originHost}:${code}`, '[proxy] upstream %s %s: %s', originHost + req.url, code, err.message)
                             } else {
-                                logRuntimeError(`https:upstream:${originHost}:${getErrorKey(err)}`, '[error debug]', originHost + req.url, err)
+                                logRuntimeError(`https:upstream:${originHost}:${getErrorKey(err)}`, '[proxy] upstream %s: %s', originHost + req.url, getErrorMessage(err))
                             }
                             pluginIntercept.emitLegacyErrorToPlugins('onBeforeResponse', err)
                             finishResponseWithProxyError(res)

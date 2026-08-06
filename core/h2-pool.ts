@@ -8,7 +8,23 @@ const proxyDebug = _debug('proxy')
 
 const h2SessionPool = new Map<string, http2.ClientHttp2Session>()
 const MAX_H2_SESSIONS = process.env.MEDDLE_MAX_H2_SESSIONS ? parseInt(process.env.MEDDLE_MAX_H2_SESSIONS) : 32
-const UPSTREAM_REQUEST_TIMEOUT_MS = 60000
+const DEFAULT_UPSTREAM_REQUEST_TIMEOUT_MS = 60000
+
+function upstreamTimeoutMs(): number {
+    const fromEnv = process.env.MEDDLE_UPSTREAM_TIMEOUT_MS
+    const parsed = fromEnv ? parseInt(fromEnv, 10) : NaN
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_UPSTREAM_REQUEST_TIMEOUT_MS
+}
+
+export const UPSTREAM_TIMEOUT_CODE = 'UPSTREAM_TIMEOUT'
+
+function upstreamTimeoutError(target: string, timeoutMs: number): Error {
+    const err = new Error(
+        `上游连接超时: ${timeoutMs / 1000}s 内未收到 ${target} 的响应（上游服务可能挂起、网络不通或规则指向了不可达目标）`,
+    ) as Error & { code: string }
+    err.code = UPSTREAM_TIMEOUT_CODE
+    return err
+}
 
 function evictOldestH2SessionIfNeeded(): void {
     while (h2SessionPool.size >= MAX_H2_SESSIONS) {
@@ -53,7 +69,9 @@ function getOrCreateH2Session(origin: string, servername?: string): Promise<http
 
         const timeout = setTimeout(() => {
             session.destroy()
-            reject(new Error('HTTP/2 connection timeout'))
+            const err = new Error(`HTTP/2 连接超时: 5s 内未能与 ${origin} 建立 HTTP/2 连接（上游不支持 H2 或网络不通）`) as Error & { code: string }
+            err.code = 'H2_CONNECT_TIMEOUT'
+            reject(err)
         }, 5000)
 
         session.once('connect', () => {
@@ -138,8 +156,8 @@ function proxyViaH1(target: string, method: string, headers: Record<string, any>
                 protocol: 'h1.1'
             })
         })
-        proxyReq.setTimeout(UPSTREAM_REQUEST_TIMEOUT_MS, () => {
-            proxyReq.destroy(new Error('HTTP/1.1 upstream request timeout'))
+        proxyReq.setTimeout(upstreamTimeoutMs(), () => {
+            proxyReq.destroy(upstreamTimeoutError(target, upstreamTimeoutMs()))
         })
         proxyReq.on('error', reject)
         if (reqBody && reqBody.length > 0) proxyReq.write(reqBody)
