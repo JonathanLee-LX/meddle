@@ -1,5 +1,30 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
+import http from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { once } from 'node:events'
 import { cleanHeadersForH2, makeProxyRequest } from '../core/h2-pool'
+
+const servers: http.Server[] = []
+const sockets = new Set<import('node:net').Socket>()
+
+afterEach(async () => {
+    for (const s of sockets) s.destroy()
+    sockets.clear()
+    await Promise.all(servers.splice(0).map(s => new Promise<void>(r => {
+        if (s.listening) s.close(() => r())
+        else r()
+    })))
+})
+
+function listen(server: http.Server): Promise<number> {
+    servers.push(server)
+    return new Promise(async (resolve, reject) => {
+        server.once('error', reject)
+        server.listen(0, '127.0.0.1')
+        await once(server, 'listening')
+        resolve((server.address() as AddressInfo).port)
+    })
+}
 
 describe('h2-pool cleanHeadersForH2', () => {
     it('removes hop-by-hop headers', () => {
@@ -63,9 +88,42 @@ describe('h2-pool cleanHeadersForH2', () => {
     })
 })
 
-describe('h2-pool makeProxyRequest', () => {
-    it('is a function that accepts 4 arguments', () => {
-        expect(typeof makeProxyRequest).toBe('function')
-        expect(makeProxyRequest.length).toBe(4)
-    })
+describe('h2-pool makeProxyRequest upstream timeout', () => {
+    it('fails with a stable UPSTREAM_TIMEOUT code and a descriptive message', async () => {
+        // Upstream accepts the connection but never responds → idle timeout.
+        const s = http.createServer((_req, res) => {
+            // hold the connection open without sending anything
+            const hold = setInterval(() => {}, 1000)
+            res.on('close', () => clearInterval(hold))
+        })
+        const port = await listen(s)
+
+        process.env.MEDDLE_UPSTREAM_TIMEOUT_MS = '300'
+        try {
+            await expect(
+                makeProxyRequest(`http://127.0.0.1:${port}/never`, 'GET', { host: '127.0.0.1' }, Buffer.alloc(0)),
+            ).rejects.toMatchObject({
+                code: 'UPSTREAM_TIMEOUT',
+            })
+        } finally {
+            delete process.env.MEDDLE_UPSTREAM_TIMEOUT_MS
+        }
+    }, 30000)
+
+    it('mentions the target URL in the timeout message', async () => {
+        const s = http.createServer((_req, res) => {
+            const hold = setInterval(() => {}, 1000)
+            res.on('close', () => clearInterval(hold))
+        })
+        const port = await listen(s)
+
+        process.env.MEDDLE_UPSTREAM_TIMEOUT_MS = '300'
+        try {
+            await expect(
+                makeProxyRequest(`http://127.0.0.1:${port}/api/x`, 'GET', { host: '127.0.0.1' }, Buffer.alloc(0)),
+            ).rejects.toThrow(/127\.0\.0\.1/)
+        } finally {
+            delete process.env.MEDDLE_UPSTREAM_TIMEOUT_MS
+        }
+    }, 30000)
 })
