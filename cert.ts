@@ -19,6 +19,9 @@ const options = {
     ]
 };
 
+// 所有外部子进程调用的超时保护：security/openssl 卡住时不阻塞启动
+const EXEC_TIMEOUT_MS = 5000;
+
 const easyCert = new EasyCert(options);
 const crtMgr = Object.assign({}, easyCert);
 
@@ -169,7 +172,8 @@ export function checkCATrusted(): boolean {
     try {
         if (platform === 'darwin') {
             execSync(`security find-certificate -c "meddle" /Library/Keychains/System.keychain`, {
-                stdio: 'pipe'
+                stdio: 'pipe',
+                timeout: EXEC_TIMEOUT_MS,
             });
             return true;
         } else if (platform === 'linux') {
@@ -180,7 +184,8 @@ export function checkCATrusted(): boolean {
             for (const bundle of caBundles) {
                 if (existsSync(bundle)) {
                     execSync(`openssl verify -CAfile "${bundle}" "${rootCAPath}"`, {
-                        stdio: 'pipe'
+                        stdio: 'pipe',
+                        timeout: EXEC_TIMEOUT_MS,
                     });
                     return true;
                 }
@@ -194,17 +199,35 @@ export function checkCATrusted(): boolean {
     }
 }
 
-export async function ensureRootCA(): Promise<void> {
+export async function ensureRootCA(opts: { trustCheckAsync?: boolean } = {}): Promise<void> {
     if (!crtMgr.ifRootCAFileExists()) {
         const { keyPath, crtPath } = await doGenerate(false);
         console.log('根证书已生成:', keyPath, crtPath);
     }
 
-    const isTrusted = checkCATrusted();
+    const runTrustCheck = (): void => {
+        try {
+            const isTrusted = checkCATrusted();
+            if (!isTrusted && !process.env.MEDDLE_HEADLESS && !process.env.MEDDLE_MCP) {
+                trustRootCA();
+            }
+        } catch (err) {
+            console.error('证书信任检查失败:', getErrorMessage(err));
+        }
+    };
 
-    if (!isTrusted && !process.env.MEDDLE_HEADLESS && !process.env.MEDDLE_MCP) {
-        await trustRootCA();
+    if (opts.trustCheckAsync) {
+        // 不缓存结果：每次启动都真实检查，避免掩盖系统证书状态的变化。
+        // 异步执行，不阻塞代理启动——Keychain 慢/卡住不影响上线。
+        setImmediate(runTrustCheck);
+        return;
     }
+
+    runTrustCheck();
+}
+
+function getErrorMessage(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
 }
 
 export function getRootCAPath(): string {

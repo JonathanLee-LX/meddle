@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- CA trust check on startup is now asynchronous and non-blocking: `security find-certificate` / `openssl verify` run in the background, so a slow Keychain service no longer delays proxy startup. No caching — the trust state is re-checked on every launch to avoid masking system cert changes.
+- All certificate-related subprocess calls now have a 5s timeout guard so a hung `security`/`openssl` can never block startup forever.
+
 ## [0.4.3] - 2026-08-07
 
 ### Fixed
