@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.3] - 2026-08-07
+
+### Fixed
+
+- Manual `meddle update` (including `--check` / `status`) now bypasses the 24h update-check cache and always hits the network — newly released versions were previously invisible for up to 24h after publish because the CLI served the cached "latest" instead of re-checking.
+
 ## [0.4.2] - 2026-08-07
 
 ### Added

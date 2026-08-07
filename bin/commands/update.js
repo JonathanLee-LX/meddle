@@ -80,7 +80,7 @@ meddle update - 检查并升级 meddle
 `)
 }
 
-async function resolveLatest({ force = false, notify = true, channel = 'stable', explicitChannel = false } = {}) {
+async function resolveLatest({ force = true, notify = true, channel = 'stable', explicitChannel = false } = {}) {
     const info = await checkForUpdate({
         home,
         installMethod,

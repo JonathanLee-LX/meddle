@@ -181,6 +181,24 @@ async function main() {
         assert.match(stdout, expected)
     })
 
+    await test('--check ignores a fresh-but-stale cached version (manual check must hit the network)', async () => {
+        // A stale cached "latest" (1.0.0) with a fresh timestamp must NOT be
+        // served to a MANUAL `meddle update` — the user explicitly asked for a
+        // check, so the 24h cache is bypassed. This is what made newly released
+        // versions invisible right after publish.
+        const cacheDir = path.join(home, '.cache')
+        fs.mkdirSync(cacheDir, { recursive: true })
+        fs.writeFileSync(
+            path.join(cacheDir, 'update-check.json'),
+            JSON.stringify({ version: '1.0.0', checkedAt: Date.now(), channel: 'stable' }),
+        )
+
+        const { code, stdout } = await run(['update', '--check', '--stable'], baseEnv)
+        assert.equal(code, 2, `expected exit 2 (newer version available), got ${code}\n${stdout}`)
+        assert.match(stdout, /2\.0\.0/)
+        assert.doesNotMatch(stdout, /1\.0\.0/)
+    })
+
     await test('--check --stable reports up-to-date (exit 0) when versions match', async () => {
         const { code, stdout } = await run(['update', '--check', '--stable'], {
             ...baseEnv,
