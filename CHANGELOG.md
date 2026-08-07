@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Crash collection: fatal errors (`uncaughtException` / `unhandledRejection` / watchdog exit) now write a crash dump to `~/.meddle/crash/<fingerprint>-<ts>.json` with fingerprint dedupe (max 10 per fingerprint), env-key-only recording (never values), and credential scrubbing — `[fatal] 崩溃报告已保存: <path> (指纹 <fp>)` is printed on crash.
+
 ### Fixed
 
 - Proxy no longer crashes with `uncaughtException: read ECONNRESET` when an upstream HTTP/2 session errors more than once: the session error listener is now persistent (`on` instead of `once`) and destroys the errored session so it is never reused. The MITM https server also attaches an `'error'` listener so a client resetting its TLS connection cannot kill the whole proxy.

@@ -22,6 +22,8 @@ const {
 } = require('./dist/core/client-identity')
 const { createApplicationIdentityResolver } = require('./dist/core/application-identity')
 const { runAsyncUpdateCheck } = require('./bin/lib/update-check')
+const { resolveMeddleHome } = require('./bin/lib/meddle-home')
+const { recordCrash, crashFingerprint } = require('./bin/lib/crash-report')
 const {
     authorizeProxyClient,
     buildRemoteAccessConfig,
@@ -977,6 +979,28 @@ function handleFatalError(type, reason) {
     if (!fatalErrorInProgress) {
         fatalErrorInProgress = true
         writeFatalError(type, reason)
+
+        // 崩溃采集: 落盘现场（指纹去重、脱敏），便于事后定位
+        const err = reason instanceof Error ? reason : new Error(String(reason))
+        try {
+            const home = resolveMeddleHome()
+            const crashFile = recordCrash({
+                home,
+                error: err,
+                version: require('./package.json').version,
+                envKeys: Object.keys(process.env || {}),
+                context: {
+                    fatalType: type,
+                    connections: activeProxySockets.size,
+                    mitmServers: ctx.httpsServerMap ? ctx.httpsServerMap.size : 0,
+                },
+            })
+            if (crashFile) {
+                console.error(`[fatal] 崩溃报告已保存: ${crashFile} (指纹 ${crashFingerprint(err)})`)
+            }
+        } catch (_) {
+            // 崩溃报告失败不影响退出
+        }
     }
 
     process.exit(1)
