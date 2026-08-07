@@ -507,7 +507,9 @@ localWSServer.on('connection', (client, req) => {})
 ;(async () => {
     // 非阻塞异步版本检查：不会阻塞启动，失败静默，1.5s 后发起且 timer unref
     runAsyncUpdateCheck({ current: require('./package.json').version })
-    await ensureRootCA()
+    // 证书存在性检查同步（快）；信任检查异步执行，Keychain 慢也不阻塞启动。
+    // 不缓存结果——每次启动都真实检查，避免掩盖系统证书状态变化。
+    await ensureRootCA({ trustCheckAsync: true })
     await pluginBoot.bootstrapBuiltinPlugins()
     const port = await getFreePort()
     proxyServer.listen(port, remoteAccess.bindHost, () => {
