@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Proxy no longer crashes with `uncaughtException: read ECONNRESET` when an upstream HTTP/2 session errors more than once: the session error listener is now persistent (`on` instead of `once`) and destroys the errored session so it is never reused. The MITM https server also attaches an `'error'` listener so a client resetting its TLS connection cannot kill the whole proxy.
+- CONNECT tunnel sockets now keep persistent error listeners (`on` instead of `once`) — a second socket error after the first could previously become an uncaughtException and kill the proxy.
+
 ## [0.4.1] - 2026-08-06
 
 ### Added

@@ -123,4 +123,69 @@ describe('CONNECT tunnel bridge', () => {
             poll()
         })
     })
+
+    it('keeps error listeners after the first socket error (no uncaughtException on the second)', async () => {
+        // Regression: establishConnectTunnel attached `once('error', closeBoth)`.
+        // After the first error the listener was consumed; a second 'error'
+        // emission on either tunnel socket had no listener → in the deno binary
+        // this surfaced as uncaughtException and killed the whole proxy. The
+        // listener must persist.
+        let upstreamSocket: Socket | undefined
+        let bridgedUpstream: Socket | undefined
+        let proxySideClient: Socket | undefined
+        const upstream = createServer(socket => {
+            upstreamSocket = socket
+            sockets.add(socket)
+        })
+        servers.push(upstream)
+        upstream.listen(0, '127.0.0.1')
+        await once(upstream, 'listening')
+
+        const proxy = createServer(client => {
+            proxySideClient = client
+            sockets.add(client)
+            const target = connect(upstream.address() as { port: number; address: string })
+            bridgedUpstream = target
+            sockets.add(target)
+            target.once('connect', () => {
+                establishConnectTunnel(client, target, Buffer.alloc(0))
+            })
+        })
+        servers.push(proxy)
+        proxy.listen(0, '127.0.0.1')
+        await once(proxy, 'listening')
+
+        const client = connect(proxy.address() as { port: number; address: string })
+        sockets.add(client)
+        await once(client, 'connect')
+        await once(client, 'data')
+
+        // Wait for establishConnectTunnel to finish registering its listeners
+        // (they attach inside the write() callback).
+        await new Promise<void>(r => setTimeout(r, 50))
+        expect(proxySideClient).toBeDefined()
+        expect(proxySideClient!.listenerCount('error')).toBeGreaterThan(0)
+
+        let uncaught: Error | null = null
+        const onUncaught = (e: Error) => { uncaught = e }
+        process.on('uncaughtException', onUncaught)
+
+        try {
+            // First error on the proxy-side tunnel socket.
+            proxySideClient!.emit('error', new Error('first ECONNRESET'))
+            await new Promise<void>(r => setTimeout(r, 30))
+            expect(uncaught).toBeNull()
+
+            // Second error must still be handled (persistent listener).
+            proxySideClient!.emit('error', new Error('second ECONNRESET'))
+            await new Promise<void>(r => setTimeout(r, 30))
+            expect(uncaught).toBeNull()
+
+            // The bridge should have closed both sockets after the first error.
+            expect(bridgedUpstream?.destroyed).toBe(true)
+            expect(upstreamSocket?.destroyed).toBe(true)
+        } finally {
+            process.removeListener('uncaughtException', onUncaught)
+        }
+    })
 })
