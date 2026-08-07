@@ -39,8 +39,14 @@ export function establishConnectTunnel(
 
         client.once('close', closeBoth)
         upstream.once('close', closeBoth)
-        client.once('error', closeBoth)
-        upstream.once('error', closeBoth)
+        // Persistent error listeners: a tunnel socket can emit 'error' more
+        // than once (e.g. an RST while the other side is still draining). With
+        // `once` the listener would be consumed by the first error and a second
+        // emission would crash the process via uncaughtException (observed in
+        // the deno binary). `on` keeps the bridge protected for the socket's
+        // lifetime; closeBoth is idempotent.
+        client.on('error', closeBoth)
+        upstream.on('error', closeBoth)
 
         if (head.length > 0) upstream.write(head)
         client.pipe(upstream)

@@ -2,7 +2,8 @@ import { describe, it, expect, afterEach } from 'vitest'
 import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { once } from 'node:events'
-import { cleanHeadersForH2, makeProxyRequest } from '../core/h2-pool'
+import { EventEmitter } from 'node:events'
+import { cleanHeadersForH2, makeProxyRequest, __setH2SessionFactoryForTest } from '../core/h2-pool'
 
 const servers: http.Server[] = []
 const sockets = new Set<import('node:net').Socket>()
@@ -88,8 +89,7 @@ describe('h2-pool cleanHeadersForH2', () => {
     })
 })
 
-describe('h2-pool makeProxyRequest upstream timeout', () => {
-    it('fails with a stable UPSTREAM_TIMEOUT code and a descriptive message', async () => {
+describe('h2-pool makeProxyRequest upstream timeout', () => {    it('fails with a stable UPSTREAM_TIMEOUT code and a descriptive message', async () => {
         // Upstream accepts the connection but never responds → idle timeout.
         const s = http.createServer((_req, res) => {
             // hold the connection open without sending anything
@@ -124,6 +124,71 @@ describe('h2-pool makeProxyRequest upstream timeout', () => {
             ).rejects.toThrow(/127\.0\.0\.1/)
         } finally {
             delete process.env.MEDDLE_UPSTREAM_TIMEOUT_MS
+        }
+    }, 30000)
+
+    it('does not crash when a pooled H2 session errors more than once', async () => {
+        // Regression: getOrCreateH2Session attached `once('error')`. The first
+        // error consumed the listener; a second 'error' emission on the same
+        // session (e.g. an RST while a caller still holds it) then had no
+        // listener → uncaughtException killed the whole proxy. The listener
+        // must persist and the errored session must be destroyed.
+        const { generateKeyPairSync } = await import('node:crypto')
+        const { execFileSync } = await import('node:child_process')
+        const fs = await import('node:fs')
+        const os = await import('node:os')
+        const path = await import('node:path')
+
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'h2pool-'))
+        const keyPath = path.join(dir, 'key.pem')
+        const crtPath = path.join(dir, 'cert.pem')
+        const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 1024 })
+        fs.writeFileSync(keyPath, privateKey.export({ type: 'pkcs8', format: 'pem' }))
+        execFileSync('openssl', ['req', '-x509', '-new', '-key', keyPath, '-out', crtPath,
+            '-days', '1', '-subj', '/CN=localhost', '-nodes'], { stdio: 'pipe' })
+
+        // Fake http2 session: emits connect, then lets the test emit 'error' repeatedly.
+        let fakeSession: (EventEmitter & { destroyed: boolean; closed: boolean; destroy(): void }) | null = null
+        __setH2SessionFactoryForTest(() => {
+            const s = new EventEmitter() as EventEmitter & {
+                destroyed: boolean; closed: boolean; destroy(): void
+            }
+            s.destroyed = false
+            s.closed = false
+            s.destroy = () => { s.destroyed = true; s.closed = true }
+            fakeSession = s
+            return s as unknown as import('node:http2').ClientHttp2Session
+        })
+
+        let uncaught: Error | null = null
+        const onUncaught = (e: Error) => { uncaught = e }
+        process.on('uncaughtException', onUncaught)
+
+        try {
+            // Trigger session creation.
+            const reqPromise = makeProxyRequest(
+                'https://127.0.0.1:1/', 'GET', { host: '127.0.0.1:1' }, Buffer.alloc(0),
+            ).catch(() => { /* session errors reject the request */ })
+            await new Promise<void>((r) => setTimeout(r, 50))
+            expect(fakeSession).not.toBeNull()
+            fakeSession!.emit('connect')
+
+            // First error: handled (rejects the pending request).
+            fakeSession!.emit('error', new Error('first ECONNRESET'))
+            await new Promise<void>((r) => setTimeout(r, 50))
+            expect(uncaught).toBeNull()
+            expect(fakeSession!.destroyed).toBe(true)
+
+            // Second error on the same session must NOT crash the process.
+            fakeSession!.emit('error', new Error('second ECONNRESET'))
+            await new Promise<void>((r) => setTimeout(r, 50))
+            expect(uncaught).toBeNull()
+
+            await reqPromise
+        } finally {
+            process.removeListener('uncaughtException', onUncaught)
+            __setH2SessionFactoryForTest(null)
+            fs.rmSync(dir, { recursive: true, force: true })
         }
     }, 30000)
 })

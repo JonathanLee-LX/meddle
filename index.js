@@ -748,6 +748,15 @@ proxyServer.on('connect', async (req, socket, head) => {
                 markMitmServerUsed(server)
                 server._epActiveSockets = new Set()
 
+                // A client resetting its TLS connection (ECONNRESET) can surface
+                // as an 'error' on the http2 server. Without a listener this
+                // would propagate to uncaughtException and kill the whole proxy.
+                server.on('error', (err) => {
+                    if (!isExpectedSocketError(err)) {
+                        proxyDebug('MITM server error', originHost, getErrorMessage(err))
+                    }
+                })
+
                 server._epRegisterClientIdentity = (remotePort, identity) => {
                     clientIdentityRegistry.register(remotePort, identity)
                 }

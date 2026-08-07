@@ -54,6 +54,19 @@ export function cleanHeadersForH2(headers: Record<string, any>): Record<string, 
     return cleaned
 }
 
+// Test-only hook: override the session constructor so specs can inject a fake
+// http2 session (e.g. one that emits 'error' repeatedly). Do not call from prod.
+let sessionFactoryOverride: ((origin: string, opts: http2.SecureClientSessionOptions) => http2.ClientHttp2Session) | null = null
+export function __setH2SessionFactoryForTest(
+    factory: ((origin: string, opts: http2.SecureClientSessionOptions) => http2.ClientHttp2Session) | null,
+): void {
+    sessionFactoryOverride = factory
+}
+
+function createH2Session(origin: string, opts: http2.SecureClientSessionOptions): http2.ClientHttp2Session {
+    return sessionFactoryOverride ? sessionFactoryOverride(origin, opts) : http2.connect(origin, opts)
+}
+
 function getOrCreateH2Session(origin: string, servername?: string): Promise<http2.ClientHttp2Session> {
     const poolKey = servername ? `${origin}#${servername}` : origin
     const cached = h2SessionPool.get(poolKey)
@@ -65,7 +78,7 @@ function getOrCreateH2Session(origin: string, servername?: string): Promise<http
     return new Promise((resolve, reject) => {
         const connectOpts: http2.SecureClientSessionOptions = { rejectUnauthorized: false }
         if (servername) connectOpts.servername = servername
-        const session = http2.connect(origin, connectOpts)
+        const session = createH2Session(origin, connectOpts)
 
         const timeout = setTimeout(() => {
             session.destroy()
@@ -81,10 +94,16 @@ function getOrCreateH2Session(origin: string, servername?: string): Promise<http
             resolve(session)
         })
 
-        session.once('error', (err: Error) => {
+        // Persistent error listener: a session that errored once must be
+        // evicted AND destroyed so it is never reused. Using `once` would drop
+        // the listener after the first error — a second error (e.g. an RST
+        // while a concurrent caller still holds the session) had no listener
+        // and crashed the whole process via uncaughtException.
+        session.on('error', (err: Error) => {
             clearTimeout(timeout)
             h2SessionPool.delete(poolKey)
-            reject(err)
+            if (!session.destroyed) session.destroy()
+            reject(err) // no-op after the promise has settled
         })
 
         session.on('close', () => { h2SessionPool.delete(poolKey) })
