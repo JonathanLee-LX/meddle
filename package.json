@@ -1,6 +1,6 @@
 {
   "name": "@jonathanleelx/meddle",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "A simple development proxy server with custom routing rules, mock responses, HTTPS interception, and a plugin system",
   "type": "commonjs",
   "main": "index.js",
