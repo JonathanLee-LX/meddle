@@ -155,13 +155,23 @@ export class HookDispatcher {
     private pluginManager: PluginManager;
     private logger: Logger;
     private defaultTimeoutMs: number;
+    private breakerThreshold: number;
+    private syncBlockThresholdMs: number;
+    private timeoutDegradeAfter: number;
     private pluginHookStats: Map<string, PluginStats>;
+    private consecutiveFailures: Map<string, number>;
+    private consecutiveTimeouts: Map<string, number>;
 
     constructor(pluginManager: PluginManager, options: HookDispatcherOptions = {}) {
         this.pluginManager = pluginManager;
         this.logger = options.logger || console;
         this.defaultTimeoutMs = options.defaultTimeoutMs || DEFAULT_HOOK_TIMEOUT_MS;
+        this.breakerThreshold = options.breakerThreshold || 10;
+        this.syncBlockThresholdMs = options.syncBlockThresholdMs || 50;
+        this.timeoutDegradeAfter = options.timeoutDegradeAfter || 5;
         this.pluginHookStats = new Map();
+        this.consecutiveFailures = new Map();
+        this.consecutiveTimeouts = new Map();
     }
 
     async dispatch(
@@ -175,8 +185,13 @@ export class HookDispatcher {
         
         for (const plugin of plugins) {
             const pluginId = plugin.manifest.id;
-            if (this.pluginManager.getState(pluginId) === 'disabled') {
+            const state = this.pluginManager.getState(pluginId);
+            if (state === 'disabled') {
                 results.push({ pluginId, status: 'skipped-disabled', duration: 0 });
+                continue;
+            }
+            if (state === 'degraded') {
+                results.push({ pluginId, status: 'skipped-degraded', duration: 0 });
                 continue;
             }
             const hookFn = plugin[hookName];
@@ -190,22 +205,27 @@ export class HookDispatcher {
                     timeoutMs,
                     `${pluginId}.${hookName}`
                 );
-                this._recordHookStat(pluginId, hookName, 'ok', Date.now() - start);
+                const duration = Date.now() - start;
+                this._recordHookStat(pluginId, hookName, 'ok', duration);
+                this._recordSyncBlock(pluginId, duration);
+                this.consecutiveFailures.set(pluginId, 0);
+                this.consecutiveTimeouts.set(pluginId, 0);
                 results.push({
                     pluginId,
                     status: 'ok',
-                    duration: Date.now() - start,
+                    duration,
                     contextBefore,
                     contextAfter: snapshotHookContext(hookContext),
                 });
             } catch (error: any) {
                 const isTimeout = error && error.code === 'PLUGIN_HOOK_TIMEOUT';
                 const status = isTimeout ? 'timeout' : 'error';
-                this._recordHookStat(pluginId, hookName, status, Date.now() - start, error);
+                const duration = Date.now() - start;
+                this._recordHookStat(pluginId, hookName, status, duration, error);
                 results.push({
                     pluginId,
                     status,
-                    duration: Date.now() - start,
+                    duration,
                     error: error && error.message ? error.message : String(error),
                     contextBefore,
                     contextAfter: snapshotHookContext(hookContext),
@@ -214,6 +234,12 @@ export class HookDispatcher {
                     `[plugin-runtime] hook ${pluginId}.${hookName} failed:`,
                     error && error.message ? error.message : error
                 );
+
+                if (isTimeout) {
+                    this._recordTimeout(pluginId);
+                } else {
+                    this._recordFailure(pluginId);
+                }
             }
         }
         return results;
@@ -227,6 +253,8 @@ export class HookDispatcher {
                 ok: value.ok,
                 error: value.error,
                 timeout: value.timeout,
+                slowCount: value.slowCount,
+                degraded: value.degraded,
                 lastHook: value.lastHook,
                 lastDuration: value.lastDuration,
                 lastError: value.lastError,
@@ -259,6 +287,8 @@ export class HookDispatcher {
             ok: 0,
             error: 0,
             timeout: 0,
+            slowCount: 0,
+            degraded: false,
             lastHook: null,
             lastDuration: null,
             lastError: null,
@@ -269,6 +299,50 @@ export class HookDispatcher {
         current.lastDuration = duration;
         current.lastError = error ? (error.message || String(error)) : null;
         this.pluginHookStats.set(pluginId, current);
+    }
+
+    /** Mark a plugin slow when its hook blocked the event loop past the budget. */
+    private _recordSyncBlock(pluginId: string, duration: number): void {
+        if (duration < this.syncBlockThresholdMs) return;
+        const current = this.pluginHookStats.get(pluginId);
+        if (current) {
+            current.slowCount += 1;
+            this.pluginHookStats.set(pluginId, current);
+        }
+        this.logger.warn?.(
+            `[plugin-runtime] plugin ${pluginId} hook blocked the event loop for ${duration}ms (threshold ${this.syncBlockThresholdMs}ms)`
+        );
+    }
+
+    /** Circuit breaker: disable a plugin after N consecutive failures. */
+    private _recordFailure(pluginId: string): void {
+        const count = (this.consecutiveFailures.get(pluginId) || 0) + 1;
+        this.consecutiveFailures.set(pluginId, count);
+        if (count >= this.breakerThreshold) {
+            this.pluginManager.setState(pluginId, 'disabled');
+            this.consecutiveFailures.set(pluginId, 0);
+            this.logger.error(
+                `[plugin-runtime] plugin ${pluginId} auto-disabled after ${count} consecutive hook failures (circuit breaker)`
+            );
+        }
+    }
+
+    /** Degrade a plugin (skip future hooks) after N consecutive timeouts. */
+    private _recordTimeout(pluginId: string): void {
+        const count = (this.consecutiveTimeouts.get(pluginId) || 0) + 1;
+        this.consecutiveTimeouts.set(pluginId, count);
+        if (count >= this.timeoutDegradeAfter) {
+            this.pluginManager.setState(pluginId, 'degraded');
+            this.consecutiveTimeouts.set(pluginId, 0);
+            const stats = this.pluginHookStats.get(pluginId);
+            if (stats) {
+                stats.degraded = true;
+                this.pluginHookStats.set(pluginId, stats);
+            }
+            this.logger.warn?.(
+                `[plugin-runtime] plugin ${pluginId} degraded after ${count} consecutive hook timeouts (skipping future hooks)`
+            );
+        }
     }
 }
 

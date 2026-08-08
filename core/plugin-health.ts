@@ -25,6 +25,8 @@ export function buildPluginHealth(input: PluginHealthInput = {}): PluginHealth {
         let health: 'healthy' | 'degraded' | 'disabled' | 'inactive' = 'inactive';
         if (state === 'disabled') {
             health = 'disabled';
+        } else if (state === 'degraded') {
+            health = 'degraded';
         } else if (failed > 0) {
             health = 'degraded';
         } else if (state === 'running') {
