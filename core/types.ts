@@ -66,7 +66,7 @@ export interface PluginContext {
     [key: string]: any;
 }
 
-export type PluginState = 'registered' | 'ready' | 'running' | 'stopped' | 'disposed' | 'disabled' | 'unknown';
+export type PluginState = 'registered' | 'ready' | 'running' | 'stopped' | 'disposed' | 'disabled' | 'degraded' | 'unknown';
 
 export interface Request {
     method?: string;
@@ -158,7 +158,7 @@ export interface PipelineExecuteInput {
 
 export interface HookDispatchResult {
     pluginId: string;
-    status: 'ok' | 'error' | 'timeout' | 'skipped-disabled';
+    status: 'ok' | 'error' | 'timeout' | 'skipped-disabled' | 'skipped-degraded';
     duration: number;
     error?: string;
     contextBefore?: HookDispatchSnapshot;
@@ -186,6 +186,8 @@ export interface PluginStats {
     ok: number;
     error: number;
     timeout: number;
+    slowCount: number;
+    degraded: boolean;
     lastHook: string | null;
     lastDuration: number | null;
     lastError: string | null;
@@ -199,6 +201,12 @@ export interface PluginManagerOptions {
 export interface HookDispatcherOptions {
     logger?: Logger;
     defaultTimeoutMs?: number;
+    /** Circuit breaker: disable a plugin after N consecutive hook failures. */
+    breakerThreshold?: number;
+    /** Mark a plugin slow when a hook blocks the event loop past this budget (ms). */
+    syncBlockThresholdMs?: number;
+    /** Degrade a plugin (skip future hooks) after N consecutive timeouts. */
+    timeoutDegradeAfter?: number;
 }
 
 export interface HookDispatchOptions {

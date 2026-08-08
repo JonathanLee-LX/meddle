@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - CA trust check on startup is now asynchronous and non-blocking: `security find-certificate` / `openssl verify` run in the background, so a slow Keychain service no longer delays proxy startup. No caching — the trust state is re-checked on every launch to avoid masking system cert changes.
+- Plugin stability hardening (no architecture change, all in-process):
+  - **Circuit breaker**: a plugin is auto-disabled after N consecutive hook failures (`breakerThreshold`, default 10), and re-enabled by a successful hook. A failing plugin no longer runs on every request.
+  - **Slow-plugin detection**: hooks that block the event loop past `syncBlockThresholdMs` (default 50ms) are counted as `slowCount` in plugin stats and logged — this pins which plugin caused `eventLoopDelay` watchdog alerts.
+  - **Timeout degrade**: a plugin is marked `degraded` after N consecutive hook timeouts (`timeoutDegradeAfter`, default 5) and skipped on subsequent hooks instead of being re-invoked and re-timing-out every request.
+  - `degraded` is now a first-class plugin state shown in health reporting.
 - All certificate-related subprocess calls now have a 5s timeout guard so a hung `security`/`openssl` can never block startup forever.
 
 ## [0.4.3] - 2026-08-07
