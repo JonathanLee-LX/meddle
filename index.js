@@ -26,6 +26,7 @@ const { resolveMeddleHome } = require('./bin/lib/meddle-home')
 const { recordCrash, crashFingerprint } = require('./bin/lib/crash-report')
 const {
     authorizeProxyClient,
+    authorizeManagementRequest,
     buildRemoteAccessConfig,
     buildRemoteSetupHtml,
     createRemoteAccessInfo,
@@ -316,6 +317,13 @@ const proxyServer = http.createServer(async (req, res) => {
             return
         }
 
+        // 远程管理界面：需 remote 模式 + 私有网络 + （配置了 token 时）合法 Authorization
+        const managementAuth = authorizeManagementRequest(req.socket.remoteAddress, req.headers, remoteAccess)
+        if (managementAuth.allowed) {
+            handleLocalRequest(req, res, { expressApp, serverContext, ctx })
+            return
+        }
+
         if (remoteAccess.enabled && requestUrl.pathname === '/') {
             const html = buildRemoteSetupHtml(
                 requestUrl.hostname,
@@ -331,8 +339,11 @@ const proxyServer = http.createServer(async (req, res) => {
             return
         }
 
-        res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' })
-        res.end('Remote access to the Meddle management interface is forbidden')
+        const managementStatus = managementAuth.statusCode || 403
+        res.writeHead(managementStatus, { 'Content-Type': 'text/plain; charset=utf-8' })
+        res.end(managementStatus === 401
+            ? 'Authentication required for remote management'
+            : 'Remote access to the Meddle management interface is forbidden')
         return
     }
 
@@ -937,13 +948,16 @@ proxyServer.on('upgrade', (req, socket, head) => {
         if (err.code !== 'ECONNRESET') proxyDebug('[ws] upgrade socket error:', err.message)
     })
 
-    if (isLoopbackAddress(socket.remoteAddress) && (req.url === '/ws' || req.url.startsWith('/ws?'))) {
-        if (socket._epWsUpgradeHandled) return
-        socket._epWsUpgradeHandled = true
-        localWSServer.handleUpgrade(req, socket, head, (ws) => {
-            localWSServer.emit('connection', ws, req)
-        })
-        return
+    if (req.url === '/ws' || req.url.startsWith('/ws?')) {
+        const wsAuth = authorizeManagementRequest(socket.remoteAddress, req.headers, remoteAccess)
+        if (wsAuth.allowed) {
+            if (socket._epWsUpgradeHandled) return
+            socket._epWsUpgradeHandled = true
+            localWSServer.handleUpgrade(req, socket, head, (ws) => {
+                localWSServer.emit('connection', ws, req)
+            })
+            return
+        }
     }
 
     socket.destroy()
