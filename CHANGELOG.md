@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Web UI request/response detail panel:
+  - JSON bodies now show a「源数据 / 格式化」tab switch (pretty-printed via the existing syntax highlighter); non-JSON bodies render as before.
+  - Request/Response headers and bodies each get a copy button (uses the existing clipboard util with toast feedback).
+
 ## [0.4.4] - 2026-08-08
 
 ### Changed

@@ -12,10 +12,10 @@ import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Loader2, Wand2, RotateCw, Activity, XCircle, ArrowRight, ArrowDown, Clock, CornerDownRight, Flag, Route, ShieldCheck, ChevronDown, ChevronRight, Monitor, Server } from 'lucide-react'
 import { diffLines } from 'diff'
-import { highlightCode } from '@/lib/syntax-highlight'
 import { ApplicationIcon } from '@/components/application-icon'
 import type { RecordDetail, ProxyRecord, InspectionStage } from '@/types'
 import { BodyDiffView } from './body-diff-view'
+import { CopyableJsonBody, CopyableHeaders } from './body-view'
 
 interface DetailPanelProps {
   open?: boolean
@@ -35,41 +35,6 @@ function getStatusColor(code: number) {
   if (code >= 400 && code < 500) return 'bg-amber-100 text-amber-800'
   if (code >= 500) return 'bg-red-100 text-red-800'
   return ''
-}
-
-function HeadersView({ headers }: { headers: Record<string, string> }) {
-  const entries = Object.entries(headers || {})
-  if (entries.length === 0) {
-    return <p className="text-sm text-muted-foreground py-2">无头部信息</p>
-  }
-  return (
-    <div className="font-mono text-xs space-y-0.5">
-      {entries.map(([key, value]) => (
-        <div key={key} className="flex gap-2 py-0.5 hover:bg-muted/50 px-1 rounded">
-          <span className="text-purple-600 shrink-0 font-semibold">{key}:</span>
-          <span className="text-foreground/80 break-all">{value}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function BodyView({ body }: { body: string }) {
-  // 使用轻量级语法高亮（类似 Chrome DevTools）
-  const highlightedBody = useMemo(() => {
-    if (!body) return null
-    return highlightCode(body)
-  }, [body])
-
-  if (!body) {
-    return <p className="text-sm text-muted-foreground py-2">无内容</p>
-  }
-
-  return (
-    <div className="font-mono text-xs bg-muted/30 rounded p-2">
-      <pre className="whitespace-pre-wrap break-all">{highlightedBody}</pre>
-    </div>
-  )
 }
 
 function getStatusBadgeVariant(status: InspectionStage['status']) {
@@ -811,12 +776,12 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
                 <div className="space-y-3 pt-3">
                   <div>
                     <h4 className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">Request Headers</h4>
-                    <HeadersView headers={detail.requestHeaders} />
+                    <CopyableHeaders headers={detail.requestHeaders} />
                   </div>
                   <Separator />
                   <div>
                     <h4 className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">Request Body</h4>
-                    <BodyView body={detail.requestBody} />
+                    <CopyableJsonBody body={detail.requestBody} />
                   </div>
                 </div>
               </ScrollArea>
@@ -826,12 +791,12 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
                 <div className="space-y-3 pt-3">
                   <div>
                     <h4 className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">Response Headers</h4>
-                    <HeadersView headers={detail.responseHeaders} />
+                    <CopyableHeaders headers={detail.responseHeaders} />
                   </div>
                   <Separator />
                   <div>
                     <h4 className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">Response Body</h4>
-                    <BodyView body={detail.responseBody} />
+                    <CopyableJsonBody body={detail.responseBody} />
                   </div>
                 </div>
               </ScrollArea>
