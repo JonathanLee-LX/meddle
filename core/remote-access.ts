@@ -11,7 +11,7 @@ export interface RemoteAccessConfig {
 
 export interface ProxyAccessDecision {
     allowed: boolean;
-    statusCode?: 403 | 407;
+    statusCode?: 401 | 403 | 407;
     message?: string;
 }
 
@@ -148,6 +148,30 @@ export function authorizeProxyClient(
     }
     if (config.token && !hasValidProxyAuthorization(headers['proxy-authorization'], config.token)) {
         return { allowed: false, statusCode: 407, message: 'Proxy authentication required' }
+    }
+    return { allowed: true }
+}
+
+/**
+ * Authorize a request to the management interface (Web UI / REST API / WebSocket).
+ * Loopback is always allowed; remote clients require remote mode, a private
+ * network address, and (when a token is configured) a valid `Authorization`
+ * header (Bearer or Basic with username `meddle`).
+ */
+export function authorizeManagementRequest(
+    remoteAddress: string | undefined | null,
+    headers: Record<string, string | string[] | undefined>,
+    config: RemoteAccessConfig,
+): ProxyAccessDecision {
+    if (isLoopbackAddress(remoteAddress)) return { allowed: true }
+    if (!config.enabled) {
+        return { allowed: false, statusCode: 403, message: 'Remote management is disabled' }
+    }
+    if (!isPrivateNetworkAddress(remoteAddress)) {
+        return { allowed: false, statusCode: 403, message: 'Only private network clients are allowed' }
+    }
+    if (config.token && !hasValidProxyAuthorization(headers['authorization'], config.token)) {
+        return { allowed: false, statusCode: 401, message: 'Management authentication required' }
     }
     return { allowed: true }
 }

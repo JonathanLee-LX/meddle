@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Remote access to the management interface (Web UI / REST API / WebSocket):
+  - With `--remote` / `MEDDLE_REMOTE=1`, LAN clients can now load the Web dashboard, call REST APIs, and receive live log pushes over WebSocket (previously loopback-only).
+  - Optional auth: when `--remote-token` / `MEDDLE_REMOTE_TOKEN` is set, remote HTTP/WS requests must carry `Authorization: Bearer <token>` or Basic (`meddle:<token>`); loopback is always allowed and the default is no auth.
+- MCP HTTP transport: `MEDDLE_MCP_HTTP=1` starts the MCP server over Streamable HTTP (`MEDDLE_MCP_PORT`, default 9010; `MEDDLE_BIND_HOST` for remote binding; `MEDDLE_MCP_TOKEN` for bearer auth). Stdio transport remains the default.
+
 ## [0.4.5-beta.1] - 2026-08-10
 
 ### Changed

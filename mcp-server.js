@@ -5,8 +5,10 @@
  */
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js')
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js')
+const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js')
 // MCP SDK zod-compat 仅支持 zod/v3 或 zod/v4-mini 的内部结构，使用默认 zod 会报 _zod undefined
 const z = require('zod/v3')
+const crypto = require('crypto')
 const path = require('path')
 const fs = require('fs')
 const { spawn } = require('child_process')
@@ -790,6 +792,59 @@ mcpServer.registerTool('route_preview', {
 })
 
 async function main() {
+    // HTTP 传输模式: MEDDLE_MCP_HTTP=1（可选 MEDDLE_BIND_HOST / MEDDLE_MCP_TOKEN）
+    if (process.env.MEDDLE_MCP_HTTP === '1' || process.env.MEDDLE_MCP_HTTP === 'true') {
+        const express = require('express')
+        const { createMcpExpressApp } = require('@modelcontextprotocol/sdk/server/express.js')
+        const host = process.env.MEDDLE_BIND_HOST || '127.0.0.1'
+        const port = parseInt(process.env.MEDDLE_MCP_PORT || '9010', 10)
+        const token = (process.env.MEDDLE_MCP_TOKEN || '').trim() || null
+
+        let transport = null
+
+        function authOk(req) {
+            if (!token) return true
+            const header = req.headers['authorization'] || req.headers['x-mcp-token'] || ''
+            if (Array.isArray(header)) return false
+            if (header.startsWith('Bearer ')) {
+                const candidate = header.slice(7)
+                return candidate.length === token.length && crypto.timingSafeEqual(
+                    Buffer.from(candidate), Buffer.from(token),
+                )
+            }
+            return header === token
+        }
+
+        const app = createMcpExpressApp({ host })
+        // 鉴权中间件：配置了 token 时校验所有 MCP 请求
+        app.use((req, res, next) => {
+            if (!authOk(req)) {
+                res.status(401).json({ error: 'authentication required' })
+                return
+            }
+            next()
+        })
+        // 单一 transport 处理所有请求；SDK 的 connect 会接管 onmessage/onclose
+        transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: undefined,
+            enableJsonResponse: true,
+            enableSseResponse: true,
+        })
+        await mcpServer.connect(transport)
+        app.all('/', (req, res) => {
+            transport.handleRequest(req, res, req.body)
+        })
+
+        const server = app.listen(port, host, () => {
+            console.log(`MCP HTTP server listening on http://${host}:${port}${token ? ' (token auth)' : ''}`)
+        })
+        server.on('error', (err) => {
+            console.error('MCP HTTP server error:', err.message)
+            process.exit(1)
+        })
+        return
+    }
+
     const transport = new StdioServerTransport()
     await mcpServer.connect(transport)
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
     authorizeProxyClient,
+    authorizeManagementRequest,
     buildRemoteAccessConfig,
     buildRemoteSetupHtml,
     createRemoteAccessInfo,
@@ -127,5 +128,51 @@ describe('remote access helpers', () => {
         expect(html).toContain('/_meddle/ca.crt')
         expect(html).toContain('meddle')
         expect(html).not.toContain('/api/')
+    })
+})
+
+describe('management interface authorization (Web UI / API / WS)', () => {
+    const remoteConfig = {
+        enabled: true,
+        bindHost: '0.0.0.0',
+        interceptHttps: true,
+        token: null,
+    }
+
+    it('allows loopback without any token', () => {
+        const config = { ...remoteConfig, token: 'secret' }
+        expect(authorizeManagementRequest('127.0.0.1', {}, config).allowed).toBe(true)
+        expect(authorizeManagementRequest('::ffff:127.0.0.1', {}, config).allowed).toBe(true)
+    })
+
+    it('blocks remote management when remote mode is disabled', () => {
+        const config = { ...remoteConfig, enabled: false }
+        expect(authorizeManagementRequest('192.168.1.20', {}, config))
+            .toMatchObject({ allowed: false, statusCode: 403 })
+    })
+
+    it('allows private-network management without a token when remote is on', () => {
+        expect(authorizeManagementRequest('192.168.1.20', {}, remoteConfig).allowed).toBe(true)
+    })
+
+    it('requires a token for remote management when one is configured', () => {
+        const config = { ...remoteConfig, token: 'secret' }
+        expect(authorizeManagementRequest('192.168.1.20', {}, config))
+            .toMatchObject({ allowed: false, statusCode: 401 })
+        expect(authorizeManagementRequest('192.168.1.20', { authorization: 'Bearer secret' }, config).allowed).toBe(true)
+        expect(authorizeManagementRequest('192.168.1.20', { authorization: 'Bearer wrong' }, config))
+            .toMatchObject({ allowed: false, statusCode: 401 })
+    })
+
+    it('accepts Basic credentials with username meddle for management', () => {
+        const config = { ...remoteConfig, token: 'secret' }
+        const basic = `Basic ${Buffer.from('meddle:secret').toString('base64')}`
+        expect(authorizeManagementRequest('192.168.1.20', { authorization: basic }, config).allowed).toBe(true)
+    })
+
+    it('blocks public-internet management clients', () => {
+        const config = { ...remoteConfig, token: null }
+        expect(authorizeManagementRequest('8.8.8.8', {}, config))
+            .toMatchObject({ allowed: false, statusCode: 403 })
     })
 })
