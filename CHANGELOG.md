@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Binary smoke test now polls for the proxy port instead of a fixed 3s sleep — slow CI runners no longer fail with ECONNREFUSED on the dashboard check.
+
 ## [0.4.5-beta.2] - 2026-08-10
 
 ### Added

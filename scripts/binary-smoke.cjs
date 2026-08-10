@@ -3,6 +3,7 @@
 
 const { execSync, spawn } = require('child_process')
 const http = require('http')
+const net = require('net')
 const path = require('path')
 
 const bin = path.resolve(process.argv[2] || 'dist-bin/meddle-linux-x64')
@@ -49,6 +50,35 @@ function fetchViaProxy(proxyPort, targetUrl) {
     })
 }
 
+/** Poll until the proxy port accepts connections (bounded), or the child exits. */
+function waitForPort(port, child, output) {
+    return new Promise((resolve) => {
+        const deadline = Date.now() + 15000
+        const poll = () => {
+            if (child.exitCode !== null) {
+                resolve(false)
+                return
+            }
+            if (Date.now() > deadline) {
+                resolve(false)
+                return
+            }
+            const socket = net.connect(port, '127.0.0.1')
+            const done = (ok) => {
+                socket.destroy()
+                if (ok) {
+                    resolve(true)
+                    return
+                }
+                setTimeout(poll, 100)
+            }
+            socket.once('connect', () => done(true))
+            socket.once('error', () => done(false))
+        }
+        poll()
+    })
+}
+
 async function main() {
     console.log(`Smoke test: ${bin}\n`)
 
@@ -83,11 +113,12 @@ async function main() {
     child.stdout.on('data', (d) => (serverOutput += d))
     child.stderr.on('data', (d) => (serverOutput += d))
 
-    await new Promise((r) => setTimeout(r, 3000))
+    // 等待代理端口就绪（而非固定 sleep）：冷启动在慢 CI runner 上可能超过 3s。
+    const ready = await waitForPort(port, child, serverOutput)
 
     try {
         assert('proxy server starts', () => {
-            if (child.exitCode !== null) throw new Error(`exited with ${child.exitCode}: ${serverOutput}`)
+            if (!ready) throw new Error(`port ${port} not listening: ${serverOutput}`)
         })
 
         const dashRes = await fetch(`http://127.0.0.1:${port}/__meddle__/`)

@@ -5,7 +5,6 @@
  */
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js')
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js')
-const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js')
 // MCP SDK zod-compat 仅支持 zod/v3 或 zod/v4-mini 的内部结构，使用默认 zod 会报 _zod undefined
 const z = require('zod/v3')
 const crypto = require('crypto')
@@ -794,6 +793,9 @@ mcpServer.registerTool('route_preview', {
 async function main() {
     // HTTP 传输模式: MEDDLE_MCP_HTTP=1（可选 MEDDLE_BIND_HOST / MEDDLE_MCP_TOKEN）
     if (process.env.MEDDLE_MCP_HTTP === '1' || process.env.MEDDLE_MCP_HTTP === 'true') {
+        // 延迟加载：仅 HTTP 模式才引入 SDK 的 streamableHttp（及其 hono/express 依赖链），
+        // 避免 stdio 模式 / 代理二进制加载不必要的模块拖慢冷启动。
+        const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js')
         const express = require('express')
         const { createMcpExpressApp } = require('@modelcontextprotocol/sdk/server/express.js')
         const host = process.env.MEDDLE_BIND_HOST || '127.0.0.1'
