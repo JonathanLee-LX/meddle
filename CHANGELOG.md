@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Web UI copy buttons now show a green check + 「已复制」feedback for 2s after a successful copy, so the action is visibly confirmed.
+
 ### Fixed
 
 - Binary smoke test now polls for the proxy port instead of a fixed 3s sleep — slow CI runners no longer fail with ECONNREFUSED on the dashboard check.

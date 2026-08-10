@@ -1,22 +1,38 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Copy } from 'lucide-react'
+import { Copy, Check } from 'lucide-react'
 import { highlightCode, detectLanguage } from '@/lib/syntax-highlight'
 import { copyText } from '@/utils/clipboard'
 import { formatHeadersText } from '@/utils/headers'
 
+const COPIED_FEEDBACK_MS = 2000
+
 function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  async function handleCopy() {
+    try {
+      await copyText(text)
+      setCopied(true)
+      if (resetTimer.current) clearTimeout(resetTimer.current)
+      resetTimer.current = setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS)
+    } catch {
+      // copyText shows its own failure toast; keep button state unchanged
+    }
+  }
+
   return (
     <Button
       variant="ghost"
       size="sm"
       className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
-      aria-label={`复制${label}`}
-      onClick={() => void copyText(text)}
+      aria-label={copied ? `复制${label}成功` : `复制${label}`}
+      onClick={() => void handleCopy()}
     >
-      <Copy className="h-3 w-3 mr-0.5" />
-      复制
+      {copied ? <Check className="h-3 w-3 mr-0.5 text-green-600" /> : <Copy className="h-3 w-3 mr-0.5" />}
+      {copied ? '已复制' : '复制'}
     </Button>
   )
 }

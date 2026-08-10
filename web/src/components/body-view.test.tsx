@@ -63,6 +63,15 @@ describe('CopyableJsonBody', () => {
     await user.click(copyBtn!)
     await vi.waitFor(() => expect(copyText).toHaveBeenCalledWith('{"a":1}'))
   })
+
+  it('shows a copied confirmation after a successful copy', async () => {
+    const user = userEvent.setup()
+    render(<CopyableJsonBody body={'{"a":1}'} />)
+    const copyBtn = screen.getByRole('button', { name: /复制Body/ })
+    await user.click(copyBtn)
+    await screen.findByRole('button', { name: /复制Body成功/ })
+    expect(screen.getByText('已复制')).toBeTruthy()
+  })
 })
 
 describe('CopyableHeaders', () => {
