@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Inspect tab (plugin stage diffs): the expanded header diff now shows 变更前/变更后 with copy buttons, and each body diff has 「复制变更前 Body / 复制变更后 Body」— copy support is now consistent across request/response and Inspect tabs.
 
+## [0.4.5] - 2026-08-11
+
+### Fixed
+
+- Proxy no longer crashes with `uncaughtException: read ECONNRESET` when a client resets its TLS connection to a MITM server (e.g. closing a tab / switching networks mid-request): every `secureConnection` TLS socket now gets a persistent `'error'` listener (via the new `wireMitmClientSocket`), so a socket error can no longer escape to `uncaughtException` and kill the whole proxy process. Routine resets (ECONNRESET/EPIPE) are swallowed; unexpected errors are logged via `[proxy]` debug.
+
 ## [0.4.5-beta.5] - 2026-08-11
 
 ### Fixed

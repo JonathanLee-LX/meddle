@@ -13,6 +13,7 @@ const {
     establishConnectTunnel,
     isExpectedSocketError,
 } = require('./dist/core/connect-tunnel')
+const { wireMitmClientSocket } = require('./dist/core/mitm-socket')
 const {
     createClientIdentityResolver,
     createMitmClientIdentityRegistry,
@@ -776,13 +777,18 @@ proxyServer.on('connect', async (req, socket, head) => {
                     clientIdentityRegistry.register(remotePort, identity)
                 }
                 server.on('secureConnection', tlsSocket => {
-                    markMitmServerUsed(server)
-                    server._epActiveSockets.add(tlsSocket)
-                    tlsSocket.once('close', () => {
-                        server._epActiveSockets.delete(tlsSocket)
-                        markMitmServerUsed(server)
+                    wireMitmClientSocket(tlsSocket, {
+                        onTrack: () => {
+                            markMitmServerUsed(server)
+                            server._epActiveSockets.add(tlsSocket)
+                        },
+                        onUntrack: () => {
+                            server._epActiveSockets.delete(tlsSocket)
+                            markMitmServerUsed(server)
+                        },
+                        attachIdentity: socket => clientIdentityRegistry.attach(socket),
+                        onUnexpectedError: err => proxyDebug('MITM client socket error', originHost, getErrorMessage(err)),
                     })
-                    clientIdentityRegistry.attach(tlsSocket)
                 })
 
                 // WebSocket 代理（MITM HTTPS 服务器）- 使用 noServer 模式，统一在此处理并强制上游→客户端为文本
