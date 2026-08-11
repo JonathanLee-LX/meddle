@@ -60,7 +60,11 @@ function copyTextWithSelection(text: string) {
 export async function copyText(text: string) {
   let clipboardError: unknown
 
-  if (typeof navigator !== 'undefined' && 'clipboard' in navigator) {
+  // 非安全上下文（http://LAN-IP / 非 localhost）下 navigator.clipboard 即使存在也受限：
+  // await writeText 会丢失用户手势，导致 execCommand 降级失败。直接同步降级（保持在点击手势内）。
+  const secureContext = typeof window !== 'undefined' && window.isSecureContext !== false
+
+  if (secureContext && typeof navigator !== 'undefined' && 'clipboard' in navigator) {
     try {
       await writeClipboardText(text)
       return
