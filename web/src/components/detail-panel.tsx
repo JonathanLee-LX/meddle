@@ -15,7 +15,7 @@ import { diffLines } from 'diff'
 import { ApplicationIcon } from '@/components/application-icon'
 import type { RecordDetail, ProxyRecord, InspectionStage } from '@/types'
 import { BodyDiffView } from './body-diff-view'
-import { CopyableJsonBody, CopyableHeaders } from './body-view'
+import { CopyableJsonBody, CopyableHeaders, CopyButton } from './body-view'
 
 interface DetailPanelProps {
   open?: boolean
@@ -101,22 +101,6 @@ function getChangedHeaderEntries(before: Record<string, string>, after: Record<s
       after: after[key] ?? '',
     }))
     .filter((entry) => entry.before !== entry.after)
-}
-
-function HeaderSnapshotView({ headers }: { headers: Record<string, string> }) {
-  const entries = Object.entries(headers)
-  if (entries.length === 0) {
-    return <span className="text-muted-foreground italic">(无)</span>
-  }
-  return (
-    <div className="space-y-1">
-      {entries.map(([key, value]) => (
-        <div key={key} className="break-all">
-          <span className="text-muted-foreground">{key}:</span> {value}
-        </div>
-      ))}
-    </div>
-  )
 }
 
 function DiffLinePreview({
@@ -235,11 +219,11 @@ function HeaderDiffPreview({
         <div className="grid gap-2 md:grid-cols-2">
           <div className="rounded-lg bg-muted/50 p-2 text-xs font-mono">
             <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">变更前</div>
-            <HeaderSnapshotView headers={before} />
+            <CopyableHeaders headers={before} />
           </div>
           <div className="rounded-lg bg-muted/50 p-2 text-xs font-mono">
             <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">变更后</div>
-            <HeaderSnapshotView headers={after} />
+            <CopyableHeaders headers={after} />
           </div>
         </div>
       )}
@@ -285,6 +269,10 @@ function CompactBodyDiff({
 
   return (
     <div className="space-y-2">
+      <div className="flex items-center gap-1.5">
+        <CopyButton text={before} label="变更前 Body" />
+        <CopyButton text={after} label="变更后 Body" />
+      </div>
       <DiffLinePreview lines={previewLines} className="max-h-40 overflow-auto" />
       {!hasBinaryBody && (
         <>

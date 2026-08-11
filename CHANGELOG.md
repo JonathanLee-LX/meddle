@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Inspect tab (plugin stage diffs): the expanded header diff now shows 变更前/变更后 with copy buttons, and each body diff has 「复制变更前 Body / 复制变更后 Body」— copy support is now consistent across request/response and Inspect tabs.
+
 ## [0.4.5-beta.5] - 2026-08-11
 
 ### Fixed
