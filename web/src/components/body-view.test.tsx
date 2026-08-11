@@ -4,9 +4,18 @@ import userEvent from '@testing-library/user-event'
 import { CopyableJsonBody, CopyableHeaders } from './body-view'
 import { formatHeadersText } from '@/utils/headers'
 import { copyText } from '@/utils/clipboard'
+import { toast } from '@/components/ui/toast'
 
 vi.mock('@/utils/clipboard', () => ({
   copyText: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('@/components/ui/toast', () => ({
+  toast: {
+    success: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+  },
 }))
 
 afterEach(() => {
@@ -71,6 +80,17 @@ describe('CopyableJsonBody', () => {
     await user.click(copyBtn)
     await screen.findByRole('button', { name: /复制Body成功/ })
     expect(screen.getByText('已复制')).toBeTruthy()
+    expect(toast.success).toHaveBeenCalledWith('已复制Body')
+  })
+
+  it('shows an error toast when copy fails', async () => {
+    const user = userEvent.setup()
+    vi.mocked(copyText).mockRejectedValueOnce(new Error('clipboard denied'))
+    render(<CopyableJsonBody body={'{"a":1}'} />)
+    const copyBtn = screen.getByRole('button', { name: /复制Body/ })
+    await user.click(copyBtn)
+    await vi.waitFor(() => expect(toast.error).toHaveBeenCalledWith('复制Body失败，请手动选择复制'))
+    expect(screen.getByRole('button', { name: /复制Body/ })).toBeTruthy() // state unchanged
   })
 })
 

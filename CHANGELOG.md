@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Web UI copy buttons: failed copies now show an error toast instead of failing silently; successful copies toast 「已复制」 alongside the check feedback. Body JSON view uses `whitespace-pre` + horizontal scroll so pretty-printed indentation and syntax colors render correctly. Copy button and 源数据/格式化 tabs share a consistent height (`h-6`) and padding.
+
 ## [0.4.5-beta.3] - 2026-08-10
 
 ### Changed

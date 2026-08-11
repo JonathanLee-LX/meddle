@@ -4,6 +4,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Copy, Check } from 'lucide-react'
 import { highlightCode, detectLanguage } from '@/lib/syntax-highlight'
 import { copyText } from '@/utils/clipboard'
+import { toast } from '@/components/ui/toast'
 import { formatHeadersText } from '@/utils/headers'
 
 const COPIED_FEEDBACK_MS = 2000
@@ -18,8 +19,9 @@ function CopyButton({ text, label }: { text: string; label: string }) {
       setCopied(true)
       if (resetTimer.current) clearTimeout(resetTimer.current)
       resetTimer.current = setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS)
+      toast.success(`已复制${label}`)
     } catch {
-      // copyText shows its own failure toast; keep button state unchanged
+      toast.error(`复制${label}失败，请手动选择复制`)
     }
   }
 
@@ -27,11 +29,11 @@ function CopyButton({ text, label }: { text: string; label: string }) {
     <Button
       variant="ghost"
       size="sm"
-      className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+      className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
       aria-label={copied ? `复制${label}成功` : `复制${label}`}
       onClick={() => void handleCopy()}
     >
-      {copied ? <Check className="h-3 w-3 mr-0.5 text-green-600" /> : <Copy className="h-3 w-3 mr-0.5" />}
+      {copied ? <Check className="h-3 w-3 mr-1 text-green-600" /> : <Copy className="h-3 w-3 mr-1" />}
       {copied ? '已复制' : '复制'}
     </Button>
   )
@@ -72,9 +74,9 @@ export function CopyableJsonBody({ body }: CopyableJsonBodyProps) {
       <div className="flex items-center justify-between">
         {isJson ? (
           <Tabs value={mode} onValueChange={(v) => setMode(v as 'source' | 'formatted')} className="w-fit">
-            <TabsList className="h-6">
-              <TabsTrigger value="source" className="h-5 px-2 text-[10px]">源数据</TabsTrigger>
-              <TabsTrigger value="formatted" className="h-5 px-2 text-[10px]">格式化</TabsTrigger>
+            <TabsList className="h-6 px-1">
+              <TabsTrigger value="source" className="h-6 px-2 text-[11px]">源数据</TabsTrigger>
+              <TabsTrigger value="formatted" className="h-6 px-2 text-[11px]">格式化</TabsTrigger>
             </TabsList>
           </Tabs>
         ) : (
@@ -82,8 +84,8 @@ export function CopyableJsonBody({ body }: CopyableJsonBodyProps) {
         )}
         <CopyButton text={body} label="Body" />
       </div>
-      <div className="font-mono text-xs bg-muted/30 rounded p-2">
-        <pre className="whitespace-pre-wrap break-all">{highlighted}</pre>
+      <div className="font-mono text-xs bg-muted/30 rounded p-2 overflow-x-auto">
+        <pre className="whitespace-pre">{highlighted}</pre>
       </div>
     </div>
   )
