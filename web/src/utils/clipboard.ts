@@ -42,7 +42,12 @@ function copyTextWithSelection(text: string) {
   textarea.style.opacity = '0'
   textarea.style.pointerEvents = 'none'
 
-  document.body.appendChild(textarea)
+  // 挂到最近的 dialog 容器（radix Sheet/Dialog 的 FocusScope 会强制焦点留在 dialog 内，
+  // body 上的 textarea 无法聚焦，导致 execCommand 复制空内容）。
+  const activeHost =
+    activeElement?.closest('[role="dialog"], [role="alertdialog"], [data-radix-dialog-content]') || null
+  const dialogHost = activeHost || document.querySelector('[role="dialog"], [role="alertdialog"], [data-radix-dialog-content]') || document.body
+  dialogHost.appendChild(textarea)
   textarea.focus()
   textarea.select()
   textarea.setSelectionRange(0, text.length)

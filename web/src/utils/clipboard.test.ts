@@ -44,6 +44,36 @@ describe('copyText fallback', () => {
     expect(select).toHaveBeenCalled()
   })
 
+  it('appends the fallback textarea inside an open dialog (radix FocusScope keeps focus in-dialog)', async () => {
+    // Sheet/Dialog 场景: body 上的 textarea 会被 FocusScope 拉回焦点,
+    // execCommand 复制空内容。textarea 必须挂到 dialog 容器内。
+    Object.defineProperty(window, 'isSecureContext', { value: false, configurable: true })
+    const exec = vi.fn().mockReturnValue(true)
+    Object.defineProperty(document, 'execCommand', { value: exec, configurable: true })
+    vi.spyOn(HTMLTextAreaElement.prototype, 'select').mockImplementation(function (this: HTMLTextAreaElement) {
+      this.setSelectionRange(0, this.value.length)
+    })
+
+    // 模拟 radix dialog 结构: activeElement 在 [role=dialog] 内
+    const dialog = document.createElement('div')
+    dialog.setAttribute('role', 'dialog')
+    document.body.appendChild(dialog)
+    const btn = document.createElement('button')
+    dialog.appendChild(btn)
+    btn.focus()
+
+    const appendChild = vi.spyOn(dialog, 'appendChild')
+
+    await copyText('dialog-content')
+
+    // textarea 应被 append 到 dialog 容器内（appendChild 被调用）
+    expect(appendChild).toHaveBeenCalled()
+    const appended = appendChild.mock.calls[0][0] as HTMLTextAreaElement
+    expect(appended.tagName).toBe('TEXTAREA')
+    expect(appended.value).toBe('dialog-content')
+    dialog.remove()
+  })
+
   it('throws a clear error when both clipboard and execCommand fail', async () => {
     // clipboard 不存在，execCommand 返回 false
     Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true })

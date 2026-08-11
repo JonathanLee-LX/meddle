@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Copy buttons inside dialogs (e.g. the request detail Sheet) now actually copy: the fallback textarea is appended to the open dialog container so radix FocusScope no longer steals focus mid-copy (previously `execCommand('copy')` returned true while copying nothing).
+
 ## [0.4.5-beta.4] - 2026-08-11
 
 ### Changed
