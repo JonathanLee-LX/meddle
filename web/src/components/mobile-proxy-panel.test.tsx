@@ -139,6 +139,38 @@ describe('MobileProxyPanel', () => {
     expect(screen.getByText('meddle --remote')).toBeInTheDocument()
   })
 
+  it('renders the public entry target without LAN labels', async () => {
+    const response = {
+      enabled: true,
+      interceptHttps: true,
+      authenticationRequired: false,
+      proxyPort: 8284,
+      localSetupPath: '/_meddle/setup',
+      targets: [{
+        address: 'meddle.livs.top',
+        proxyUrl: 'https://meddle.livs.top',
+        setupUrl: 'https://meddle.livs.top/',
+        certificateUrl: 'https://meddle.livs.top/_meddle/ca.crt',
+      }],
+    }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(response), {
+      headers: { 'Content-Type': 'application/json' },
+    })))
+
+    render(<MobileProxyPanel />)
+
+    expect(await screen.findByRole('img', {
+      name: '打开 https://meddle.livs.top/ 的二维码',
+    })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '下载根证书' }))
+      .toHaveAttribute('href', 'https://meddle.livs.top/_meddle/ca.crt')
+    expect(screen.getByRole('link', { name: '浏览器打开' }))
+      .toHaveAttribute('href', 'https://meddle.livs.top/')
+    expect(screen.getByText('公网入口')).toBeInTheDocument()
+    expect(screen.queryByText('局域网')).not.toBeInTheDocument()
+    expect(screen.queryByText('meddle.livs.top:8284')).not.toBeInTheDocument()
+  })
+
   it('shows a recoverable error when the server does not expose remote access info', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('<!DOCTYPE html>Not Found', {
       headers: { 'Content-Type': 'text/html' },

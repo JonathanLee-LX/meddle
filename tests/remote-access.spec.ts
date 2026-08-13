@@ -20,7 +20,18 @@ describe('remote access config', () => {
             bindHost: '127.0.0.1',
             interceptHttps: false,
             token: null,
+            publicUrl: null,
         })
+    })
+
+    it('reads MEDDLE_PUBLIC_URL as the public entry point', () => {
+        expect(buildRemoteAccessConfig({ MEDDLE_PUBLIC_URL: 'https://meddle.livs.top' }, []))
+            .toMatchObject({ publicUrl: 'https://meddle.livs.top' })
+    })
+
+    it('ignores an invalid MEDDLE_PUBLIC_URL value', () => {
+        expect(buildRemoteAccessConfig({ MEDDLE_PUBLIC_URL: 'not a url' }, []))
+            .toMatchObject({ publicUrl: null })
     })
 
     it('enables LAN binding and HTTPS interception in remote mode', () => {
@@ -99,6 +110,45 @@ describe('remote access helpers', () => {
                 setupUrl: 'http://192.168.1.10:8989/',
                 certificateUrl: 'http://192.168.1.10:8989/_meddle/ca.crt',
             }],
+        })
+    })
+
+    it('builds management UI setup targets with a public entry and LAN addresses', () => {
+        expect(createRemoteAccessInfo({
+            enabled: true,
+            bindHost: '0.0.0.0',
+            interceptHttps: true,
+            token: null,
+            publicUrl: 'https://meddle.livs.top',
+        }, ['192.168.1.10'], 8284)).toEqual({
+            enabled: true,
+            interceptHttps: true,
+            authenticationRequired: false,
+            proxyPort: 8284,
+            localSetupPath: '/_meddle/setup',
+            targets: [{
+                address: 'meddle.livs.top',
+                proxyUrl: 'https://meddle.livs.top',
+                setupUrl: 'https://meddle.livs.top/',
+                certificateUrl: 'https://meddle.livs.top/_meddle/ca.crt',
+            }, {
+                address: '192.168.1.10',
+                proxyUrl: 'http://192.168.1.10:8284',
+                setupUrl: 'http://192.168.1.10:8284/',
+                certificateUrl: 'http://192.168.1.10:8284/_meddle/ca.crt',
+            }],
+        })
+    })
+
+    it('builds management UI setup targets with only the public entry when port is null', () => {
+        expect(createRemoteAccessInfo({
+            enabled: true,
+            bindHost: '0.0.0.0',
+            interceptHttps: true,
+            token: null,
+            publicUrl: 'https://meddle.livs.top/',
+        }, ['192.168.1.10'], null)).toMatchObject({
+            targets: [{ address: 'meddle.livs.top', setupUrl: 'https://meddle.livs.top/' }],
         })
     })
 

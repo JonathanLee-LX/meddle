@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- New `MEDDLE_PUBLIC_URL` env var for reverse-proxy / tunnel deployments: when set (e.g. `MEDDLE_PUBLIC_URL=https://meddle.example.com`), the mobile proxy panel lists the public entry first, so the QR code, setup page and CA-certificate download link point at the public domain instead of an unreachable LAN IP.
+
+### Changed
+
+- Mobile proxy panel distinguishes public vs LAN targets: public domains show a 公网入口 badge and no longer have a port appended (previously rendered as `example.com:8284`).
+
 ## [0.4.5-beta.6] - 2026-08-11
 
 ### Changed

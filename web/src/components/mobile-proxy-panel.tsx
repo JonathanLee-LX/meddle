@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
-import { Check, Copy, Download, ExternalLink, Loader2, QrCode, RefreshCw, ShieldCheck, ShieldOff, Smartphone, Wifi } from 'lucide-react'
+import { Check, Copy, Download, ExternalLink, Globe, Loader2, QrCode, RefreshCw, ShieldCheck, ShieldOff, Smartphone, Wifi } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,6 +26,10 @@ interface RemoteAccessInfo {
   proxyPort: number | null
   localSetupPath: string
   targets: RemoteAccessTarget[]
+}
+
+function isLanAddress(address: string): boolean {
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(address)
 }
 
 function isRemoteAccessInfo(value: unknown): value is RemoteAccessInfo {
@@ -75,6 +79,7 @@ export function MobileProxyPanel() {
   }, [manualCopyUrl])
 
   const selectedTarget = useMemo(() => info?.targets.find((target) => target.address === selectedAddress) || info?.targets[0] || null, [info, selectedAddress])
+  const isPublicTarget = selectedTarget ? !isLanAddress(selectedTarget.address) : false
 
   useEffect(() => {
     let cancelled = false
@@ -187,7 +192,7 @@ export function MobileProxyPanel() {
             </CardTitle>
             <CardDescription>使用手机相机或 Safari 扫描。</CardDescription>
             <CardAction>
-              <Badge variant="secondary">局域网</Badge>
+              {isPublicTarget ? <Badge variant="secondary">公网入口</Badge> : <Badge variant="secondary">局域网</Badge>}
             </CardAction>
           </CardHeader>
           <CardContent className="flex min-h-[340px] items-center justify-center bg-background p-4">
@@ -211,8 +216,8 @@ export function MobileProxyPanel() {
             <div className="flex flex-wrap gap-2">
               <div className="inline-flex items-center gap-1">
                 <Badge variant="outline" className="gap-1.5">
-                  <Wifi />
-                  {selectedTarget.address}:{info.proxyPort}
+                  {isPublicTarget ? <Globe /> : <Wifi />}
+                  {isPublicTarget ? selectedTarget.address : `${selectedTarget.address}:${info.proxyPort}`}
                 </Badge>
                 <Button
                   variant="ghost"
