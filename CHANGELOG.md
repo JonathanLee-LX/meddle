@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - New `MEDDLE_PUBLIC_URL` env var for reverse-proxy / tunnel deployments: when set (e.g. `MEDDLE_PUBLIC_URL=https://meddle.example.com`), the mobile proxy panel lists the public entry first, so the QR code, setup page and CA-certificate download link point at the public domain instead of an unreachable LAN IP.
+- The mobile proxy panel also **infers the public entry automatically** from `window.location` when the dashboard itself is served on a public domain (no env config needed): the QR code, setup page and CA-certificate download link then point at the domain the user is actually browsing.
 
 ### Changed
 

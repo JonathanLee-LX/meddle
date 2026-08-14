@@ -17,6 +17,7 @@ interface RemoteAccessTarget {
   proxyUrl: string
   setupUrl: string
   certificateUrl: string
+  proxyPort?: number
 }
 
 interface RemoteAccessInfo {
@@ -30,6 +31,33 @@ interface RemoteAccessInfo {
 
 function isLanAddress(address: string): boolean {
   return /^\d{1,3}(\.\d{1,3}){3}$/.test(address)
+}
+
+function isLocalHostname(hostname: string): boolean {
+  return hostname === 'localhost'
+    || hostname === '127.0.0.1'
+    || hostname === '::1'
+    || isLanAddress(hostname)
+}
+
+/**
+ * When the dashboard itself is served on a public domain (reverse proxy /
+ * tunnel in front of meddle), infer the public entry from the browser's
+ * location so certificate download and setup links work without env config.
+ * The proxy address is the origin host; the proxy port is the default port
+ * of the current protocol (443 for https).
+ */
+function inferPublicTarget(): RemoteAccessTarget | null {
+  const { hostname, origin, protocol, port } = window.location
+  if (isLocalHostname(hostname)) return null
+  const proxyPort = port ? Number(port) : (protocol === 'https:' ? 443 : 80)
+  return {
+    address: hostname,
+    proxyUrl: origin,
+    setupUrl: `${origin}/`,
+    certificateUrl: `${origin}/_meddle/ca.crt`,
+    proxyPort,
+  }
 }
 
 function isRemoteAccessInfo(value: unknown): value is RemoteAccessInfo {
@@ -59,8 +87,14 @@ export function MobileProxyPanel() {
       if (!isRemoteAccessInfo(result)) {
         throw new Error('手机代理接口不可用，请重启 Meddle 服务后重试')
       }
-      setInfo(result)
-      setSelectedAddress((current) => (result.targets.some((target) => target.address === current) ? current : result.targets[0]?.address || ''))
+      const publicTarget = inferPublicTarget()
+      const inferred = publicTarget
+        && !result.targets.some((target) => target.address === publicTarget.address)
+        ? [publicTarget, ...result.targets]
+        : result.targets
+      const enriched = { ...result, targets: inferred }
+      setInfo(enriched)
+      setSelectedAddress((current) => (inferred.some((target) => target.address === current) ? current : inferred[0]?.address || ''))
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : '无法读取远程代理状态')
     } finally {
