@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
-import { Check, Copy, Download, ExternalLink, Loader2, QrCode, RefreshCw, ShieldCheck, ShieldOff, Smartphone, Wifi } from 'lucide-react'
+import { Check, Copy, Download, ExternalLink, Globe, Loader2, QrCode, RefreshCw, ShieldCheck, ShieldOff, Smartphone, Wifi } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,7 @@ interface RemoteAccessTarget {
   proxyUrl: string
   setupUrl: string
   certificateUrl: string
+  proxyPort?: number
 }
 
 interface RemoteAccessInfo {
@@ -26,6 +27,37 @@ interface RemoteAccessInfo {
   proxyPort: number | null
   localSetupPath: string
   targets: RemoteAccessTarget[]
+}
+
+function isLanAddress(address: string): boolean {
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(address)
+}
+
+function isLocalHostname(hostname: string): boolean {
+  return hostname === 'localhost'
+    || hostname === '127.0.0.1'
+    || hostname === '::1'
+    || isLanAddress(hostname)
+}
+
+/**
+ * When the dashboard itself is served on a public domain (reverse proxy /
+ * tunnel in front of meddle), infer the public entry from the browser's
+ * location so certificate download and setup links work without env config.
+ * The proxy address is the origin host; the proxy port is the default port
+ * of the current protocol (443 for https).
+ */
+function inferPublicTarget(): RemoteAccessTarget | null {
+  const { hostname, origin, protocol, port } = window.location
+  if (isLocalHostname(hostname)) return null
+  const proxyPort = port ? Number(port) : (protocol === 'https:' ? 443 : 80)
+  return {
+    address: hostname,
+    proxyUrl: origin,
+    setupUrl: `${origin}/`,
+    certificateUrl: `${origin}/_meddle/ca.crt`,
+    proxyPort,
+  }
 }
 
 function isRemoteAccessInfo(value: unknown): value is RemoteAccessInfo {
@@ -55,8 +87,14 @@ export function MobileProxyPanel() {
       if (!isRemoteAccessInfo(result)) {
         throw new Error('手机代理接口不可用，请重启 Meddle 服务后重试')
       }
-      setInfo(result)
-      setSelectedAddress((current) => (result.targets.some((target) => target.address === current) ? current : result.targets[0]?.address || ''))
+      const publicTarget = inferPublicTarget()
+      const inferred = publicTarget
+        && !result.targets.some((target) => target.address === publicTarget.address)
+        ? [publicTarget, ...result.targets]
+        : result.targets
+      const enriched = { ...result, targets: inferred }
+      setInfo(enriched)
+      setSelectedAddress((current) => (inferred.some((target) => target.address === current) ? current : inferred[0]?.address || ''))
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : '无法读取远程代理状态')
     } finally {
@@ -75,6 +113,7 @@ export function MobileProxyPanel() {
   }, [manualCopyUrl])
 
   const selectedTarget = useMemo(() => info?.targets.find((target) => target.address === selectedAddress) || info?.targets[0] || null, [info, selectedAddress])
+  const isPublicTarget = selectedTarget ? !isLanAddress(selectedTarget.address) : false
 
   useEffect(() => {
     let cancelled = false
@@ -187,7 +226,7 @@ export function MobileProxyPanel() {
             </CardTitle>
             <CardDescription>使用手机相机或 Safari 扫描。</CardDescription>
             <CardAction>
-              <Badge variant="secondary">局域网</Badge>
+              {isPublicTarget ? <Badge variant="secondary">公网入口</Badge> : <Badge variant="secondary">局域网</Badge>}
             </CardAction>
           </CardHeader>
           <CardContent className="flex min-h-[340px] items-center justify-center bg-background p-4">
@@ -211,8 +250,8 @@ export function MobileProxyPanel() {
             <div className="flex flex-wrap gap-2">
               <div className="inline-flex items-center gap-1">
                 <Badge variant="outline" className="gap-1.5">
-                  <Wifi />
-                  {selectedTarget.address}:{info.proxyPort}
+                  {isPublicTarget ? <Globe /> : <Wifi />}
+                  {isPublicTarget ? selectedTarget.address : `${selectedTarget.address}:${info.proxyPort}`}
                 </Badge>
                 <Button
                   variant="ghost"

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Public entry point for the management interface: when the dashboard is served behind a public domain / reverse proxy / tunnel, set `MEDDLE_PUBLIC_URL` (e.g. `https://meddle.example.com`) and the remote-access setup shows this URL as a first-class 「公网入口」 target (certificate download and setup links point at the public origin). The Web UI also auto-infers the public entry from `window.location` when the dashboard itself is open from a public (non-local) host, so no env config is needed in the common reverse-proxy setup.
+
 ## [0.4.5-beta.6] - 2026-08-11
 
 ### Changed
