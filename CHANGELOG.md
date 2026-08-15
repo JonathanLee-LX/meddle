@@ -5,16 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.5.0-beta.1] - 2026-08-15
 
 ### Added
 
-- New `MEDDLE_PUBLIC_URL` env var for reverse-proxy / tunnel deployments: when set (e.g. `MEDDLE_PUBLIC_URL=https://meddle.example.com`), the mobile proxy panel lists the public entry first, so the QR code, setup page and CA-certificate download link point at the public domain instead of an unreachable LAN IP.
-- The mobile proxy panel also **infers the public entry automatically** from `window.location` when the dashboard itself is served on a public domain (no env config needed): the QR code, setup page and CA-certificate download link then point at the domain the user is actually browsing.
-
-### Changed
-
-- Mobile proxy panel distinguishes public vs LAN targets: public domains show a 公网入口 badge and no longer have a port appended (previously rendered as `example.com:8284`).
+- Public entry point for the management interface: when the dashboard is served behind a public domain / reverse proxy / tunnel, set `MEDDLE_PUBLIC_URL` (e.g. `https://meddle.example.com`) and the remote-access setup shows this URL as a first-class 「公网入口」 target (certificate download and setup links point at the public origin). The Web UI also auto-infers the public entry from `window.location` when the dashboard itself is open from a public (non-local) host, so no env config is needed in the common reverse-proxy setup.
+- 规则配置页新增「查看所有规则」弹窗：一键列出全部规则文件下所有启用的路由规则，按规则文件分组展示（规则、目标、启用状态），便于总览和排查。
 
 ## [0.4.5-beta.6] - 2026-08-11
 
