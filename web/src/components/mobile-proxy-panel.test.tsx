@@ -151,6 +151,7 @@ describe('MobileProxyPanel', () => {
         proxyUrl: 'https://meddle.livs.top',
         setupUrl: 'https://meddle.livs.top/',
         certificateUrl: 'https://meddle.livs.top/_meddle/ca.crt',
+        proxyPort: 443,
       }],
     }
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(response), {
@@ -169,6 +170,30 @@ describe('MobileProxyPanel', () => {
     expect(screen.getByText('公网入口')).toBeInTheDocument()
     expect(screen.queryByText('局域网')).not.toBeInTheDocument()
     expect(screen.queryByText('meddle.livs.top:8284')).not.toBeInTheDocument()
+  })
+
+  it('shows the public proxy address with a TCP-tunneled port', async () => {
+    const response = {
+      enabled: true,
+      interceptHttps: true,
+      authenticationRequired: false,
+      proxyPort: 8284,
+      localSetupPath: '/_meddle/setup',
+      targets: [{
+        address: 'meddle.livs.top',
+        proxyUrl: 'http://meddle.livs.top:2083',
+        setupUrl: 'http://meddle.livs.top:2083/',
+        certificateUrl: 'http://meddle.livs.top:2083/_meddle/ca.crt',
+        proxyPort: 2083,
+      }],
+    }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(response), {
+      headers: { 'Content-Type': 'application/json' },
+    })))
+
+    render(<MobileProxyPanel />)
+
+    expect(await screen.findByText('meddle.livs.top:2083')).toBeInTheDocument()
   })
 
   it('infers the public entry from window.location when the UI is served on a public domain', async () => {

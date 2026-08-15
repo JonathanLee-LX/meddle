@@ -35,6 +35,7 @@ const {
     isLoopbackAddress,
     isProxyHost,
     parseConnectAuthority,
+    resolveSetupAddress,
     stripProxyHeaders,
 } = require('./dist/core/remote-access')
 const chalk = require('chalk')
@@ -295,13 +296,10 @@ const proxyServer = http.createServer(async (req, res) => {
         }
 
         if (remoteAccess.enabled && requestUrl.pathname === '/_meddle/setup') {
-            const requestedHost = requestUrl.hostname.replace(/^\[|\]$/g, '')
-            const setupHost = requestedHost === 'localhost' || isLoopbackAddress(requestedHost)
-                ? (lanAddresses[0] || requestedHost)
-                : requestedHost
+            const setup = resolveSetupAddress(remoteAccess, requestUrl.hostname, serverPort, lanAddresses)
             const html = buildRemoteSetupHtml(
-                setupHost,
-                serverPort,
+                setup.host,
+                setup.port,
                 remoteAccess.interceptHttps,
                 !!remoteAccess.token,
             )
@@ -326,9 +324,10 @@ const proxyServer = http.createServer(async (req, res) => {
         }
 
         if (remoteAccess.enabled && requestUrl.pathname === '/') {
+            const setup = resolveSetupAddress(remoteAccess, requestUrl.hostname, serverPort, lanAddresses)
             const html = buildRemoteSetupHtml(
-                requestUrl.hostname,
-                serverPort,
+                setup.host,
+                setup.port,
                 remoteAccess.interceptHttps,
                 !!remoteAccess.token,
             )

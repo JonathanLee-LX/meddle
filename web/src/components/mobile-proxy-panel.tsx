@@ -40,6 +40,23 @@ function isLocalHostname(hostname: string): boolean {
     || isLanAddress(hostname)
 }
 
+function defaultProxyPort(proxyUrl: string): number {
+  try {
+    return new URL(proxyUrl).protocol === 'https:' ? 443 : 80
+  } catch {
+    return 0
+  }
+}
+
+function formatProxyAddress(target: RemoteAccessTarget, fallbackPort: number | null): string {
+  if (!target.address) return ''
+  if (isLanAddress(target.address)) return `${target.address}:${fallbackPort ?? ''}`
+  const port = target.proxyPort ?? defaultProxyPort(target.proxyUrl)
+  if (!port) return target.address
+  if (port === defaultProxyPort(target.proxyUrl)) return target.address
+  return `${target.address}:${port}`
+}
+
 /**
  * When the dashboard itself is served on a public domain (reverse proxy /
  * tunnel in front of meddle), infer the public entry from the browser's
@@ -251,7 +268,7 @@ export function MobileProxyPanel() {
               <div className="inline-flex items-center gap-1">
                 <Badge variant="outline" className="gap-1.5">
                   {isPublicTarget ? <Globe /> : <Wifi />}
-                  {isPublicTarget ? selectedTarget.address : `${selectedTarget.address}:${info.proxyPort}`}
+                  {formatProxyAddress(selectedTarget, info.proxyPort)}
                 </Badge>
                 <Button
                   variant="ghost"
