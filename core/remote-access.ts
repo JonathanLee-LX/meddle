@@ -7,6 +7,7 @@ export interface RemoteAccessConfig {
     bindHost: string;
     interceptHttps: boolean;
     token: string | null;
+    publicUrl?: string | null;
 }
 
 export interface ProxyAccessDecision {
@@ -29,6 +30,17 @@ export interface RemoteAccessInfo {
     proxyPort: number | null;
     localSetupPath: string;
     targets: RemoteAccessSetupTarget[];
+}
+
+function parsePublicUrl(raw: string | undefined): string | null {
+    if (!raw?.trim()) return null
+    try {
+        const url = new URL(raw.trim())
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+        return url.origin
+    } catch (_) {
+        return null
+    }
 }
 
 function parseBoolean(value: string | undefined): boolean | undefined {
@@ -66,6 +78,7 @@ export function buildRemoteAccessConfig(
         bindHost: env.MEDDLE_BIND_HOST || (enabled ? '0.0.0.0' : '127.0.0.1'),
         interceptHttps: interceptArg ?? interceptEnv ?? enabled,
         token: token?.trim() || null,
+        publicUrl: parsePublicUrl(env.MEDDLE_PUBLIC_URL),
     }
 }
 
@@ -205,7 +218,18 @@ export function createRemoteAccessInfo(
     addresses: string[],
     port: number | null,
 ): RemoteAccessInfo {
-    const targets = port === null
+    const publicTarget: RemoteAccessSetupTarget[] = (() => {
+        if (!config.publicUrl) return []
+        const publicOrigin = config.publicUrl.replace(/\/+$/, '')
+        return [{
+            address: new URL(publicOrigin).hostname,
+            proxyUrl: publicOrigin,
+            setupUrl: `${publicOrigin}/`,
+            certificateUrl: `${publicOrigin}/_meddle/ca.crt`,
+        }]
+    })()
+
+    const lanTargets: RemoteAccessSetupTarget[] = port === null
         ? []
         : addresses.map(address => ({
             address,
@@ -220,7 +244,7 @@ export function createRemoteAccessInfo(
         authenticationRequired: !!config.token,
         proxyPort: port,
         localSetupPath: '/_meddle/setup',
-        targets,
+        targets: [...publicTarget, ...lanTargets],
     }
 }
 
