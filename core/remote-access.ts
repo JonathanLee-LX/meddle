@@ -213,6 +213,43 @@ export function getLanIPv4Addresses(): string[] {
     return Array.from(addresses)
 }
 
+function resolvePublicProxyPort(publicUrl: string): number {
+    const url = new URL(publicUrl.replace(/\/+$/, ''))
+    if (url.port) return Number(url.port)
+    return url.protocol === 'https:' ? 443 : 80
+}
+
+/**
+ * Resolve the host:port pair a phone should be told to use for the proxy.
+ * When the management UI is reached through the public domain (reverse
+ * proxy / tunnel), the phone must dial the publicly reachable port derived
+ * from `MEDDLE_PUBLIC_URL` instead of the internal proxy port. Loopback and
+ * LAN hosts keep the internal proxy port.
+ */
+export function resolveSetupAddress(
+    config: RemoteAccessConfig,
+    requestedHost: string,
+    serverPort: number,
+    lanAddresses: string[],
+): { host: string; port: number } {
+    const hostname = requestedHost.replace(/^\[|\]$/g, '')
+    const isLocalHost = isLocalHostname(hostname)
+        || isLoopbackAddress(hostname)
+        || isPrivateNetworkAddress(hostname)
+    if (config.publicUrl && !isLocalHost) {
+        return { host: hostname, port: resolvePublicProxyPort(config.publicUrl) }
+    }
+    return { host: lanAddresses[0] || hostname, port: serverPort }
+}
+
+function isLocalHostname(hostname: string): boolean {
+    const lower = hostname.toLowerCase()
+    return lower === 'localhost'
+        || lower === '127.0.0.1'
+        || lower === '::1'
+        || isLoopbackAddress(lower)
+}
+
 export function createRemoteAccessInfo(
     config: RemoteAccessConfig,
     addresses: string[],
@@ -226,6 +263,7 @@ export function createRemoteAccessInfo(
             proxyUrl: publicOrigin,
             setupUrl: `${publicOrigin}/`,
             certificateUrl: `${publicOrigin}/_meddle/ca.crt`,
+            proxyPort: resolvePublicProxyPort(publicOrigin),
         }]
     })()
 

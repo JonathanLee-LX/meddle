@@ -9,6 +9,7 @@ import {
     isPrivateNetworkAddress,
     isProxyHost,
     parseConnectAuthority,
+    resolveSetupAddress,
     stripProxyHeaders,
     getLanIPv4Addresses,
 } from '../core/remote-access'
@@ -131,6 +132,35 @@ describe('remote access helpers', () => {
                 proxyUrl: 'https://meddle.livs.top',
                 setupUrl: 'https://meddle.livs.top/',
                 certificateUrl: 'https://meddle.livs.top/_meddle/ca.crt',
+                proxyPort: 443,
+            }, {
+                address: '192.168.1.10',
+                proxyUrl: 'http://192.168.1.10:8284',
+                setupUrl: 'http://192.168.1.10:8284/',
+                certificateUrl: 'http://192.168.1.10:8284/_meddle/ca.crt',
+            }],
+        })
+    })
+
+    it('preserves an explicit public proxy port from MEDDLE_PUBLIC_URL', () => {
+        expect(createRemoteAccessInfo({
+            enabled: true,
+            bindHost: '0.0.0.0',
+            interceptHttps: true,
+            token: null,
+            publicUrl: 'http://meddle.livs.top:2083',
+        }, ['192.168.1.10'], 8284)).toEqual({
+            enabled: true,
+            interceptHttps: true,
+            authenticationRequired: false,
+            proxyPort: 8284,
+            localSetupPath: '/_meddle/setup',
+            targets: [{
+                address: 'meddle.livs.top',
+                proxyUrl: 'http://meddle.livs.top:2083',
+                setupUrl: 'http://meddle.livs.top:2083/',
+                certificateUrl: 'http://meddle.livs.top:2083/_meddle/ca.crt',
+                proxyPort: 2083,
             }, {
                 address: '192.168.1.10',
                 proxyUrl: 'http://192.168.1.10:8284',
@@ -148,7 +178,7 @@ describe('remote access helpers', () => {
             token: null,
             publicUrl: 'https://meddle.livs.top/',
         }, ['192.168.1.10'], null)).toMatchObject({
-            targets: [{ address: 'meddle.livs.top', setupUrl: 'https://meddle.livs.top/' }],
+            targets: [{ address: 'meddle.livs.top', setupUrl: 'https://meddle.livs.top/', proxyPort: 443 }],
         })
     })
 
@@ -178,6 +208,42 @@ describe('remote access helpers', () => {
         expect(html).toContain('/_meddle/ca.crt')
         expect(html).toContain('meddle')
         expect(html).not.toContain('/api/')
+    })
+
+    it('resolves the setup address with the public proxy port for a public host', () => {
+        const config = {
+            enabled: true,
+            bindHost: '0.0.0.0',
+            interceptHttps: true,
+            token: null,
+            publicUrl: 'http://meddle.livs.top:2083',
+        }
+        expect(resolveSetupAddress(config, 'meddle.livs.top', 8284, ['192.168.1.10']))
+            .toEqual({ host: 'meddle.livs.top', port: 2083 })
+    })
+
+    it('resolves the setup address with the default https port for a public host', () => {
+        const config = {
+            enabled: true,
+            bindHost: '0.0.0.0',
+            interceptHttps: true,
+            token: null,
+            publicUrl: 'https://meddle.livs.top',
+        }
+        expect(resolveSetupAddress(config, 'meddle.livs.top', 8284, ['192.168.1.10']))
+            .toEqual({ host: 'meddle.livs.top', port: 443 })
+    })
+
+    it('falls back to a LAN address and the proxy port for loopback hosts', () => {
+        const config = {
+            enabled: true,
+            bindHost: '0.0.0.0',
+            interceptHttps: true,
+            token: null,
+            publicUrl: 'https://meddle.livs.top',
+        }
+        expect(resolveSetupAddress(config, 'localhost', 8284, ['192.168.1.10']))
+            .toEqual({ host: '192.168.1.10', port: 8284 })
     })
 })
 
