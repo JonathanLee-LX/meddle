@@ -5,16 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0-beta.2] - 2026-08-16
+
+### Fixed
+
+- Public proxy entry is actually usable behind a reverse proxy / tunnel: `MEDDLE_PUBLIC_URL` now carries the publicly reachable proxy port (e.g. `https://meddle.example.com:2083` for a raw TCP tunnel) through to the mobile panel and setup page, so the phone dials the public endpoint instead of the unreachable internal proxy port or the Cloudflare/nginx HTTPS origin that rejects CONNECT tunnels (`ERR_TUNNEL_CONNECTION_FAILED`).
+
 ## [0.5.0-beta.1] - 2026-08-15
 
 ### Added
 
 - Public entry point for the management interface: when the dashboard is served behind a public domain / reverse proxy / tunnel, set `MEDDLE_PUBLIC_URL` (e.g. `https://meddle.example.com`) and the remote-access setup shows this URL as a first-class 「公网入口」 target (certificate download and setup links point at the public origin). The Web UI also auto-infers the public entry from `window.location` when the dashboard itself is open from a public (non-local) host, so no env config is needed in the common reverse-proxy setup.
 - 规则配置页新增「查看所有规则」弹窗：一键列出全部规则文件下所有启用的路由规则，按规则文件分组展示（规则、目标、启用状态），便于总览和排查。
-
-### Fixed
-
-- Public proxy entry is actually usable behind a reverse proxy / tunnel: `MEDDLE_PUBLIC_URL` now carries the publicly reachable proxy port (e.g. `https://meddle.example.com:2083` for a raw TCP tunnel) through to the mobile panel and setup page, so the phone dials the public endpoint instead of the unreachable internal proxy port or the Cloudflare/nginx HTTPS origin that rejects CONNECT tunnels (`ERR_TUNNEL_CONNECTION_FAILED`).
 
 ## [0.4.5-beta.6] - 2026-08-11
 
