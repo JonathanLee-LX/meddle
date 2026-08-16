@@ -32,9 +32,6 @@ importers:
       portfinder:
         specifier: ^1.0.38
         version: 1.0.38
-      puppeteer-core:
-        specifier: ^24.43.1
-        version: 24.43.1
       ws:
         specifier: ^8.21.0
         version: 8.21.0
@@ -60,6 +57,9 @@ importers:
       nodemon:
         specifier: ^2.0.22
         version: 2.0.22
+      puppeteer-core:
+        specifier: ^24.43.1
+        version: 24.43.1
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
