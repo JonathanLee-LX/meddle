@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0-beta.3] - 2026-08-17
+
+### Changed
+
+- `puppeteer-core` moved from `dependencies` to `devDependencies` (#64): the `deno compile` binary no longer embeds puppeteer-core + `@puppeteer/browsers`. Its only runtime consumer (browser-control MCP tools, `mcp-browser.js`) was removed earlier and it is now only referenced by e2e tests (`tests/e2e/*.e2e.cjs`), so the `--prod` dependency prune in the binary build no longer carries it into the artifact.
+
 ## [0.5.0-beta.2] - 2026-08-16
 
 ### Fixed
