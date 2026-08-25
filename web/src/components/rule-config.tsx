@@ -19,7 +19,6 @@ import {
   FolderOpen,
   GitBranch,
   GripVertical,
-  List,
   Plus,
   Save,
   Table2,
@@ -355,33 +354,6 @@ export function RuleConfig(props: RuleConfigProps) {
   const [textImportDraft, setTextImportDraft] = useState('')
   const [textImportError, setTextImportError] = useState<string | null>(null)
   const [textImportCreating, setTextImportCreating] = useState(false)
-
-  // 查看所有规则弹窗
-  const [viewAllOpen, setViewAllOpen] = useState(false)
-  const [viewAllLoading, setViewAllLoading] = useState(false)
-  const [viewAllRules, setViewAllRules] = useState<Array<{ name: string; enabled: boolean; rules: RuleItem[] }>>([])
-
-  const openViewAllRules = useCallback(async () => {
-    setViewAllOpen(true)
-    setViewAllLoading(true)
-    try {
-      const results = await Promise.all(
-        ruleFiles.map(async (file) => {
-          let rules: RuleItem[] = []
-          try {
-            const content = await fetchRuleFileRawContent(file.name)
-            rules = parseEprcRules(content)
-          } catch {
-            rules = []
-          }
-          return { name: file.name, enabled: file.enabled, rules }
-        }),
-      )
-      setViewAllRules(results)
-    } finally {
-      setViewAllLoading(false)
-    }
-  }, [fetchRuleFileRawContent, ruleFiles])
 
   // 筛选
   const [showFilters, setShowFilters] = useState(false)
@@ -980,14 +952,9 @@ export function RuleConfig(props: RuleConfigProps) {
                     </Button>
                   </div>
                 ) : (
-                  <>
-                    <Button type="button" variant="ghost" size="icon-sm" onClick={() => void openViewAllRules()} aria-label="查看所有规则" title="查看所有规则">
-                      <List />
-                    </Button>
-                    <Button type="button" variant="ghost" size="icon-sm" onClick={beginCreateRuleFile} aria-label="创建规则文件" title="创建规则文件">
-                      <Plus />
-                    </Button>
-                  </>
+                  <Button type="button" variant="ghost" size="icon-sm" onClick={beginCreateRuleFile} aria-label="创建规则文件" title="创建规则文件">
+                    <Plus />
+                  </Button>
                 )}
               </div>
             </div>
@@ -1379,64 +1346,6 @@ export function RuleConfig(props: RuleConfigProps) {
               确认创建
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 查看所有规则弹窗 */}
-      <Dialog open={viewAllOpen} onOpenChange={setViewAllOpen}>
-        <DialogContent className="flex max-h-[90vh] flex-col gap-4 sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>查看所有规则</DialogTitle>
-            <DialogDescription>展示全部规则文件下的所有路由规则</DialogDescription>
-          </DialogHeader>
-          {viewAllLoading ? (
-            <div className="flex min-h-[200px] items-center justify-center">
-              <Spinner />
-            </div>
-          ) : viewAllRules.length === 0 || viewAllRules.every((file) => file.rules.length === 0) ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">暂无路由规则</p>
-          ) : (
-            <ScrollArea className="max-h-[60vh]">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-40">规则文件</TableHead>
-                    <TableHead className="w-12">启用</TableHead>
-                    <TableHead>规则</TableHead>
-                    <TableHead>目标</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {viewAllRules.flatMap((file) =>
-                    file.rules.length === 0
-                      ? []
-                      : [
-                          <TableRow key={`${file.name}-header`}>
-                            <TableCell colSpan={4} className="bg-muted/30 font-medium">
-                              <span className="inline-flex items-center gap-2">
-                                {file.name}
-                                <Badge variant={file.enabled ? 'default' : 'secondary'} className="text-[10px] px-1 py-0">
-                                  {file.enabled ? '启用' : '禁用'}
-                                </Badge>
-                              </span>
-                            </TableCell>
-                          </TableRow>,
-                          ...file.rules.map((item, index) => (
-                            <TableRow key={`${file.name}-${index}`}>
-                              <TableCell />
-                              <TableCell>
-                                <Checkbox checked={item.enabled} disabled aria-label={`${item.rule} 启用状态`} />
-                              </TableCell>
-                              <TableCell className="font-mono">{item.rule}</TableCell>
-                              <TableCell className="font-mono">{item.target}</TableCell>
-                            </TableRow>
-                          )),
-                        ],
-                  )}
-                </TableBody>
-              </Table>
-            </ScrollArea>
-          )}
         </DialogContent>
       </Dialog>
     </div>
