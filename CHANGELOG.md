@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0-beta.4] - 2026-08-25
+
+### Reverted
+
+- 回滚 PR #62「查看所有规则」弹窗（#65）：该实现存在内容溢出无法滚动、disabled Checkbox 不可交互、表格未遵循系统 table-fixed/colgroup 风格、当前文件未保存修改不展示等问题。相关需求见 #60，暂时不实现。
+
 ## [0.5.0-beta.3] - 2026-08-17
 
 ### Changed
