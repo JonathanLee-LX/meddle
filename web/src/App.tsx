@@ -11,6 +11,7 @@ import {
   Filter,
   Globe,
   ListFilter,
+  ListChecks,
   Pause,
   Pencil,
   Play,
@@ -95,6 +96,11 @@ const MockEditorPanel = lazy(() =>
 const RoutePreview = lazy(() =>
   import('@/components/route-preview').then((module) => ({
     default: module.RoutePreview,
+  })),
+)
+const RuleOverviewPanel = lazy(() =>
+  import('@/components/rule-overview-panel').then((module) => ({
+    default: module.RuleOverviewPanel,
   })),
 )
 const MobileProxyPanel = lazy(() =>
@@ -390,6 +396,23 @@ function App() {
               title: 'URL 预览',
               description: '使用当前编辑中的规则计算真实转发地址',
               size: 'md',
+            })
+          },
+        },
+        {
+          id: 'rules.overview',
+          title: '查看所有规则',
+          description: '总览全部规则文件与代理实际生效的路由规则',
+          section: '路由规则',
+          icon: ListChecks,
+          keywords: ['全部', '总览', 'overview', 'rules', '生效', '冲突', '覆盖'],
+          closeOnRun: false,
+          run: () => {
+            panel.openPanel({
+              id: 'rules.overview',
+              title: '全局规则总览',
+              description: '总览全部规则文件与代理实际生效的路由规则',
+              size: 'lg',
             })
           },
         },
@@ -819,6 +842,34 @@ function App() {
                     }),
                   )
                 }, 120)
+              }}
+            />
+          )
+        case 'rules.overview':
+          return (
+            <RuleOverviewPanel
+              rules={store.rules}
+              activeFileName={store.activeFileName}
+              onLocateRule={(file, rule, target) => {
+                panel.close()
+                navigate('/config')
+                void store.fetchFileContent(file).then(() => {
+                  window.setTimeout(() => {
+                    window.dispatchEvent(
+                      new CustomEvent('route-rule:highlight', {
+                        detail: {
+                          pattern: rule,
+                          target,
+                        },
+                      }),
+                    )
+                  }, 120)
+                })
+              }}
+              onSelectFile={(file) => {
+                panel.close()
+                navigate('/config')
+                void store.fetchFileContent(file)
               }}
             />
           )
