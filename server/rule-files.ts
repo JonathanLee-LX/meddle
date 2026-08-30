@@ -197,6 +197,8 @@ export function mergeActiveRules(ctx: ServerContext): MergedRules {
 export interface RuleOverviewEntry {
     pattern: string
     target: string
+    rawRule: string
+    rawTarget: string
     exclusions: string[]
     enabled: boolean
 }
@@ -211,14 +213,23 @@ export interface RuleOverviewFile {
 export interface RuleOverviewMergedRule {
     pattern: string
     target: string
+    rawRule: string
+    rawTarget: string
     exclusions: string[]
     file: string
 }
 
+export interface RuleOverviewConflictRecord {
+    file: string
+    target: string
+    rawRule: string
+    rawTarget: string
+}
+
 export interface RuleOverviewConflict {
     pattern: string
-    winner: { file: string; target: string }
-    shadowed: Array<{ file: string; target: string }>
+    winner: RuleOverviewConflictRecord
+    shadowed: RuleOverviewConflictRecord[]
 }
 
 export interface RuleOverview {
@@ -246,6 +257,8 @@ export function buildRuleOverview(ctx: ServerContext): RuleOverview {
                 rules: rules.map((entry) => ({
                     pattern: entry.pattern,
                     target: entry.target,
+                    rawRule: entry.rawRule ?? entry.pattern,
+                    rawTarget: entry.rawTarget ?? entry.target,
                     exclusions: entry.exclusions.slice(),
                     enabled: entry.enabled !== false,
                 })),
@@ -256,14 +269,20 @@ export function buildRuleOverview(ctx: ServerContext): RuleOverview {
     })
 
     // 仅启用文件的启用规则参与合并，顺序 = activeRuleFiles 顺序 + 文件内行序
-    const definitions = new Map<string, Array<{ file: string; target: string; exclusions: string[] }>>()
+    const definitions = new Map<string, Array<{ file: string; target: string; rawRule: string; rawTarget: string; exclusions: string[] }>>()
     const firstSeenOrder: string[] = []
     for (const name of activeNames) {
         const overview = perFileRules.find((file) => file.name === name)
         if (!overview || overview.error) continue
         for (const entry of overview.rules) {
             if (!entry.enabled) continue
-            const record = { file: name, target: entry.target, exclusions: entry.exclusions.slice() }
+            const record = {
+                file: name,
+                target: entry.target,
+                rawRule: entry.rawRule,
+                rawTarget: entry.rawTarget,
+                exclusions: entry.exclusions.slice(),
+            }
             if (!definitions.has(entry.pattern)) {
                 definitions.set(entry.pattern, [record])
                 firstSeenOrder.push(entry.pattern)
@@ -276,18 +295,31 @@ export function buildRuleOverview(ctx: ServerContext): RuleOverview {
     const mergedRules: RuleOverviewMergedRule[] = firstSeenOrder.map((pattern) => {
         const records = definitions.get(pattern)!
         const winner = records[records.length - 1]
-        return { pattern, target: winner.target, exclusions: winner.exclusions, file: winner.file }
+        return {
+            pattern,
+            target: winner.target,
+            rawRule: winner.rawRule,
+            rawTarget: winner.rawTarget,
+            exclusions: winner.exclusions,
+            file: winner.file,
+        }
     })
 
     const conflicts: RuleOverviewConflict[] = []
     for (const pattern of firstSeenOrder) {
         const records = definitions.get(pattern)!
         if (records.length > 1) {
+            const toRecord = (record: { file: string; target: string; rawRule: string; rawTarget: string }): RuleOverviewConflictRecord => ({
+                file: record.file,
+                target: record.target,
+                rawRule: record.rawRule,
+                rawTarget: record.rawTarget,
+            })
             const winner = records[records.length - 1]
             conflicts.push({
                 pattern,
-                winner: { file: winner.file, target: winner.target },
-                shadowed: records.slice(0, -1).map((record) => ({ file: record.file, target: record.target })),
+                winner: toRecord(winner),
+                shadowed: records.slice(0, -1).map(toRecord),
             })
         }
     }

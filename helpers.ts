@@ -14,6 +14,9 @@ export interface RouteRuleEntry {
     exclusions: string[];
     /** 仅在 includeDisabled 解析时存在；缺省视为启用 */
     enabled?: boolean;
+    /** 文件中的原始规则 token（未经 patternKey/file:// 归一化，用于展示与前端定位） */
+    rawRule?: string;
+    rawTarget?: string;
 }
 
 function looksLikeWildcardPattern(pattern: string): boolean {
@@ -275,7 +278,8 @@ export function parseEprcWithExclusions(
 
         if (regularParts.length < 2) return; // Need at least one rule and one target
 
-        let target = regularParts[regularParts.length - 1];
+        const rawTarget = regularParts[regularParts.length - 1];
+        let target = rawTarget;
         const patterns = regularParts.slice(0, -1);
         if (LOCAL_FILE_PATTERN.test(target) && !FILE_PATTERN.test(target)) {
             target = 'file://' + (target.replace(/\\/g, '/'));
@@ -299,6 +303,8 @@ export function parseEprcWithExclusions(
                 target: storedTarget,
                 exclusions: lineExclusions,
                 enabled,
+                rawRule: rule,
+                rawTarget,
             });
         });
     });

@@ -310,11 +310,29 @@ describe('rule-files', () => {
             const overview = buildRuleOverview(ctx)
 
             const conflict = overview.conflicts.find((c) => c.pattern === 'example.com')
-            expect(conflict?.winner).toEqual({ file: 'override', target: '10.0.0.9:80' })
-            expect(conflict?.shadowed).toEqual([{ file: 'base', target: '127.0.0.1:3000' }])
+            expect(conflict?.winner).toMatchObject({ file: 'override', target: '10.0.0.9:80', rawTarget: '10.0.0.9:80' })
+            expect(conflict?.shadowed).toHaveLength(1)
+            expect(conflict?.shadowed[0]).toMatchObject({ file: 'base', target: '127.0.0.1:3000' })
             const merged = overview.mergedRules.find((r) => r.pattern === 'example.com')
             expect(merged?.target).toBe('10.0.0.9:80')
             expect(merged?.file).toBe('override')
+        })
+
+        it('keeps raw tokens distinct from normalized pattern/target', () => {
+            setupFiles(
+                {
+                    file: 'example.com[www.example.com] /etc/hosts',
+                },
+                ['file'],
+            )
+
+            const overview = buildRuleOverview(ctx)
+
+            const merged = overview.mergedRules[0]
+            expect(merged.pattern).toBe('example.comwww.example.com')
+            expect(merged.target).toBe('file:///etc/hosts[www.example.com]')
+            expect(merged.rawRule).toBe('example.com[www.example.com]')
+            expect(merged.rawTarget).toBe('/etc/hosts')
         })
 
         it('excludes disabled files from merged view but keeps them in per-file view', () => {
