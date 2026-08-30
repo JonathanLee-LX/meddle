@@ -194,6 +194,107 @@ export function mergeActiveRules(ctx: ServerContext): MergedRules {
     return { rules: mergedRules, ruleMap, excludeMap }
 }
 
+export interface RuleOverviewEntry {
+    pattern: string
+    target: string
+    exclusions: string[]
+    enabled: boolean
+}
+
+export interface RuleOverviewFile {
+    name: string
+    enabled: boolean
+    rules: RuleOverviewEntry[]
+    error?: string
+}
+
+export interface RuleOverviewMergedRule {
+    pattern: string
+    target: string
+    exclusions: string[]
+    file: string
+}
+
+export interface RuleOverviewConflict {
+    pattern: string
+    winner: { file: string; target: string }
+    shadowed: Array<{ file: string; target: string }>
+}
+
+export interface RuleOverview {
+    files: RuleFileInfo[]
+    mergedRules: RuleOverviewMergedRule[]
+    conflicts: RuleOverviewConflict[]
+    perFileRules: RuleOverviewFile[]
+}
+
+/**
+ * 全局规则总览数据：合并语义与 mergeActiveRules / routeRulesToLegacyMaps 保持一致——
+ * 同 pattern 后定义覆盖先定义（last-write-wins），匹配位置取首次出现顺序。
+ */
+export function buildRuleOverview(ctx: ServerContext): RuleOverview {
+    const files = listRuleFiles(ctx)
+    const activeNames = getActiveFileNames(ctx)
+
+    const perFileRules: RuleOverviewFile[] = files.map((file) => {
+        try {
+            const content = fs.readFileSync(ruleFilePath(ctx, file.name), 'utf8')
+            const { rules } = parseEprcWithExclusions(content, { includeDisabled: true })
+            return {
+                name: file.name,
+                enabled: file.enabled,
+                rules: rules.map((entry) => ({
+                    pattern: entry.pattern,
+                    target: entry.target,
+                    exclusions: entry.exclusions.slice(),
+                    enabled: entry.enabled !== false,
+                })),
+            }
+        } catch (err) {
+            return { name: file.name, enabled: file.enabled, rules: [], error: (err as Error).message }
+        }
+    })
+
+    // 仅启用文件的启用规则参与合并，顺序 = activeRuleFiles 顺序 + 文件内行序
+    const definitions = new Map<string, Array<{ file: string; target: string; exclusions: string[] }>>()
+    const firstSeenOrder: string[] = []
+    for (const name of activeNames) {
+        const overview = perFileRules.find((file) => file.name === name)
+        if (!overview || overview.error) continue
+        for (const entry of overview.rules) {
+            if (!entry.enabled) continue
+            const record = { file: name, target: entry.target, exclusions: entry.exclusions.slice() }
+            if (!definitions.has(entry.pattern)) {
+                definitions.set(entry.pattern, [record])
+                firstSeenOrder.push(entry.pattern)
+            } else {
+                definitions.get(entry.pattern)!.push(record)
+            }
+        }
+    }
+
+    const mergedRules: RuleOverviewMergedRule[] = firstSeenOrder.map((pattern) => {
+        const records = definitions.get(pattern)!
+        const winner = records[records.length - 1]
+        return { pattern, target: winner.target, exclusions: winner.exclusions, file: winner.file }
+    })
+
+    const conflicts: RuleOverviewConflict[] = []
+    for (const pattern of firstSeenOrder) {
+        const records = definitions.get(pattern)!
+        if (records.length > 1) {
+            const winner = records[records.length - 1]
+            conflicts.push({
+                pattern,
+                winner: { file: winner.file, target: winner.target },
+                shadowed: records.slice(0, -1).map((record) => ({ file: record.file, target: record.target })),
+            })
+        }
+    }
+
+    return { files, mergedRules, conflicts, perFileRules }
+}
+
 /**
  * Ensure the route-rules directory exists and has at least one default file.
  * Returns the list of active file names.
@@ -225,6 +326,13 @@ export function registerRuleFilesRoutes(app: Application, ctx: ServerContext): v
     app.get('/api/rule-files', (_req: Request, res: Response) => {
         res.setHeader('Content-Type', 'application/json')
         res.write(JSON.stringify(listRuleFiles(ctx)))
+        res.end()
+    })
+
+    // GET /api/rule-files/overview - 全局规则总览（合并语义与代理实际路由一致）
+    app.get('/api/rule-files/overview', (_req: Request, res: Response) => {
+        res.setHeader('Content-Type', 'application/json')
+        res.write(JSON.stringify(buildRuleOverview(ctx)))
         res.end()
     })
 

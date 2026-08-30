@@ -6,6 +6,7 @@ import {
     listRuleFiles,
     mergeActiveRules,
     ensureRouteRules,
+    buildRuleOverview,
     registerRuleFilesRoutes,
 } from '../server/rule-files'
 
@@ -270,6 +271,116 @@ describe('rule-files', () => {
         })
     })
 
+    describe('buildRuleOverview', () => {
+        const setupFiles = (files: Record<string, string>, activeRuleFiles: string[]) => {
+            const ruleDir = path.join(tempDir, 'route-rules')
+            fs.mkdirSync(ruleDir, { recursive: true })
+            for (const [name, content] of Object.entries(files)) {
+                fs.writeFileSync(path.join(ruleDir, `${name}.txt`), content)
+            }
+            fs.writeFileSync(ctx.settingsPath, JSON.stringify({ activeRuleFiles }))
+        }
+
+        it('merges enabled rules from enabled files in active order', () => {
+            setupFiles(
+                {
+                    first: 'a.com 1.1.1.1:80\nb.com 2.2.2.2:80',
+                    second: 'c.com 3.3.3.3:80',
+                },
+                ['first', 'second'],
+            )
+
+            const overview = buildRuleOverview(ctx)
+
+            expect(overview.files.map((f) => f.name).sort()).toEqual(['first', 'second'])
+            expect(overview.mergedRules.map((r) => r.pattern)).toEqual(['a.com', 'b.com', 'c.com'])
+            expect(overview.mergedRules.find((r) => r.pattern === 'c.com')?.file).toBe('second')
+            expect(overview.conflicts).toEqual([])
+        })
+
+        it('reports last-write-wins conflicts for duplicate patterns', () => {
+            setupFiles(
+                {
+                    base: 'example.com 127.0.0.1:3000',
+                    override: 'example.com 10.0.0.9:80',
+                },
+                ['base', 'override'],
+            )
+
+            const overview = buildRuleOverview(ctx)
+
+            const conflict = overview.conflicts.find((c) => c.pattern === 'example.com')
+            expect(conflict?.winner).toEqual({ file: 'override', target: '10.0.0.9:80' })
+            expect(conflict?.shadowed).toEqual([{ file: 'base', target: '127.0.0.1:3000' }])
+            const merged = overview.mergedRules.find((r) => r.pattern === 'example.com')
+            expect(merged?.target).toBe('10.0.0.9:80')
+            expect(merged?.file).toBe('override')
+        })
+
+        it('excludes disabled files from merged view but keeps them in per-file view', () => {
+            setupFiles(
+                {
+                    active: 'a.com 1.1.1.1:80',
+                    inactive: 'b.com 2.2.2.2:80',
+                },
+                ['active'],
+            )
+
+            const overview = buildRuleOverview(ctx)
+
+            expect(overview.mergedRules.map((r) => r.pattern)).toEqual(['a.com'])
+            const inactive = overview.perFileRules.find((f) => f.name === 'inactive')
+            expect(inactive?.enabled).toBe(false)
+            expect(inactive?.rules[0]).toMatchObject({ pattern: 'b.com', enabled: true })
+        })
+
+        it('keeps disabled rules only in per-file view with enabled=false', () => {
+            setupFiles(
+                {
+                    file: 'a.com 1.1.1.1:80\n//b.com 2.2.2.2:80\n# comment',
+                },
+                ['file'],
+            )
+
+            const overview = buildRuleOverview(ctx)
+
+            expect(overview.mergedRules.map((r) => r.pattern)).toEqual(['a.com'])
+            const rules = overview.perFileRules.find((f) => f.name === 'file')?.rules
+            expect(rules).toHaveLength(2)
+            expect(rules?.[1]).toMatchObject({ pattern: 'b.com', enabled: false })
+        })
+
+        it('carries exclusions into merged rules', () => {
+            setupFiles(
+                {
+                    file: 'a.com !sub.a.com 1.1.1.1:80',
+                },
+                ['file'],
+            )
+
+            const overview = buildRuleOverview(ctx)
+
+            expect(overview.mergedRules[0].exclusions).toEqual(['sub.a.com'])
+        })
+
+        it('reports per-file read errors without failing the whole overview', () => {
+            const ruleDir = path.join(tempDir, 'route-rules')
+            fs.mkdirSync(ruleDir, { recursive: true })
+            // 用目录伪装规则文件，readFileSync 会抛 EISDIR（对 root 同样生效）
+            fs.mkdirSync(path.join(ruleDir, 'broken.txt'))
+            fs.writeFileSync(path.join(ruleDir, 'ok.txt'), 'a.com 1.1.1.1:80')
+            fs.writeFileSync(ctx.settingsPath, JSON.stringify({ activeRuleFiles: ['ok'] }))
+
+            const overview = buildRuleOverview(ctx)
+
+            const broken = overview.perFileRules.find((f) => f.name === 'broken')
+            expect(broken?.error).toBeTruthy()
+            expect(broken?.rules).toEqual([])
+            // 其它文件不受影响
+            expect(overview.mergedRules.map((r) => r.pattern)).toEqual(['a.com'])
+        })
+    })
+
     describe('registerRuleFilesRoutes', () => {
         it('should register all routes', () => {
             const mockApp = {
@@ -290,6 +401,7 @@ describe('rule-files', () => {
             registerRuleFilesRoutes(mockApp, ctx)
 
             expect(mockApp.get).toHaveBeenCalledWith('/api/rule-files', expect.any(Function))
+            expect(mockApp.get).toHaveBeenCalledWith('/api/rule-files/overview', expect.any(Function))
             expect(mockApp.post).toHaveBeenCalledWith('/api/rule-files', expect.any(Function))
             expect(mockApp.get).toHaveBeenCalledWith('/api/rule-files/:name/content', expect.any(Function))
             expect(mockApp.put).toHaveBeenCalledWith('/api/rule-files/:name/content', expect.any(Function))
