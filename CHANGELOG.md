@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0-beta.5] - 2026-08-31
+
+### Added
+
+- 全局规则总览（#66，#67/#69）：路由规则页新增「查看所有规则」入口，打开总览面板。「生效规则」视图按代理实际生效顺序展示合并后的路由规则（后定义覆盖先定义），同名规则行带「生效/已被覆盖」徽标；「按文件」视图按规则文件分组展示全部规则（含 `//` 禁用行、启用状态与计数）；支持按规则/目标/文件名即时搜索；点击行可定位回规则编辑器并滚动高亮命中行。
+- 后端新增 `GET /api/rule-files/overview`：返回规则文件列表、合并生效规则、同名冲突与逐文件规则明细，合并语义与代理实际路由一致；附 e2e 测试 `test:e2e:rule-overview`。
+
 ## [0.5.0-beta.4] - 2026-08-25
 
 ### Reverted
