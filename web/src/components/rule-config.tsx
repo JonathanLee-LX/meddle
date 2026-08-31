@@ -19,6 +19,7 @@ import {
   FolderOpen,
   GitBranch,
   GripVertical,
+  ListChecks,
   Plus,
   Save,
   Table2,
@@ -322,6 +323,19 @@ export function RuleConfig(props: RuleConfigProps) {
   } = props
 
   const [saving, setSaving] = useState(false)
+
+  const openRuleOverview = useCallback(() => {
+    window.dispatchEvent(
+      new CustomEvent('global-panel:open-panel', {
+        detail: {
+          id: 'rules.overview',
+          title: '全局规则总览',
+          description: '总览全部规则文件与代理实际生效的路由规则',
+          size: 'lg',
+        },
+      }),
+    )
+  }, [])
   const [viewMode, setViewMode] = useState<'table' | 'text' | 'graph'>('table')
   const [textDraft, setTextDraft] = useState('')
   const [loadedTextFileName, setLoadedTextFileName] = useState<string | null>(null)
@@ -952,9 +966,21 @@ export function RuleConfig(props: RuleConfigProps) {
                     </Button>
                   </div>
                 ) : (
-                  <Button type="button" variant="ghost" size="icon-sm" onClick={beginCreateRuleFile} aria-label="创建规则文件" title="创建规则文件">
-                    <Plus />
-                  </Button>
+                  <>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={openRuleOverview}
+                      aria-label="查看所有规则"
+                      title="查看所有规则"
+                    >
+                      <ListChecks />
+                    </Button>
+                    <Button type="button" variant="ghost" size="icon-sm" onClick={beginCreateRuleFile} aria-label="创建规则文件" title="创建规则文件">
+                      <Plus />
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
