@@ -283,6 +283,23 @@ describe('helpers.parseEprcWithExclusions', () => {
     expect(excludeMap['a.com']).toEqual(['/api'])
     expect(excludeMap['b.com']).toEqual(['/api'])
   })
+
+  it('skips disabled rules by default', () => {
+    const content = 'a.com 1.1.1.1\n//b.com 2.2.2.2'
+    const { rules, ruleMap } = parseEprcWithExclusions(content)
+    expect(rules).toHaveLength(1)
+    expect(ruleMap['b.com']).toBeUndefined()
+  })
+
+  it('keeps disabled rules with enabled=false when includeDisabled is set', () => {
+    const content = 'a.com 1.1.1.1\n//b.com 2.2.2.2\n//\n//   '
+    const { rules, ruleMap } = parseEprcWithExclusions(content, { includeDisabled: true })
+    expect(rules).toHaveLength(2)
+    expect(rules[0]).toMatchObject({ pattern: 'a.com', enabled: true })
+    expect(rules[1]).toMatchObject({ pattern: 'b.com', enabled: false })
+    // 禁用规则不进入 ruleMap（与代理实际行为一致）
+    expect(ruleMap['b.com']).toBeUndefined()
+  })
 })
 
 describe('helpers.resolveTargetUrl with exclusions', () => {

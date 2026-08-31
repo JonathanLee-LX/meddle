@@ -12,6 +12,11 @@ export interface RouteRuleEntry {
     pattern: string;
     target: string;
     exclusions: string[];
+    /** 仅在 includeDisabled 解析时存在；缺省视为启用 */
+    enabled?: boolean;
+    /** 文件中的原始规则 token（未经 patternKey/file:// 归一化，用于展示与前端定位） */
+    rawRule?: string;
+    rawTarget?: string;
 }
 
 function looksLikeWildcardPattern(pattern: string): boolean {
@@ -238,14 +243,27 @@ export interface ParseEprcResult {
     excludeMap: ExcludeMap;
 }
 
-export function parseEprcWithExclusions(content: string): ParseEprcResult {
+export function parseEprcWithExclusions(
+    content: string,
+    opts: { includeDisabled?: boolean } = {},
+): ParseEprcResult {
     const rules: RouteRuleEntry[] = [];
 
     content.split(/\r?\n/).forEach(line => {
         const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) return;
+        if (!trimmed || trimmed.startsWith('#')) return;
 
-        const parts = trimmed.split(/\s+/).filter(Boolean);
+        // `//` 前缀为禁用规则：默认直接跳过；includeDisabled 时保留并标记 enabled=false
+        let enabled = true;
+        let effective = trimmed;
+        if (trimmed.startsWith('//')) {
+            if (!opts.includeDisabled) return;
+            enabled = false;
+            effective = trimmed.slice(2).trim();
+            if (!effective) return;
+        }
+
+        const parts = effective.split(/\s+/).filter(Boolean);
         if (parts.length < 2) return;
 
         // Separate exclusions (tokens starting with !) from regular parts
@@ -260,7 +278,8 @@ export function parseEprcWithExclusions(content: string): ParseEprcResult {
 
         if (regularParts.length < 2) return; // Need at least one rule and one target
 
-        let target = regularParts[regularParts.length - 1];
+        const rawTarget = regularParts[regularParts.length - 1];
+        let target = rawTarget;
         const patterns = regularParts.slice(0, -1);
         if (LOCAL_FILE_PATTERN.test(target) && !FILE_PATTERN.test(target)) {
             target = 'file://' + (target.replace(/\\/g, '/'));
@@ -283,11 +302,16 @@ export function parseEprcWithExclusions(content: string): ParseEprcResult {
                 pattern: patternKey,
                 target: storedTarget,
                 exclusions: lineExclusions,
+                enabled,
+                rawRule: rule,
+                rawTarget,
             });
         });
     });
 
-    const { ruleMap, excludeMap } = routeRulesToLegacyMaps(rules);
+    // ruleMap/excludeMap 只包含启用规则（禁用规则即使被保留也不生效）
+    const effectiveRules = opts.includeDisabled ? rules.filter(rule => rule.enabled !== false) : rules;
+    const { ruleMap, excludeMap } = routeRulesToLegacyMaps(effectiveRules);
     return { rules, ruleMap, excludeMap };
 }
 
