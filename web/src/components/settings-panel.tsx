@@ -765,8 +765,8 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                   />
                   <Button
                     variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                    size="icon-sm"
+                    className="text-muted-foreground hover:text-destructive"
                     onClick={() => {
                       setClientAliases((current) => {
                         const next = { ...current }
@@ -775,6 +775,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                       })
                     }}
                     title="删除设备名称"
+                    aria-label="删除设备名称"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -875,12 +876,12 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                       </div>
                       <div className="flex gap-1">
                         {aiConfig.activeModelId !== model.id && (
-                          <Button variant="ghost" size="sm" onClick={() => setAiConfig(setActiveModel(aiConfig, model.id))} className="h-7 text-xs">
+                          <Button variant="ghost" size="xs" onClick={() => setAiConfig(setActiveModel(aiConfig, model.id))}>
                             <Check className="h-3 w-3 mr-1" />
                             使用
                           </Button>
                         )}
-                        <Button variant="ghost" size="sm" onClick={() => setAiConfig(deleteModel(aiConfig, model.id))} className="h-7 w-7 p-0 text-destructive">
+                        <Button variant="ghost" size="icon-sm" onClick={() => setAiConfig(deleteModel(aiConfig, model.id))} className="text-destructive" aria-label="删除模型">
                           <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
@@ -897,7 +898,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
               <div className="space-y-5 rounded-md border border-primary bg-primary/5 p-4">
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-medium">新增模型</Label>
-                  <Button variant="ghost" size="sm" onClick={() => setNewModelForm(null)} className="h-6 w-6 p-0">
+                  <Button variant="ghost" size="icon-xs" onClick={() => setNewModelForm(null)} aria-label="关闭新增模型表单">
                     <XCircle className="h-4 w-4" />
                   </Button>
                 </div>
@@ -1004,11 +1005,11 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                 </div>
 
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" size="sm" onClick={() => setNewModelForm(null)} className="h-7 text-xs">
+                  <Button variant="outline" size="xs" onClick={() => setNewModelForm(null)}>
                     取消
                   </Button>
                   <Button
-                    size="sm"
+                    size="xs"
                     onClick={() => {
                       if (newModelForm.name && newModelForm.apiKey && newModelForm.model && newModelForm.baseUrl) {
                         setAiConfig(addModel(aiConfig, newModelForm as Omit<AIModel, 'id'>))
@@ -1016,7 +1017,6 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                       }
                     }}
                     disabled={!newModelForm.name || !newModelForm.apiKey || !newModelForm.model || !newModelForm.baseUrl}
-                    className="h-7 text-xs"
                   >
                     <Plus className="h-3 w-3 mr-1" />
                     添加
@@ -1066,7 +1066,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                 placeholder="输入 API Key"
                 className="flex-1 h-8 text-sm"
               />
-              <Button variant="outline" size="icon" onClick={() => setShowApiKey(!showApiKey)} className="h-8 w-8">
+              <Button variant="outline" size="icon-sm" onClick={() => setShowApiKey(!showApiKey)} aria-label={showApiKey ? '隐藏 API Key' : '显示 API Key'}>
                 {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>

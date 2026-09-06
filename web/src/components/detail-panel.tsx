@@ -211,7 +211,7 @@ function HeaderDiffPreview({
   return (
     <div className="space-y-2">
       <DiffLinePreview lines={diffLines} />
-      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setExpanded((value) => !value)}>
+      <Button variant="ghost" size="xs" onClick={() => setExpanded((value) => !value)}>
         {expanded ? <ChevronDown className="h-3.5 w-3.5 mr-1" /> : <ChevronRight className="h-3.5 w-3.5 mr-1" />}
         {expanded ? '收起完整头部' : '展开完整头部'}
       </Button>
@@ -276,7 +276,7 @@ function CompactBodyDiff({
       <DiffLinePreview lines={previewLines} className="max-h-40 overflow-auto" />
       {!hasBinaryBody && (
         <>
-          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setExpanded((value) => !value)}>
+          <Button variant="ghost" size="xs" onClick={() => setExpanded((value) => !value)}>
             {expanded ? <ChevronDown className="h-3.5 w-3.5 mr-1" /> : <ChevronRight className="h-3.5 w-3.5 mr-1" />}
             {expanded ? '收起完整 Diff' : '展开完整 Diff'}
           </Button>
@@ -362,10 +362,10 @@ function StageCard({
           <div className="flex items-center gap-2 flex-wrap">
             <Button
               variant="ghost"
-              size="sm"
-              className="h-6 px-1 text-xs"
+              size="icon-xs"
               onClick={() => setExpanded((value) => !value)}
               title={expanded ? '收起' : '展开'}
+              aria-label={expanded ? '收起' : '展开'}
             >
               {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
             </Button>
@@ -706,8 +706,7 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
               {detail && onReplay && selectedRecord?.id != null && (
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="h-7 text-xs"
+                  size="xs"
                   onClick={handleReplay}
                   disabled={replaying}
                   title="使用相同的请求参数重新发送请求"
@@ -719,8 +718,7 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
               {detail && onCreateMock && !selectedRecord?.mock && (
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="h-7 text-xs"
+                  size="xs"
                   onClick={handleCreateMock}
                 >
                   <Wand2 className="h-3.5 w-3.5 mr-1" />

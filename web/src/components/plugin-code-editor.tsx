@@ -306,8 +306,7 @@ export function PluginCodeEditor({
               </div>
               <Button
                 variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs"
+                size="xs"
                 onClick={() => setAiReviseOpen(false)}
                 disabled={!aiReviseOpen || revising}
               >

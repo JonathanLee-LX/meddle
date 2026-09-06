@@ -284,8 +284,7 @@ export function MockEditorPanel({
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
-                  className="h-7 text-xs"
+                  size="xs"
                   onClick={fixBodyErrors}
                   disabled={fixing || !isAIReady}
                   title={!isAIReady ? 'AI 未配置或未启用' : '使用 AI 修复响应内容'}
@@ -297,8 +296,7 @@ export function MockEditorPanel({
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
+                size="xs"
                 onClick={formatBody}
                 disabled={formatting || !form.body.trim()}
                 title="格式化响应内容"
