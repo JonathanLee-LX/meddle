@@ -66,3 +66,49 @@ The `v*` tag triggers CI publish to npm. Never publish without a tag.
 - Config dir: `~/.meddle/`. Env vars: `MEDDLE_*`. CLI command: `meddle`.
 - Network to GitHub from this environment is intermittently unreachable; pushes may need retries.
 - `.githooks/pre-commit` validates that version bumps include a CHANGELOG.md update. Run `git config core.hooksPath .githooks` after clone to enable it.
+
+## Web UI design system (for AI agents)
+
+Stack: `web/` is React 19 + Vite + Tailwind 4 + shadcn **new-york/neutral**. Prefer consistency over redesign; do not introduce a parallel design language.
+
+### Source of truth
+
+| Concern | Location |
+| --- | --- |
+| Tokens | `web/src/index.css` (`:root`, `.dark`, `@theme`, `data-accent`) |
+| Layout classes | `.app-workspace-content`, `.app-page-stack`, `.app-panel-content`, `.app-section`, `.app-field-group` |
+| UI kit | `web/src/components/ui/*` |
+| Tests | `web/src/components/ui-layout-standard.test.ts`, `web/src/components/ui/button.test.tsx` — update when changing token/Button contracts |
+
+### Tokens
+
+- Spacing: `--ui-page-padding` (1.5rem / 1rem mobile), `--ui-panel-padding` (1.75rem / 1rem), `--ui-content-gap` (2rem / 1.5rem), `--ui-section-gap` 1rem, `--ui-field-gap` 0.75rem, `--ui-copy-leading` 1.5rem; `--font-size-base` 14px + `--app-scale`; shell `max-w-[1600px]`. Prefer `.app-*` layout classes over one-off `p-6` / `gap-8`.
+- Radius: `--radius` 0.625rem with `sm` / `md` / `lg` / `xl` / `2xl` / `3xl` / `4xl` scale.
+- Colors: semantic CSS variables only. Meddle system: `--system-success`, `--system-warning`. Support Light/Dark + accent modes. Do not invent hex/oklch in feature code.
+
+### Button (Meddle-specific)
+
+- `default` variant = `bg-foreground` (not classic primary).
+- Selected / active = primary fill.
+- Sizes: `default` / `xs` / `sm` / `lg` / `icon*`. Do not add one-off `h-7` overrides when a size token fits.
+- Status pills / tip chips → `Badge`. Prefer `Tabs` / `Input` / `Switch` / `Label` / `Card` from `ui/`.
+
+### Patterns vs screens
+
+Extend shared tokens, layout classes, and `ui/*` primitives. Screens compose patterns; they should not redefine spacing, radius, or color contracts.
+
+### Agent must-follow rules
+
+1. Consistency first — reuse existing tokens and components.
+2. No parallel design system or alternate visual language.
+3. Touch files minimally; avoid drive-by refactors.
+4. Empty / Error / Loading states are Phase 2 — do not invent ad-hoc ones ahead of that work unless fixing a regression.
+5. Prefer glass / panel surfaces for in-app chrome; dialogs for focused confirmations/modals.
+6. Figma naming alignment comes later — do not rename tokens for Figma parity yet.
+7. After UI contract changes: `cd web && npx tsc --noEmit` and `cd web && pnpm run test:run`.
+
+### Roadmap
+
+- **Phase 1** — tokens + primitives (done / in progress on this track).
+- **Phase 2** — Empty / Error / Loading.
+- **Phase 3+** — polish + Figma alignment.
