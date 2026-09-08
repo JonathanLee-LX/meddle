@@ -95,6 +95,8 @@ describe('ui primitive contracts', () => {
     expect(source).toContain('"icon-xs": "size-6')
     expect(source).toContain('"icon-sm": "size-8"')
     expect(source).toContain('"icon-lg": "size-10"')
+    expect(source).toContain('leading-none')
+    expect(source).toContain('[&_svg]:translate-y-px')
   })
 
   it('keeps Badge / Tabs / Input as shared primitives', () => {
@@ -104,5 +106,24 @@ describe('ui primitive contracts', () => {
     expect(readSource('./ui/tabs.tsx')).toContain('data-slot="tabs-trigger"')
     expect(readSource('./ui/input.tsx')).toContain('data-slot="input"')
     expect(readSource('./ui/input.tsx')).toContain('h-9 w-full min-w-0 rounded-md border')
+  })
+
+  it('optically aligns tab/button icons with CJK labels', () => {
+    const tabs = readSource('./ui/tabs.tsx')
+    expect(tabs).toContain('leading-none')
+    expect(tabs).toContain('[&_svg]:block')
+    expect(tabs).toContain('[&_svg]:self-center')
+    expect(tabs).toContain('[&_svg]:translate-y-px')
+
+    const button = readSource('./ui/button.tsx')
+    expect(button).toContain('leading-none')
+    expect(button).toContain('[&_svg]:translate-y-px')
+
+    const app = readSource('../App.tsx')
+    expect(app).toContain('<span className="leading-none">日志</span>')
+    expect(app).toContain('<span className="leading-none">路由规则</span>')
+    expect(app).toContain('<span className="leading-none">Mock</span>')
+    expect(app).toContain('<span className="leading-none">扩展插件</span>')
+    expect(app).toContain('<span className="leading-none">健康</span>')
   })
 })

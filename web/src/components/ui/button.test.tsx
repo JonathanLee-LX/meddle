@@ -41,4 +41,11 @@ describe('buttonVariants', () => {
   ] as const)('locks %s size to %s', (size, token) => {
     expect(buttonVariants({ size })).toContain(token)
   })
+
+  it('nudges icons optically for CJK alignment', () => {
+    const classes = buttonVariants()
+    expect(classes).toContain('leading-none')
+    expect(classes).toContain('[&_svg]:translate-y-px')
+  })
+
 })
