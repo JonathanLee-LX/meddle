@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0-beta.6] - 2026-09-08
+
+### Added
+
+- Web UI Phase 1 设计约束测试（#70）：新增 `ui-layout-standard.test.ts` 锁定 token / layout class 合约（spacing、radius、semantic colors、`.app-*` 布局类）；扩展 `button.test.tsx` 覆盖 Button 尺寸与 variant 约定。
+- AGENTS.md 新增 Web UI design system 规则：tokens、layout classes、Button/Badge/Tabs/Input 等原语用法与 agent must-follow 清单，作为后续 UI 改动的单一事实来源。
+
+### Changed
+
+- Button / Badge / Tabs / Input 调用点收敛（#70）：多处业务组件（规则配置、设置、Mock、详情面板、AI 助手等）统一到 `ui/` 原语与尺寸 token，去掉一次性 `h-7` 等覆盖，与 Meddle new-york/neutral 设计系统对齐。
+
 ## [0.5.0-beta.5] - 2026-08-31
 
 ### Added
