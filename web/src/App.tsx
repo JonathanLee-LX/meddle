@@ -922,24 +922,24 @@ function App() {
                 <TabsList className="!h-auto max-w-full justify-start gap-1 overflow-x-auto p-1">
                   <TabsTrigger value="logs" className="h-8 flex-none items-center gap-1.5 px-3 leading-none" title="查看经过代理的本机、远程设备和插件测试流量">
                     <Globe />
-                    日志
+                    <span className="leading-none">日志</span>
                   </TabsTrigger>
                   <TabsTrigger value="config" className="h-8 flex-none items-center gap-1.5 px-3 leading-none" title="管理代理转发规则，并在表格、文本和图表视图间切换">
                     <FileText />
-                    路由规则
+                    <span className="leading-none">路由规则</span>
                   </TabsTrigger>
                   <TabsTrigger value="mock" className="h-8 flex-none items-center gap-1.5 px-3 leading-none" title="匹配请求后返回本地响应，用于联调和异常场景测试">
                     <ClipboardList />
-                    Mock
+                    <span className="leading-none">Mock</span>
                     {store.mockRules.filter((r) => r.enabled).length > 0 && <Badge variant="secondary">{store.mockRules.filter((r) => r.enabled).length}</Badge>}
                   </TabsTrigger>
                   <TabsTrigger value="plugins" className="h-8 flex-none items-center gap-1.5 px-3 leading-none" title="控制内置、自定义和第三方插件的运行状态">
                     <Plug />
-                    扩展插件
+                    <span className="leading-none">扩展插件</span>
                   </TabsTrigger>
                   <TabsTrigger value="health" className="h-8 flex-none items-center gap-1.5 px-3 leading-none" title="查看进程健康、连接、守护策略和日志限流状态">
                     <Activity />
-                    健康
+                    <span className="leading-none">健康</span>
                   </TabsTrigger>
                 </TabsList>
                 {activeTab === 'logs' && (
