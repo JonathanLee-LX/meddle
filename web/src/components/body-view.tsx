@@ -28,8 +28,8 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
   return (
     <Button
       variant="ghost"
-      size="sm"
-      className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+      size="xs"
+      className="text-[11px] text-muted-foreground hover:text-foreground"
       aria-label={copied ? `复制${label}成功` : `复制${label}`}
       onClick={() => void handleCopy()}
     >

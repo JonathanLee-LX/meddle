@@ -695,8 +695,9 @@ export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, dele
                           />
                           <Button
                             variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                            size="icon-sm"
+                            className="text-muted-foreground hover:text-destructive"
+                            aria-label={`删除响应头 ${key}`}
                             onClick={() => {
                               const newHeaders = { ...editForm.headers }
                               delete newHeaders[key]

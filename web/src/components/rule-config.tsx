@@ -193,10 +193,10 @@ const SortableRuleRow = memo(
         </TableCell>
         <TableCell className="w-24">
           <div className="flex gap-1">
-            <Button variant="ghost" size="sm" onClick={handleMoveToTop} className="h-8 w-8 p-0 text-muted-foreground hover:text-primary" title="置顶">
+            <Button variant="ghost" size="icon-sm" onClick={handleMoveToTop} className="text-muted-foreground hover:text-primary" title="置顶" aria-label="置顶">
               <ArrowUpToLine className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm" onClick={handleDelete} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive">
+            <Button variant="ghost" size="icon-sm" onClick={handleDelete} className="text-muted-foreground hover:text-destructive" aria-label="删除规则">
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
@@ -253,10 +253,10 @@ const FilteredRuleRow = memo(
         </TableCell>
         <TableCell>
           <div className="flex gap-1">
-            <Button variant="ghost" size="sm" onClick={handleMoveToTop} className="h-8 w-8 p-0 text-muted-foreground hover:text-primary" title="置顶">
+            <Button variant="ghost" size="icon-sm" onClick={handleMoveToTop} className="text-muted-foreground hover:text-primary" title="置顶" aria-label="置顶">
               <ArrowUpToLine className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm" onClick={handleDelete} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive">
+            <Button variant="ghost" size="icon-sm" onClick={handleDelete} className="text-muted-foreground hover:text-destructive" aria-label="删除规则">
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
@@ -1106,9 +1106,10 @@ export function RuleConfig(props: RuleConfigProps) {
                 {ruleFilter && (
                   <Button
                     variant="ghost"
-                    size="sm"
-                    className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 p-0"
+                    size="icon-sm"
+                    className="absolute right-1 top-1/2 -translate-y-1/2"
                     onClick={() => setRuleFilter('')}
+                    aria-label="清除规则筛选"
                   >
                     <X className="h-3 w-3" />
                   </Button>
@@ -1135,9 +1136,10 @@ export function RuleConfig(props: RuleConfigProps) {
                 {targetFilter && (
                   <Button
                     variant="ghost"
-                    size="sm"
-                    className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 p-0"
+                    size="icon-sm"
+                    className="absolute right-1 top-1/2 -translate-y-1/2"
                     onClick={() => setTargetFilter('')}
+                    aria-label="清除目标筛选"
                   >
                     <X className="h-3 w-3" />
                   </Button>

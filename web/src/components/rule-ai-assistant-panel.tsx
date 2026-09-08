@@ -99,10 +99,10 @@ export function RuleAiAssistantPanel({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="app-panel-content">
-        <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-          <span className="rounded-full border bg-muted/40 px-2 py-1">支持通配符合并</span>
-          <span className="rounded-full border bg-muted/40 px-2 py-1">可带额外优化提示词</span>
-          <span className="rounded-full border bg-muted/40 px-2 py-1">结果写回当前编辑区</span>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="secondary" className="bg-muted/40 text-[11px] font-normal text-muted-foreground">支持通配符合并</Badge>
+          <Badge variant="secondary" className="bg-muted/40 text-[11px] font-normal text-muted-foreground">可带额外优化提示词</Badge>
+          <Badge variant="secondary" className="bg-muted/40 text-[11px] font-normal text-muted-foreground">结果写回当前编辑区</Badge>
         </div>
 
         <Badge variant="outline" className="border-primary/20 bg-background/70 text-xs font-normal">

@@ -28,4 +28,17 @@ describe('buttonVariants', () => {
   it('uses the accent text color when link buttons are hovered', () => {
     expect(buttonVariants({ variant: 'link' })).toContain('hover:text-primary')
   })
+
+  it.each([
+    ['default', 'h-9'],
+    ['xs', 'h-6'],
+    ['sm', 'h-8'],
+    ['lg', 'h-10'],
+    ['icon', 'size-9'],
+    ['icon-xs', 'size-6'],
+    ['icon-sm', 'size-8'],
+    ['icon-lg', 'size-10'],
+  ] as const)('locks %s size to %s', (size, token) => {
+    expect(buttonVariants({ size })).toContain(token)
+  })
 })

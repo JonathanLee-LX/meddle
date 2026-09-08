@@ -219,13 +219,16 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
                   placeholder={config.provider === 'openai' ? 'sk-...' : 'sk-ant-...'}
                   className="pr-10"
                 />
-                <button
+                <Button
                   type="button"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   onClick={() => setShowApiKey(!showApiKey)}
+                  aria-label={showApiKey ? '隐藏 API 密钥' : '显示 API 密钥'}
                 >
                   {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+                </Button>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
