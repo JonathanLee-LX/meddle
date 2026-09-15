@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0-beta.7] - 2026-09-15
+
+### Fixed
+
+- Plugin mode=on 响应拦截不再输出非法响应头 `transfer-encoding: chunked` + `content-length` 并存（#72）：`interceptResponseWithPlugins` 在插件改写响应后重设 `content-length` 时未删除上游透传的 `transfer-encoding`，导致 Node 客户端报 `HPE_INVALID_CONTENT_LENGTH`、浏览器报 `ERR_INVALID_HTTP_RESPONSE`（请求失败/一直 pending）。HTTPS 路径因 `cleanHeadersForH2` 会删除 TE 而不受影响；修复为改写响应时同时删除 `transfer-encoding`。
+
 ## [0.5.0-beta.6] - 2026-09-08
 
 ### Added

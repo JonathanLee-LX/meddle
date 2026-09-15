@@ -66,6 +66,7 @@ export function createPluginIntercept(ctx: ProxyContext) {
             : { ...headers }
         if (shouldApplyPluginResponse) {
             delete finalHeaders['content-encoding']
+            delete finalHeaders['transfer-encoding']
             finalHeaders['content-length'] = String(finalBody.length)
         }
 
