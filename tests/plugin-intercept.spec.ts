@@ -86,6 +86,74 @@ describe('plugin-intercept createPluginIntercept', () => {
             expect(dispatched.includes('onAfterResponse')).toBeTruthy()
         })
 
+        it('strips transfer-encoding and sets content-length when plugin rewrites body', async () => {
+            // Regression for #72: upstream chunked response headers are passed through into
+            // finalHeaders; rewriting the body must drop transfer-encoding (the
+            // body is sent as a single res.end() framed by content-length), otherwise
+            // clients reject the response (HPE_INVALID_CONTENT_LENGTH / ERR_INVALID_HTTP_RESPONSE).
+            const ctx = makeCtx({
+                requestPipeline: { mode: 'on' },
+                hookDispatcher: {
+                    dispatch: async (_hook: string, hookCtx: any) => {
+                        if (hookCtx && hookCtx.response) hookCtx.response.body = '{"ok":true,"rewritten":1}'
+                    },
+                },
+            })
+            const pi = createPluginIntercept(ctx)
+
+            let writtenHeaders: Record<string, any> = {}
+            let endedBody: Buffer | null = null
+            const result = await pi.interceptResponseWithPlugins({
+                req: { method: 'GET', headers: {} },
+                res: {
+                    writeHead: (_s: number, h: Record<string, any>) => { writtenHeaders = h },
+                    end: (b: Buffer) => { endedBody = b },
+                },
+                source: 'https://a.com/api', target: 'https://a.com/api',
+                startTime: Date.now(), statusCode: 200,
+                headers: {
+                    'content-type': 'application/json',
+                    'transfer-encoding': 'chunked',
+                },
+                bodyBuffer: Buffer.from('{"ok":true}'), reqBody: Buffer.alloc(0),
+            })
+
+            expect(result).toBe(true)
+            expect(writtenHeaders['transfer-encoding']).toBeUndefined()
+            expect(writtenHeaders['content-length']).toBe(String(endedBody!.length))
+            expect(endedBody!.toString()).toBe('{"ok":true,"rewritten":1}')
+        })
+
+        it('keeps upstream transfer-encoding in passthrough mode (no rewrite)', async () => {
+            // Shadow/off paths (shouldApplyPluginResponse === false) forward the
+            // original body and headers untouched; transfer-encoding must survive
+            // so streaming semantics are preserved for the caller.
+            const ctx = makeCtx({
+                requestPipeline: { mode: 'shadow' },
+            })
+            const pi = createPluginIntercept(ctx)
+
+            let writtenHeaders: Record<string, any> = {}
+            const result = await pi.interceptResponseWithPlugins({
+                req: { method: 'GET', headers: {} },
+                res: {
+                    writeHead: (_s: number, h: Record<string, any>) => { writtenHeaders = h },
+                    end: () => {},
+                },
+                source: 'https://a.com/api', target: 'https://a.com/api',
+                startTime: Date.now(), statusCode: 200,
+                headers: {
+                    'content-type': 'application/json',
+                    'transfer-encoding': 'chunked',
+                },
+                bodyBuffer: Buffer.from('{"ok":true}'), reqBody: Buffer.alloc(0),
+            })
+
+            expect(result).toBe(true)
+            expect(writtenHeaders['transfer-encoding']).toBe('chunked')
+            expect(writtenHeaders['content-length']).toBeUndefined()
+        })
+
         it('decompresses gzip content before passing to plugins', async () => {
             let capturedBody = ''
             const ctx = makeCtx({
