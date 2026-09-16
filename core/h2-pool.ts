@@ -74,6 +74,23 @@ export function __setH2SessionFactoryForTest(
     sessionFactoryOverride = factory
 }
 
+// Deno's node:http2 client hangs on empty-body responses (204/HEAD/OPTIONS)
+// regardless of method (#72, #74 follow-up). Binary builds must not use it.
+let forceHttp1Override: boolean | null = null
+export function __setForceHttp1ForTest(value: boolean | null): void {
+    forceHttp1Override = value
+}
+
+function isDenoRuntime(): boolean {
+    return typeof (globalThis as { Deno?: unknown }).Deno !== 'undefined'
+        || typeof (process.versions as { deno?: string }).deno === 'string'
+}
+
+function shouldForceHttp1(): boolean {
+    if (forceHttp1Override !== null) return forceHttp1Override
+    return isDenoRuntime()
+}
+
 function createH2Session(origin: string, opts: http2.SecureClientSessionOptions): http2.ClientHttp2Session {
     return sessionFactoryOverride ? sessionFactoryOverride(origin, opts) : http2.connect(origin, opts)
 }
@@ -225,7 +242,7 @@ function proxyViaH1(target: string, method: string, headers: Record<string, any>
 }
 
 export async function makeProxyRequest(target: string, method: string, headers: Record<string, any>, reqBody: Buffer): Promise<ProxyResponse> {
-    if (target.startsWith('https') && !shouldSkipHttp2(method)) {
+    if (target.startsWith('https') && !shouldSkipHttp2(method) && !shouldForceHttp1()) {
         try {
             return await proxyViaH2(target, method, headers, reqBody)
         } catch (err: any) {

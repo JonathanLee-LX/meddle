@@ -3,7 +3,7 @@ import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { once } from 'node:events'
 import { EventEmitter } from 'node:events'
-import { cleanHeadersForH2, makeProxyRequest, __setH2SessionFactoryForTest } from '../core/h2-pool'
+import { cleanHeadersForH2, makeProxyRequest, __setH2SessionFactoryForTest, __setForceHttp1ForTest } from '../core/h2-pool'
 
 const servers: http.Server[] = []
 const sockets = new Set<import('node:net').Socket>()
@@ -264,4 +264,43 @@ describe('h2-pool makeProxyRequest OPTIONS/HEAD skip HTTP/2 (#72)', () => {
         ).rejects.toThrow()
         expect(Date.now() - started).toBeLessThan(5000)
     }, 10000)
+})
+
+describe('h2-pool deno runtime forces HTTP/1.1 for all HTTPS (#72/#74)', () => {
+    afterEach(() => {
+        __setH2SessionFactoryForTest(null)
+        __setForceHttp1ForTest(null)
+    })
+
+    function installTrackingH2Factory(): { used: boolean } {
+        const state = { used: false }
+        __setH2SessionFactoryForTest(() => {
+            state.used = true
+            throw new Error('HTTP/2 session must not be created')
+        })
+        return state
+    }
+
+    it('does not open an HTTP/2 session for POST when forcing HTTP/1.1 (deno / 204-body hang)', async () => {
+        const h2 = installTrackingH2Factory()
+        __setForceHttp1ForTest(true)
+        await expect(
+            makeProxyRequest(
+                'https://127.0.0.1:1/ops/events',
+                'POST',
+                { host: 'api.example.com', 'content-type': 'application/json' },
+                Buffer.from('{}'),
+            ),
+        ).rejects.toThrow()
+        expect(h2.used).toBe(false)
+    })
+
+    it('does not open an HTTP/2 session for GET when forcing HTTP/1.1', async () => {
+        const h2 = installTrackingH2Factory()
+        __setForceHttp1ForTest(true)
+        await expect(
+            makeProxyRequest('https://127.0.0.1:1/', 'GET', { host: 'api.example.com' }, Buffer.alloc(0)),
+        ).rejects.toThrow()
+        expect(h2.used).toBe(false)
+    })
 })
