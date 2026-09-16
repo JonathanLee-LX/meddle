@@ -9,11 +9,22 @@ const proxyDebug = _debug('proxy')
 const h2SessionPool = new Map<string, http2.ClientHttp2Session>()
 const MAX_H2_SESSIONS = process.env.MEDDLE_MAX_H2_SESSIONS ? parseInt(process.env.MEDDLE_MAX_H2_SESSIONS) : 32
 const DEFAULT_UPSTREAM_REQUEST_TIMEOUT_MS = 60000
+// Shorter than H1: deno's http2 client can hang on empty-body responses; fallback
+// to H1 should happen before a CORS / browser request looks "stuck" (#72).
+const DEFAULT_H2_REQUEST_TIMEOUT_MS = 8000
+
+function parsePositiveMs(raw: string | undefined, fallback: number): number {
+    const parsed = raw ? parseInt(raw, 10) : NaN
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
 
 function upstreamTimeoutMs(): number {
-    const fromEnv = process.env.MEDDLE_UPSTREAM_TIMEOUT_MS
-    const parsed = fromEnv ? parseInt(fromEnv, 10) : NaN
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_UPSTREAM_REQUEST_TIMEOUT_MS
+    return parsePositiveMs(process.env.MEDDLE_UPSTREAM_TIMEOUT_MS, DEFAULT_UPSTREAM_REQUEST_TIMEOUT_MS)
+}
+
+function h2RequestTimeoutMs(): number {
+    const h2 = parsePositiveMs(process.env.MEDDLE_H2_REQUEST_TIMEOUT_MS, DEFAULT_H2_REQUEST_TIMEOUT_MS)
+    return Math.min(h2, upstreamTimeoutMs())
 }
 
 export const UPSTREAM_TIMEOUT_CODE = 'UPSTREAM_TIMEOUT'
@@ -149,7 +160,7 @@ function proxyViaH2(target: string, method: string, headers: Record<string, any>
                 return
             }
 
-            const timeoutMs = upstreamTimeoutMs()
+            const timeoutMs = h2RequestTimeoutMs()
             let settled = false
             const settle = (fn: () => void) => {
                 if (settled) return
