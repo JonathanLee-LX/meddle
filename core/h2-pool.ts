@@ -9,11 +9,22 @@ const proxyDebug = _debug('proxy')
 const h2SessionPool = new Map<string, http2.ClientHttp2Session>()
 const MAX_H2_SESSIONS = process.env.MEDDLE_MAX_H2_SESSIONS ? parseInt(process.env.MEDDLE_MAX_H2_SESSIONS) : 32
 const DEFAULT_UPSTREAM_REQUEST_TIMEOUT_MS = 60000
+// Shorter than H1: deno's http2 client can hang on empty-body responses; fallback
+// to H1 should happen before a CORS / browser request looks "stuck" (#72).
+const DEFAULT_H2_REQUEST_TIMEOUT_MS = 8000
+
+function parsePositiveMs(raw: string | undefined, fallback: number): number {
+    const parsed = raw ? parseInt(raw, 10) : NaN
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
 
 function upstreamTimeoutMs(): number {
-    const fromEnv = process.env.MEDDLE_UPSTREAM_TIMEOUT_MS
-    const parsed = fromEnv ? parseInt(fromEnv, 10) : NaN
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_UPSTREAM_REQUEST_TIMEOUT_MS
+    return parsePositiveMs(process.env.MEDDLE_UPSTREAM_TIMEOUT_MS, DEFAULT_UPSTREAM_REQUEST_TIMEOUT_MS)
+}
+
+function h2RequestTimeoutMs(): number {
+    const h2 = parsePositiveMs(process.env.MEDDLE_H2_REQUEST_TIMEOUT_MS, DEFAULT_H2_REQUEST_TIMEOUT_MS)
+    return Math.min(h2, upstreamTimeoutMs())
 }
 
 export const UPSTREAM_TIMEOUT_CODE = 'UPSTREAM_TIMEOUT'
@@ -118,6 +129,14 @@ function getOrCreateH2Session(origin: string, servername?: string): Promise<http
     })
 }
 
+/** CORS preflight (OPTIONS) and HEAD typically have empty bodies. Deno's
+ *  node:http2 client never emits `response`/`end` for those, so they must
+ *  not go through proxyViaH2 (#72). */
+function shouldSkipHttp2(method: string): boolean {
+    const m = String(method || '').toUpperCase()
+    return m === 'OPTIONS' || m === 'HEAD'
+}
+
 function proxyViaH2(target: string, method: string, headers: Record<string, any>, reqBody: Buffer): Promise<ProxyResponse> {
     const url = new URL(target)
     const origin = url.origin
@@ -127,26 +146,47 @@ function proxyViaH2(target: string, method: string, headers: Record<string, any>
 
     return getOrCreateH2Session(origin, servername).then(session => {
         return new Promise<ProxyResponse>((resolve, reject) => {
-            try {
-                const h2Headers: Record<string, any> = cleanHeadersForH2(headers)
-                h2Headers[':method'] = method
-                h2Headers[':path'] = url.pathname + url.search
-                h2Headers[':authority'] = originalHost
-                h2Headers[':scheme'] = url.protocol.replace(':', '')
+            const h2Headers: Record<string, any> = cleanHeadersForH2(headers)
+            h2Headers[':method'] = method
+            h2Headers[':path'] = url.pathname + url.search
+            h2Headers[':authority'] = originalHost
+            h2Headers[':scheme'] = url.protocol.replace(':', '')
 
-                const h2Stream = session.request(h2Headers)
-                h2Stream.on('response', (resHeaders: http2.IncomingHttpHeaders) => {
-                    const statusCode = Number(resHeaders[':status'])
-                    const clean: Record<string, any> = {}
-                    for (const [k, v] of Object.entries(resHeaders)) {
-                        if (!k.startsWith(':')) clean[k] = v
-                    }
-                    resolve({ statusCode, statusMessage: '', headers: clean, stream: h2Stream, protocol: 'h2' })
+            let h2Stream: http2.ClientHttp2Stream
+            try {
+                h2Stream = session.request(h2Headers)
+            } catch (err) {
+                reject(err)
+                return
+            }
+
+            const timeoutMs = h2RequestTimeoutMs()
+            let settled = false
+            const settle = (fn: () => void) => {
+                if (settled) return
+                settled = true
+                clearTimeout(timer)
+                fn()
+            }
+            const timer = setTimeout(() => {
+                settle(() => {
+                    try { h2Stream.close() } catch (_) { /* ignore */ }
+                    try { h2Stream.destroy() } catch (_) { /* ignore */ }
+                    reject(upstreamTimeoutError(target, timeoutMs))
                 })
-                h2Stream.on('error', reject)
-                if (reqBody && reqBody.length > 0) h2Stream.write(reqBody)
-                h2Stream.end()
-            } catch (err) { reject(err) }
+            }, timeoutMs)
+
+            h2Stream.on('response', (resHeaders: http2.IncomingHttpHeaders) => {
+                const statusCode = Number(resHeaders[':status'])
+                const clean: Record<string, any> = {}
+                for (const [k, v] of Object.entries(resHeaders)) {
+                    if (!k.startsWith(':')) clean[k] = v
+                }
+                settle(() => resolve({ statusCode, statusMessage: '', headers: clean, stream: h2Stream, protocol: 'h2' }))
+            })
+            h2Stream.on('error', (err) => settle(() => reject(err)))
+            if (reqBody && reqBody.length > 0) h2Stream.write(reqBody)
+            h2Stream.end()
         })
     })
 }
@@ -185,7 +225,7 @@ function proxyViaH1(target: string, method: string, headers: Record<string, any>
 }
 
 export async function makeProxyRequest(target: string, method: string, headers: Record<string, any>, reqBody: Buffer): Promise<ProxyResponse> {
-    if (target.startsWith('https')) {
+    if (target.startsWith('https') && !shouldSkipHttp2(method)) {
         try {
             return await proxyViaH2(target, method, headers, reqBody)
         } catch (err: any) {
