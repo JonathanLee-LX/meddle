@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0-beta.8] - 2026-09-16
+
+### Fixed
+
+- HTTPS 代理不再因上游空 body 响应（OPTIONS 预检 / 204 / HEAD）挂起（#72）：deno 二进制的 `node:http2` 客户端对空 body 响应不触发 `response`/`end`，`proxyViaH2` 会永久挂起，导致 Chrome 跨域 JSON POST 的 CORS 预检一直 pending。修复：OPTIONS/HEAD 直接走 HTTP/1.1（`proxyViaH1`），其余方法的 H2 请求增加请求超时（默认 8s，`MEDDLE_H2_REQUEST_TIMEOUT_MS` 可配，且不超过 H1 的 `MEDDLE_UPSTREAM_TIMEOUT_MS`），超时后 fallback 到 HTTP/1.1。
+
 ## [0.5.0-beta.7] - 2026-09-15
 
 ### Fixed
