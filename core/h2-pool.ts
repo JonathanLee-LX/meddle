@@ -118,6 +118,14 @@ function getOrCreateH2Session(origin: string, servername?: string): Promise<http
     })
 }
 
+/** CORS preflight (OPTIONS) and HEAD typically have empty bodies. Deno's
+ *  node:http2 client never emits `response`/`end` for those, so they must
+ *  not go through proxyViaH2 (#72). */
+function shouldSkipHttp2(method: string): boolean {
+    const m = String(method || '').toUpperCase()
+    return m === 'OPTIONS' || m === 'HEAD'
+}
+
 function proxyViaH2(target: string, method: string, headers: Record<string, any>, reqBody: Buffer): Promise<ProxyResponse> {
     const url = new URL(target)
     const origin = url.origin
@@ -127,26 +135,47 @@ function proxyViaH2(target: string, method: string, headers: Record<string, any>
 
     return getOrCreateH2Session(origin, servername).then(session => {
         return new Promise<ProxyResponse>((resolve, reject) => {
-            try {
-                const h2Headers: Record<string, any> = cleanHeadersForH2(headers)
-                h2Headers[':method'] = method
-                h2Headers[':path'] = url.pathname + url.search
-                h2Headers[':authority'] = originalHost
-                h2Headers[':scheme'] = url.protocol.replace(':', '')
+            const h2Headers: Record<string, any> = cleanHeadersForH2(headers)
+            h2Headers[':method'] = method
+            h2Headers[':path'] = url.pathname + url.search
+            h2Headers[':authority'] = originalHost
+            h2Headers[':scheme'] = url.protocol.replace(':', '')
 
-                const h2Stream = session.request(h2Headers)
-                h2Stream.on('response', (resHeaders: http2.IncomingHttpHeaders) => {
-                    const statusCode = Number(resHeaders[':status'])
-                    const clean: Record<string, any> = {}
-                    for (const [k, v] of Object.entries(resHeaders)) {
-                        if (!k.startsWith(':')) clean[k] = v
-                    }
-                    resolve({ statusCode, statusMessage: '', headers: clean, stream: h2Stream, protocol: 'h2' })
+            let h2Stream: http2.ClientHttp2Stream
+            try {
+                h2Stream = session.request(h2Headers)
+            } catch (err) {
+                reject(err)
+                return
+            }
+
+            const timeoutMs = upstreamTimeoutMs()
+            let settled = false
+            const settle = (fn: () => void) => {
+                if (settled) return
+                settled = true
+                clearTimeout(timer)
+                fn()
+            }
+            const timer = setTimeout(() => {
+                settle(() => {
+                    try { h2Stream.close() } catch (_) { /* ignore */ }
+                    try { h2Stream.destroy() } catch (_) { /* ignore */ }
+                    reject(upstreamTimeoutError(target, timeoutMs))
                 })
-                h2Stream.on('error', reject)
-                if (reqBody && reqBody.length > 0) h2Stream.write(reqBody)
-                h2Stream.end()
-            } catch (err) { reject(err) }
+            }, timeoutMs)
+
+            h2Stream.on('response', (resHeaders: http2.IncomingHttpHeaders) => {
+                const statusCode = Number(resHeaders[':status'])
+                const clean: Record<string, any> = {}
+                for (const [k, v] of Object.entries(resHeaders)) {
+                    if (!k.startsWith(':')) clean[k] = v
+                }
+                settle(() => resolve({ statusCode, statusMessage: '', headers: clean, stream: h2Stream, protocol: 'h2' }))
+            })
+            h2Stream.on('error', (err) => settle(() => reject(err)))
+            if (reqBody && reqBody.length > 0) h2Stream.write(reqBody)
+            h2Stream.end()
         })
     })
 }
@@ -185,7 +214,7 @@ function proxyViaH1(target: string, method: string, headers: Record<string, any>
 }
 
 export async function makeProxyRequest(target: string, method: string, headers: Record<string, any>, reqBody: Buffer): Promise<ProxyResponse> {
-    if (target.startsWith('https')) {
+    if (target.startsWith('https') && !shouldSkipHttp2(method)) {
         try {
             return await proxyViaH2(target, method, headers, reqBody)
         } catch (err: any) {

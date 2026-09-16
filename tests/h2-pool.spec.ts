@@ -192,3 +192,75 @@ describe('h2-pool makeProxyRequest upstream timeout', () => {    it('fails with 
         }
     }, 30000)
 })
+
+describe('h2-pool makeProxyRequest OPTIONS/HEAD skip HTTP/2 (#72)', () => {
+    afterEach(() => {
+        __setH2SessionFactoryForTest(null)
+        delete process.env.MEDDLE_UPSTREAM_TIMEOUT_MS
+    })
+
+    function installHangingH2Factory(): { used: boolean } {
+        const state = { used: false }
+        __setH2SessionFactoryForTest(() => {
+            state.used = true
+            const s = new EventEmitter() as EventEmitter & {
+                destroyed: boolean
+                closed: boolean
+                destroy(): void
+                request(): EventEmitter
+            }
+            s.destroyed = false
+            s.closed = false
+            s.destroy = () => { s.destroyed = true; s.closed = true }
+            ;(s as any).setTimeout = () => {}
+            s.request = () => {
+                const stream = new EventEmitter() as EventEmitter & { end(): void; write(): void; close(): void; destroy(): void }
+                stream.end = () => {}
+                stream.write = () => {}
+                stream.close = () => {}
+                stream.destroy = () => {}
+                return stream
+            }
+            queueMicrotask(() => s.emit('connect'))
+            return s as unknown as import('node:http2').ClientHttp2Session
+        })
+        return state
+    }
+
+    it('does not open an HTTP/2 session for OPTIONS (CORS preflight)', async () => {
+        const h2 = installHangingH2Factory()
+        await expect(
+            makeProxyRequest('https://127.0.0.1:1/preflight', 'OPTIONS', { host: 'api.example.com' }, Buffer.alloc(0)),
+        ).rejects.toThrow()
+        expect(h2.used).toBe(false)
+    })
+
+    it('does not open an HTTP/2 session for HEAD', async () => {
+        const h2 = installHangingH2Factory()
+        await expect(
+            makeProxyRequest('https://127.0.0.1:1/', 'HEAD', { host: 'api.example.com' }, Buffer.alloc(0)),
+        ).rejects.toThrow()
+        expect(h2.used).toBe(false)
+    })
+
+    it('still uses HTTP/2 for GET', async () => {
+        const h2 = installHangingH2Factory()
+        process.env.MEDDLE_UPSTREAM_TIMEOUT_MS = '200'
+        const started = Date.now()
+        await expect(
+            makeProxyRequest('https://127.0.0.1:1/', 'GET', { host: 'api.example.com' }, Buffer.alloc(0)),
+        ).rejects.toThrow()
+        expect(h2.used).toBe(true)
+        expect(Date.now() - started).toBeLessThan(5000)
+    }, 10000)
+
+    it('times out a hung HTTP/2 GET and falls back instead of hanging forever', async () => {
+        installHangingH2Factory()
+        process.env.MEDDLE_UPSTREAM_TIMEOUT_MS = '200'
+        const started = Date.now()
+        await expect(
+            makeProxyRequest('https://127.0.0.1:1/hang', 'GET', { host: 'api.example.com' }, Buffer.alloc(0)),
+        ).rejects.toThrow()
+        expect(Date.now() - started).toBeLessThan(5000)
+    }, 10000)
+})
