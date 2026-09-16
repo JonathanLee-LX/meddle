@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0-beta.9] - 2026-09-16
+
+### Fixed
+
+- deno 二进制版 HTTPS 代理不再因上游空 body 响应（204/HEAD/OPTIONS）挂起（#72/#74 后续）：deno 的 `node:http2` 客户端对空 body 响应不触发 `response`/`end`，且与请求方法无关（POST 返回 204 同样挂起，如事件上报接口）。修复：检测到 deno 运行时（二进制分发版）时，HTTPS 上游全部走 HTTP/1.1（`proxyViaH1`），不再使用 H2 客户端。
+
 ## [0.5.0-beta.8] - 2026-09-16
 
 ### Fixed
