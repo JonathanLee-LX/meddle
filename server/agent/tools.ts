@@ -776,7 +776,7 @@ function createMockRuleAddTool(): AgentTool {
             properties: {
                 name: { type: 'string', description: '规则名称。' },
                 urlPattern: { type: 'string', description: 'URL 匹配正则或字符串。' },
-                query: { type: 'string', description: '可选 query 匹配条件（URL search 子串，如 window_key=A）。' },
+                query: { type: 'string', description: '可选 query 匹配条件（精确 key=value 参数边界，如 window_key=A，不会前缀匹配 AB）。' },
                 method: { type: 'string', description: 'HTTP 方法，如 GET、POST、*。默认 *。' },
                 statusCode: { type: 'number', description: '响应状态码，默认 200。' },
                 delay: { type: 'number', description: '延迟毫秒数，默认 0。' },
@@ -821,7 +821,7 @@ function createMockRuleUpdateTool(): AgentTool {
                 id: { type: 'number', description: '要更新的 Mock 规则 ID。' },
                 name: { type: 'string', description: '规则名称。' },
                 urlPattern: { type: 'string', description: 'URL 匹配正则或字符串。' },
-                query: { type: 'string', description: '可选 query 匹配条件（URL search 子串，如 window_key=A）。' },
+                query: { type: 'string', description: '可选 query 匹配条件（精确 key=value 参数边界，如 window_key=A，不会前缀匹配 AB）。' },
                 method: { type: 'string', description: 'HTTP 方法，如 GET、POST、*。' },
                 statusCode: { type: 'number', description: '响应状态码。' },
                 delay: { type: 'number', description: '延迟毫秒数。' },

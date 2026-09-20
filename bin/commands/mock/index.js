@@ -35,7 +35,7 @@ Mock Commands:
 Add / Update Options:
   --name <n>       Rule name
   --pattern <p>    URL pattern (regex or string; may include query)
-  --query <q>      Query match condition (URL search substring, e.g. window_key=A)
+  --query <q>      Query match (exact key=value params, e.g. window_key=A; not prefix)
   --method <m>     HTTP method (GET, POST, *, default: *)
   --status <s>     Response status code (default: 200)
   --body <b>       Response body content

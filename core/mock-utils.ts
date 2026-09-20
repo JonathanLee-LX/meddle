@@ -22,16 +22,29 @@ export function matchUrlPattern(url: string, pattern: string): boolean {
 }
 
 /**
- * Optional query condition: every `&`-separated token must appear as a substring
- * of the URL search string. Example: `window_key=A` or `window_key=A&env=prod`.
+ * Optional query condition: every `&`-separated token must match an exact
+ * `key=value` parameter in the URL search (URLSearchParams / `&`-boundary
+ * semantics). Example: `window_key=A` matches `?window_key=A&x=1` but not
+ * `?window_key=AB`. Multi-token `a=1&b=2` requires all pairs.
  * Empty/undefined query matches any request.
  */
 export function matchQueryCondition(url: string, query?: string | null): boolean {
     if (query == null || query === '') return true
-    const search = extractUrlSearch(url)
     const tokens = String(query).split('&').map((t) => t.trim()).filter(Boolean)
     if (tokens.length === 0) return true
-    return tokens.every((token) => search.includes(token))
+
+    const actual = new URLSearchParams(extractUrlSearch(url))
+    return tokens.every((token) => {
+        const eq = token.indexOf('=')
+        if (eq === -1) {
+            // Bare key: require the parameter to be present (any value).
+            return actual.has(token)
+        }
+        // Parse via URLSearchParams so encoding/decoding stays consistent.
+        const entries = [...new URLSearchParams(token).entries()]
+        if (entries.length === 0) return false
+        return entries.every(([key, value]) => actual.getAll(key).includes(value))
+    })
 }
 
 /** Read Origin from request headers (case-insensitive). Falls back to `*`. */
