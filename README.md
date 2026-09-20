@@ -36,7 +36,7 @@ irm https://raw.githubusercontent.com/JonathanLee-LX/meddle/main/scripts/install
 
 二进制产物随 [GitHub Release](https://github.com/JonathanLee-LX/meddle/releases) 发布，也可手动下载。安装目录默认 `~/.local/bin`（已有 `~/.meddle/bin` 旧安装时原地升级），可通过 `MEDDLE_BIN_DIR` 环境变量自定义。`meddle update` 始终更新到当前运行二进制所在目录。
 
-**私有仓库：** `meddle update` / 安装脚本下载 Release 资产时会读取 `GH_TOKEN`（优先）或 `GITHUB_TOKEN`（`repo` 或 fine-grained `contents:read`）。未设置 token 时私有仓会表现为 404（checksum sidecar missing）。也可手动：`gh release download -R JonathanLee-LX/meddle -p 'meddle-*'`。
+**私有仓库：** `meddle update`（含 `meddle update --beta`）/ 安装脚本下载 Release 资产时会读取 `GH_TOKEN`（优先）或 `GITHUB_TOKEN`（`repo` 或 fine-grained `contents:read`）。私有仓安装后升级也需要设置 token；未设置时会表现为 404（checksum sidecar missing）。也可手动：`gh release download -R JonathanLee-LX/meddle -p 'meddle-*'`。
 
 ### 命令
 
