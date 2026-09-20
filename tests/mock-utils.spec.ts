@@ -55,6 +55,25 @@ describe('mock-utils', () => {
             expect(matchQueryCondition(urlA, 'window_key=A&extra=1')).toBe(true)
             expect(matchQueryCondition(urlA, 'window_key=A&extra=2')).toBe(false)
         })
+
+        it('does not prefix-match values (A vs AB)', () => {
+            const urlAB = 'https://plus.wps.cn/ops/opsd/api/v3/policy?window_key=AB'
+            expect(matchQueryCondition(urlAB, 'window_key=A')).toBe(false)
+            expect(matchQueryCondition(urlAB, 'window_key=AB')).toBe(true)
+            expect(matchQueryCondition(urlA, 'window_key=A')).toBe(true)
+            // Value A must not match when it is only a prefix of another param value
+            expect(matchQueryCondition('https://a.com/p?window_key=ABC&x=1', 'window_key=A')).toBe(false)
+            expect(matchQueryCondition('https://a.com/p?window_key=A&window_key=AB', 'window_key=A')).toBe(true)
+        })
+
+        it('does not match key as substring of another key', () => {
+            expect(matchQueryCondition('https://a.com/p?my_window_key=A', 'window_key=A')).toBe(false)
+            expect(matchQueryCondition('https://a.com/p?window_key=A', 'window_key=A')).toBe(true)
+        })
+
+        it('matches params regardless of order', () => {
+            expect(matchQueryCondition('https://a.com/p?b=2&a=1', 'a=1&b=2')).toBe(true)
+        })
     })
 
     describe('getRequestOrigin / resolveHeaderPlaceholders', () => {

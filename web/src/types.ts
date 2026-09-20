@@ -59,7 +59,7 @@ export interface MockRule {
   id: number
   name: string
   urlPattern: string
-  /** Optional query condition (URL search substring tokens). */
+  /** Optional query condition (exact key=value params / parameter-boundary match). */
   query?: string
   method: string
   statusCode: number

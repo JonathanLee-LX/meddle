@@ -184,7 +184,7 @@ meddle mock add --name "API Mock" --pattern "/api/user" --method GET --status 20
 **Options:**
 - `--name <name>` - Rule name (required)
 - `--pattern <pattern>` - URL pattern (required; may include query in the regex)
-- `--query <query>` - Optional query match condition (URL search substring tokens, e.g. `window_key=A` or `window_key=A&env=prod`)
+- `--query <query>` - Optional query match condition (exact `key=value` params / `&`-boundary; e.g. `window_key=A` or `window_key=A&env=prod`; does not prefix-match values)
 - `--method <method>` - HTTP method (GET/POST/PUT/DELETE/*) (default: `*`)
 - `--status <code>` - Status code (default: `200`)
 - `--body <body>` - Response body

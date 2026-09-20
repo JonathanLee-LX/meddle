@@ -613,7 +613,7 @@ export interface MockRuleEntry {
     id: number;
     name: string;
     urlPattern: string;
-    /** Optional query condition (substring tokens in URL search). Same path, different query → different mocks. */
+    /** Optional query condition (exact key=value params in URL search). Same path, different query → different mocks. */
     query?: string;
     method: string;
     statusCode: number;

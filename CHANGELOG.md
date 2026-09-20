@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - CLI help documents existing `--headers` (JSON); invalid JSON now errors instead of silently clearing headers.
   - Web Mock editor exposes optional Query field; header values may use `{origin}`.
 
+### Fixed
+
+- Mock `--query` / rule `query` matching uses parameter-boundary semantics (URLSearchParams / exact `key=value` tokens) so `window_key=A` no longer falsely matches `window_key=AB` (follow-up to #76/#77).
+
 ## [0.5.0-beta.9] - 2026-09-16
 
 ### Fixed

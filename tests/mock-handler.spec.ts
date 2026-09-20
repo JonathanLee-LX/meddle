@@ -109,6 +109,20 @@ describe('mock-handler createMockHandler', () => {
             expect(handler.matchMockRule(urlB, 'GET')!.body).toBe('{"k":"B"}')
         })
 
+        it('query match is parameter-boundary safe (A does not match AB)', () => {
+            const ctx = makeCtx({ meddleDir: tmpDir })
+            const handler = createMockHandler(ctx)
+            ctx.mockRules = [
+                { id: 1, name: 'A', urlPattern: '/ops/.*/policy', query: 'window_key=A', method: 'GET', enabled: true, statusCode: 200, delay: 0, bodyType: 'inline', headers: {}, body: '{"k":"A"}' },
+                { id: 2, name: 'AB', urlPattern: '/ops/.*/policy', query: 'window_key=AB', method: 'GET', enabled: true, statusCode: 200, delay: 0, bodyType: 'inline', headers: {}, body: '{"k":"AB"}' },
+            ]
+            const urlA = 'https://plus.wps.cn/ops/opsd/api/v3/policy?window_key=A'
+            const urlAB = 'https://plus.wps.cn/ops/opsd/api/v3/policy?window_key=AB'
+            expect(handler.matchMockRule(urlA, 'GET')!.id).toBe(1)
+            expect(handler.matchMockRule(urlAB, 'GET')!.id).toBe(2)
+            expect(handler.matchMockRule(urlAB, 'GET')!.body).toBe('{"k":"AB"}')
+        })
+
         it('matches query embedded in urlPattern regex', () => {
             const ctx = makeCtx({ meddleDir: tmpDir })
             const handler = createMockHandler(ctx)
