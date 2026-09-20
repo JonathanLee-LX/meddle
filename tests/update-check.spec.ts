@@ -18,6 +18,8 @@ import {
     setAutoUpdate,
     runAsyncUpdateCheck,
     resolveUpdateBinDir,
+    resolveGithubToken,
+    githubAuthHeaders,
 } from '../bin/lib/update-check'
 
 const servers: http.Server[] = []
@@ -34,6 +36,8 @@ afterEach(async () => {
         fs.rmSync(d, { recursive: true, force: true })
     }
     delete process.env.MEDDLE_AUTO_UPDATE
+    delete process.env.GH_TOKEN
+    delete process.env.GITHUB_TOKEN
 })
 
 function makeTmpDir() {
@@ -523,6 +527,23 @@ describe('getAssetName', () => {
     })
 })
 
+
+describe('resolveGithubToken', () => {
+    it('prefers GH_TOKEN over GITHUB_TOKEN', () => {
+        process.env.GITHUB_TOKEN = 'github'
+        process.env.GH_TOKEN = 'gh'
+        expect(resolveGithubToken()).toBe('gh')
+        expect(githubAuthHeaders(resolveGithubToken())).toEqual({ Authorization: 'Bearer gh' })
+    })
+
+    it('falls back to GITHUB_TOKEN and accepts explicit override', () => {
+        process.env.GITHUB_TOKEN = 'github'
+        expect(resolveGithubToken()).toBe('github')
+        expect(resolveGithubToken('  explicit  ')).toBe('explicit')
+        expect(githubAuthHeaders('')).toEqual({})
+    })
+})
+
 describe('downloadBinaryAsset', () => {
     const makeFixture = async () => {
         const payload = crypto.randomBytes(256)
@@ -608,9 +629,64 @@ describe('downloadBinaryAsset', () => {
                 arch: 'x64',
                 baseUrl: s.url,
             }),
-        ).rejects.toThrow()
+        ).rejects.toThrow(/checksum sidecar missing \(404\).*GH_TOKEN/)
         expect(fs.existsSync(destFile)).toBe(false)
     })
+
+
+    it('sends Authorization Bearer when GH_TOKEN is set', async () => {
+        process.env.GH_TOKEN = 'ghp_test_token'
+        const payload = crypto.randomBytes(64)
+        const hash = crypto.createHash('sha256').update(payload).digest('hex')
+        const dir = makeTmpDir()
+        const destFile = path.join(dir, 'meddle')
+        const authSeen: string[] = []
+        const s = await jsonServer((req, res) => {
+            authSeen.push(String(req.headers.authorization || ''))
+            if (req.url === '/v1.2.3/meddle-linux-x64') {
+                res.end(payload)
+            } else if (req.url === '/v1.2.3/meddle-linux-x64.sha256') {
+                res.end(`${hash}  meddle-linux-x64\n`)
+            } else {
+                res.statusCode = 404
+                res.end()
+            }
+        })
+        await downloadBinaryAsset({
+            version: '1.2.3',
+            destFile,
+            platform: 'linux',
+            arch: 'x64',
+            baseUrl: s.url,
+        })
+        expect(authSeen.length).toBeGreaterThanOrEqual(2)
+        expect(authSeen.every((h) => h === 'Bearer ghp_test_token')).toBe(true)
+        expect(fs.readFileSync(destFile)).toEqual(payload)
+    })
+
+    it('prefers explicit githubToken over env and skips private-auth hint when tokened 404', async () => {
+        process.env.GH_TOKEN = 'env-token'
+        const dir = makeTmpDir()
+        const destFile = path.join(dir, 'meddle')
+        const authSeen: string[] = []
+        const s = await jsonServer((req, res) => {
+            authSeen.push(String(req.headers.authorization || ''))
+            res.statusCode = 404
+            res.end()
+        })
+        await expect(
+            downloadBinaryAsset({
+                version: '1.2.3',
+                destFile,
+                platform: 'linux',
+                arch: 'x64',
+                baseUrl: s.url,
+                githubToken: 'explicit-token',
+            }),
+        ).rejects.toThrow(/^checksum sidecar missing \(404\)$/)
+        expect(authSeen[0]).toBe('Bearer explicit-token')
+    })
+
 
     it('retries the payload download when the first attempt fails mid-body', async () => {
         const { payload, hash } = await makeFixture()

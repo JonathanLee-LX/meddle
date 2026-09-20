@@ -77,6 +77,10 @@ meddle update - 检查并升级 meddle
   meddle update --auto on|off     启用/禁用自动更新 (默认关闭)
   meddle update status            查看安装方式、当前版本和自动更新开关
   meddle update --help, -h        显示帮助
+
+私有仓库二进制更新需要设置 GH_TOKEN 或 GITHUB_TOKEN（优先 GH_TOKEN；
+权限：repo，或 fine-grained contents:read）。也可：
+  gh release download -R JonathanLee-LX/meddle -p 'meddle-*'
 `)
 }
 

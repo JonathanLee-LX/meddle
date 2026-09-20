@@ -27,6 +27,58 @@ const DEFAULT_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const DEFAULT_TIMEOUT_MS = 5000
 const DEFAULT_DOWNLOAD_TIMEOUT_MS = 120 * 1000
 
+/**
+ * Resolve a GitHub token for private release downloads / latest redirects.
+ * Precedence: explicit argument → GH_TOKEN → GITHUB_TOKEN.
+ * @param {string} [explicit]
+ * @returns {string}
+ */
+function resolveGithubToken(explicit) {
+    if (typeof explicit === 'string' && explicit.trim()) return explicit.trim()
+    const gh = process.env.GH_TOKEN
+    if (typeof gh === 'string' && gh.trim()) return gh.trim()
+    const github = process.env.GITHUB_TOKEN
+    if (typeof github === 'string' && github.trim()) return github.trim()
+    return ''
+}
+
+/**
+ * @param {string} token
+ * @returns {Record<string, string>}
+ */
+function githubAuthHeaders(token) {
+    if (!token) return {}
+    // GitHub accepts Bearer for PATs / fine-grained tokens on release asset URLs.
+    return { Authorization: `Bearer ${token}` }
+}
+
+function privateReleaseAuthHint() {
+    return (
+        'Private GitHub releases require GH_TOKEN or GITHUB_TOKEN '
+        + '(scope: repo, or fine-grained contents:read). '
+        + `Or: gh release download -R ${REPO} -p 'meddle-*'`
+    )
+}
+
+/**
+ * @param {'checksum' | 'download'} kind
+ * @param {number} status
+ * @param {boolean} hadToken
+ * @returns {string}
+ */
+function formatDownloadStatusError(kind, status, hadToken) {
+    const base = kind === 'checksum'
+        ? `checksum sidecar missing (${status})`
+        : `download failed (${status})`
+    if ((status === 404 || status === 401 || status === 403) && !hadToken) {
+        return `${base}. ${privateReleaseAuthHint()}`
+    }
+    if ((status === 401 || status === 403) && hadToken) {
+        return `${base}. Token may lack repo/contents:read access to ${REPO}`
+    }
+    return base
+}
+
 const VERSION_RE = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/
 
 /**
@@ -120,12 +172,14 @@ async function getLatestVersionNpm({ fetchImpl, registryUrl, timeoutMs, distTag 
  * @param {{ fetchImpl?: Function, latestUrl?: string, timeoutMs?: number }} opts
  * @returns {Promise<string>}
  */
-async function getLatestVersionGithub({ fetchImpl, latestUrl, timeoutMs } = {}) {
+async function getLatestVersionGithub({ fetchImpl, latestUrl, timeoutMs, githubToken } = {}) {
     const doFetch = fetchImpl || fetch
     const url = latestUrl || process.env.MEDDLE_GITHUB_LATEST_URL || DEFAULT_GITHUB_LATEST_URL
+    const token = resolveGithubToken(githubToken)
     const response = await doFetch(url, {
         redirect: 'manual',
         signal: AbortSignal.timeout(timeoutMs || DEFAULT_TIMEOUT_MS),
+        headers: githubAuthHeaders(token),
     })
     if (response.status < 300 || response.status >= 400) {
         throw new Error(`GitHub latest release did not redirect (${response.status})`)
@@ -287,7 +341,7 @@ function sha256Hex(buffer) {
  *           baseUrl?: string, fetchImpl?: Function, timeoutMs?: number,
  *           retries?: number, retryDelayMs?: number,
  *           onProgress?: Function, onAttempt?: Function,
- *           fsImpl?: object }} opts
+ *           githubToken?: string, fsImpl?: object }} opts
  * @returns {Promise<{ installed: string, backup: string, version: string }>}
  */
 async function downloadBinaryAsset(opts) {
@@ -300,6 +354,8 @@ async function downloadBinaryAsset(opts) {
     const retryDelayMs = opts.retryDelayMs === undefined ? 1000 : opts.retryDelayMs
     const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : () => {}
     const onAttempt = typeof opts.onAttempt === 'function' ? opts.onAttempt : () => {}
+    const token = resolveGithubToken(opts.githubToken)
+    const authHeaders = githubAuthHeaders(token)
 
     const asset = getAssetName({ platform, arch })
     const assetUrl = `${baseUrl}/v${version}/${asset}`
@@ -327,8 +383,8 @@ async function downloadBinaryAsset(opts) {
             }
             resetIdle()
             try {
-                const response = await doFetch(assetUrl, { signal: controller.signal })
-                if (!response.ok) throw new Error(`download failed (${response.status})`)
+                const response = await doFetch(assetUrl, { signal: controller.signal, headers: authHeaders })
+                if (!response.ok) throw new Error(formatDownloadStatusError('download', response.status, Boolean(token)))
                 const total = Number(response.headers.get('content-length')) || 0
                 const chunks = []
                 let received = 0
@@ -365,8 +421,11 @@ async function downloadBinaryAsset(opts) {
     // download — otherwise the sidecar body stream aborts before it is read
     // and the whole install fails with "operation aborted" right after the
     // payload reached 100%.
-    const shaResponse = await doFetch(shaUrl, { signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS) })
-    if (!shaResponse.ok) throw new Error(`checksum sidecar missing (${shaResponse.status})`)
+    const shaResponse = await doFetch(shaUrl, {
+        signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+        headers: authHeaders,
+    })
+    if (!shaResponse.ok) throw new Error(formatDownloadStatusError('checksum', shaResponse.status, Boolean(token)))
     const shaText = await shaResponse.text()
 
     const payload = await fetchPayload()
@@ -559,5 +618,7 @@ module.exports = {
     setAutoUpdate,
     resolveUpdateBinDir,
     runAsyncUpdateCheck,
+    resolveGithubToken,
+    githubAuthHeaders,
     DEFAULT_DOWNLOAD_TIMEOUT_MS,
 }
