@@ -1,4 +1,5 @@
 import { Plugin, MockPluginOptions, HookContext } from '../../core/types';
+import { resolveHeaderPlaceholders, mergeResponseHeaders } from '../../core/mock-utils';
 
 /**
  * 检测响应体的 Content-Type
@@ -87,7 +88,7 @@ export function createBuiltinMockPlugin(options: MockPluginOptions): Plugin {
                 ? undefined  // 保留 rule.headers 中的 Content-Type
                 : detectContentType(rule.body || '');
             
-            const responseHeaders: Record<string, string> = {
+            const defaults: Record<string, string> = {
                 'X-Mock-Rule': encodeURIComponent(rule.name || String(rule.id || '')),
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Methods': '*',
@@ -96,15 +97,18 @@ export function createBuiltinMockPlugin(options: MockPluginOptions): Plugin {
             
             // 如果没有自定义 Content-Type，则使用检测到的类型
             if (contentType) {
-                responseHeaders['Content-Type'] = contentType;
+                defaults['Content-Type'] = contentType;
             }
             
-            // 合并自定义响应头（会覆盖默认的 Content-Type）
-            Object.assign(responseHeaders, ruleHeaders);
+            // 合并自定义响应头（会覆盖默认头），并解析 {origin} 占位符
+            const resolvedHeaders = resolveHeaderPlaceholders(
+                mergeResponseHeaders(defaults, ruleHeaders),
+                ctx.request.headers,
+            );
             
             ctx.respond({
                 statusCode: rule.statusCode || 200,
-                headers: responseHeaders,
+                headers: resolvedHeaders,
                 body: rule.body || '',
             });
         },

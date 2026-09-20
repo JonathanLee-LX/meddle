@@ -437,6 +437,7 @@ export interface MockRule {
     statusCode?: number;
     headers?: Record<string, string>;
     body?: string;
+    query?: string;
 }
 
 export interface LoggerEntry {
@@ -612,6 +613,8 @@ export interface MockRuleEntry {
     id: number;
     name: string;
     urlPattern: string;
+    /** Optional query condition (substring tokens in URL search). Same path, different query → different mocks. */
+    query?: string;
     method: string;
     statusCode: number;
     delay: number;
@@ -648,7 +651,7 @@ export interface MockHandler {
     loadMockRules(): void;
     saveMockRules(): void;
     matchMockRule(url: string, method: string): MockRuleEntry | null;
-    buildMockResponseForTest(rule: MockRuleEntry): { statusCode: number; headers: Record<string, string>; body: string };
+    buildMockResponseForTest(rule: MockRuleEntry, requestHeaders?: Record<string, any>): { statusCode: number; headers: Record<string, string>; body: string };
     sendMockResponse(req: any, res: any, rule: MockRuleEntry, logInfo: { method: string; source: string; target: string }): void;
     loadCustomPathsFromSettings(): { mocksFilePath: string | null };
 }

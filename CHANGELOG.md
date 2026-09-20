@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0-beta.10] - 2026-09-20
+
+### Added
+
+- Mock query matching + credentials CORS (#76):
+  - Rule field `query` / CLI `--query` — same path, different query (e.g. `window_key=A` vs `B`) can return different mock bodies. `urlPattern` may also include query in the regex.
+  - Header value placeholder `{origin}` echoes the request `Origin` at response time (credentials-friendly CORS across multiple page origins without editing rules mid-session).
+  - CLI `--cors` shortcut installs `Access-Control-Allow-Origin: {origin}`, `Allow-Credentials: true`, and Methods/Headers `*`.
+  - CLI help documents existing `--headers` (JSON); invalid JSON now errors instead of silently clearing headers.
+  - Web Mock editor exposes optional Query field; header values may use `{origin}`.
+
 ## [0.5.0-beta.9] - 2026-09-16
 
 ### Fixed

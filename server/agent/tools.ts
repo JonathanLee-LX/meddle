@@ -247,6 +247,7 @@ function normalizeMockRuleInput(input: Record<string, unknown>, requirePattern: 
     const data: MockRuleInput = {}
     if (input.name !== undefined) data.name = asString(input.name, 'name')
     if (input.urlPattern !== undefined) data.urlPattern = asString(input.urlPattern, 'urlPattern')
+    if (input.query !== undefined) data.query = asString(input.query, 'query')
     if (input.method !== undefined) data.method = asString(input.method, 'method').toUpperCase()
     if (input.statusCode !== undefined) data.statusCode = asOptionalNumber(input.statusCode, 'statusCode')
     if (input.delay !== undefined) data.delay = asOptionalNumber(input.delay, 'delay')
@@ -775,6 +776,7 @@ function createMockRuleAddTool(): AgentTool {
             properties: {
                 name: { type: 'string', description: '规则名称。' },
                 urlPattern: { type: 'string', description: 'URL 匹配正则或字符串。' },
+                query: { type: 'string', description: '可选 query 匹配条件（URL search 子串，如 window_key=A）。' },
                 method: { type: 'string', description: 'HTTP 方法，如 GET、POST、*。默认 *。' },
                 statusCode: { type: 'number', description: '响应状态码，默认 200。' },
                 delay: { type: 'number', description: '延迟毫秒数，默认 0。' },
@@ -819,6 +821,7 @@ function createMockRuleUpdateTool(): AgentTool {
                 id: { type: 'number', description: '要更新的 Mock 规则 ID。' },
                 name: { type: 'string', description: '规则名称。' },
                 urlPattern: { type: 'string', description: 'URL 匹配正则或字符串。' },
+                query: { type: 'string', description: '可选 query 匹配条件（URL search 子串，如 window_key=A）。' },
                 method: { type: 'string', description: 'HTTP 方法，如 GET、POST、*。' },
                 statusCode: { type: 'number', description: '响应状态码。' },
                 delay: { type: 'number', description: '延迟毫秒数。' },

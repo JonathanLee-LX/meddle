@@ -183,12 +183,14 @@ meddle mock add --name "API Mock" --pattern "/api/user" --method GET --status 20
 
 **Options:**
 - `--name <name>` - Rule name (required)
-- `--pattern <pattern>` - URL pattern (required)
+- `--pattern <pattern>` - URL pattern (required; may include query in the regex)
+- `--query <query>` - Optional query match condition (URL search substring tokens, e.g. `window_key=A` or `window_key=A&env=prod`)
 - `--method <method>` - HTTP method (GET/POST/PUT/DELETE/*) (default: `*`)
 - `--status <code>` - Status code (default: `200`)
 - `--body <body>` - Response body
 - `--delay <ms>` - Response delay (default: `0`)
-- `--headers <json>` - Response headers (JSON string)
+- `--headers <json>` - Response headers (JSON string; values may use `{origin}` to echo request Origin)
+- `--cors` - Shortcut for credentials-friendly CORS headers (`Access-Control-Allow-Origin: {origin}`, `Allow-Credentials: true`, Methods/Headers `*`)
 - `--json` - JSON format output
 
 **Example:**
@@ -201,6 +203,14 @@ meddle mock add \
   --body '{"token":"abc123"}' \
   --headers '{"Content-Type":"application/json"}' \
   --delay 50
+
+# Same path, different query → different body + credentials CORS
+meddle mock add \
+  --name "Policy A" \
+  --pattern "/ops/.*/policy" \
+  --query "window_key=A" \
+  --body '{"key":"A"}' \
+  --cors
 ```
 
 ### meddle mock update

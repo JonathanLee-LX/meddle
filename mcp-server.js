@@ -405,6 +405,7 @@ mcpServer.registerTool('mock_rule_add', {
         session: z.string().optional().describe('目标 session id，不传则操作默认 session'),
         name: z.string().describe('规则名称，便于识别'),
         urlPattern: z.string().describe('URL 匹配正则或字符串，如 example\\.com/api 或 .*\\.example\\.com'),
+        query: z.string().optional().describe('可选 query 匹配条件（URL search 子串，如 window_key=A）；响应头可用 {origin} 回显 Origin'),
         method: z.string().optional().describe('HTTP 方法，如 GET、POST、* 表示全部，默认 *'),
         statusCode: z.number().optional().describe('响应状态码，默认 200'),
         headers: z.record(z.string()).optional().describe('响应头，如 {"content-type":"application/json"}'),
@@ -419,6 +420,7 @@ mcpServer.registerTool('mock_rule_add', {
         const body = {
             name: rest.name ?? '',
             urlPattern: rest.urlPattern ?? '',
+            query: rest.query ?? '',
             method: rest.method ?? '*',
             statusCode: rest.statusCode ?? 200,
             delay: rest.delay ?? 0,
@@ -444,6 +446,7 @@ mcpServer.registerTool('mock_rule_update', {
         id: z.number().describe('规则 id，从 mock_rule_list 获取'),
         name: z.string().optional(),
         urlPattern: z.string().optional(),
+        query: z.string().optional().describe('可选 query 匹配条件'),
         method: z.string().optional(),
         statusCode: z.number().optional(),
         headers: z.record(z.string()).optional(),

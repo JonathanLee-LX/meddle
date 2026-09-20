@@ -93,6 +93,33 @@ describe('mock-handler createMockHandler', () => {
             expect(handler.matchMockRule('url-with-[invalid-pattern', 'GET')).toBeTruthy()
             expect(handler.matchMockRule('https://clean.com', 'GET')).toBe(null)
         })
+
+        it('matches same path with different query via rule.query', () => {
+            const ctx = makeCtx({ meddleDir: tmpDir })
+            const handler = createMockHandler(ctx)
+            ctx.mockRules = [
+                { id: 1, name: 'A', urlPattern: '/ops/.*/policy', query: 'window_key=A', method: 'GET', enabled: true, statusCode: 200, delay: 0, bodyType: 'inline', headers: {}, body: '{"k":"A"}' },
+                { id: 2, name: 'B', urlPattern: '/ops/.*/policy', query: 'window_key=B', method: 'GET', enabled: true, statusCode: 200, delay: 0, bodyType: 'inline', headers: {}, body: '{"k":"B"}' },
+            ]
+            const urlA = 'https://plus.wps.cn/ops/opsd/api/v3/policy?window_key=A'
+            const urlB = 'https://plus.wps.cn/ops/opsd/api/v3/policy?window_key=B'
+            expect(handler.matchMockRule(urlA, 'GET')!.id).toBe(1)
+            expect(handler.matchMockRule(urlB, 'GET')!.id).toBe(2)
+            expect(handler.matchMockRule(urlA, 'GET')!.body).toBe('{"k":"A"}')
+            expect(handler.matchMockRule(urlB, 'GET')!.body).toBe('{"k":"B"}')
+        })
+
+        it('matches query embedded in urlPattern regex', () => {
+            const ctx = makeCtx({ meddleDir: tmpDir })
+            const handler = createMockHandler(ctx)
+            ctx.mockRules = [
+                { id: 1, name: 'Banner', urlPattern: 'policy\\?window_key=open_recharge_activity_banner', method: '*', enabled: true, statusCode: 200, delay: 0, bodyType: 'inline', headers: {}, body: '{"banner":true}' },
+            ]
+            const hit = 'https://plus.wps.cn/ops/opsd/api/v3/policy?window_key=open_recharge_activity_banner'
+            const miss = 'https://plus.wps.cn/ops/opsd/api/v3/policy?window_key=other'
+            expect(handler.matchMockRule(hit, 'GET')).toBeTruthy()
+            expect(handler.matchMockRule(miss, 'GET')).toBe(null)
+        })
     })
 
     describe('buildMockResponseForTest', () => {
@@ -129,6 +156,23 @@ describe('mock-handler createMockHandler', () => {
             const rule = { id: 5, name: 'MyRule', urlPattern: '.*', method: '*', enabled: true, statusCode: 200, delay: 0, bodyType: 'inline', headers: {}, body: '' }
             const resp = handler.buildMockResponseForTest(rule)
             expect(resp.headers['x-mock-rule']).toBe('MyRule')
+        })
+
+        it('resolves {origin} placeholder from request headers', () => {
+            const ctx = makeCtx({ meddleDir: tmpDir })
+            const handler = createMockHandler(ctx)
+            const rule = {
+                id: 1, name: 'CORS', urlPattern: '.*', method: '*', enabled: true, statusCode: 200, delay: 0,
+                bodyType: 'inline',
+                headers: {
+                    'Access-Control-Allow-Origin': '{origin}',
+                    'Access-Control-Allow-Credentials': 'true',
+                },
+                body: '{}',
+            }
+            const resp = handler.buildMockResponseForTest(rule, { origin: 'https://open.wps.cn' })
+            expect(resp.headers['access-control-allow-origin']).toBe('https://open.wps.cn')
+            expect(resp.headers['access-control-allow-credentials']).toBe('true')
         })
     })
 
@@ -248,6 +292,42 @@ describe('mock-handler createMockHandler', () => {
             expect(detail?.inspection?.stages[0].changes?.responseHeadersAfter?.['x-mock-rule']).toBe('MockRule')
             expect(detail?.inspection?.stages[0].changes?.responseBodyBefore).toBe('')
             expect(detail?.inspection?.stages[0].changes?.responseBodyAfter).toBe('{"ok":true}')
+        })
+
+        it('echoes request Origin when header value is {origin}', () => {
+            const ctx = makeCtx({ meddleDir: tmpDir })
+            const handler = createMockHandler(ctx)
+            const rule = {
+                id: 1,
+                name: 'CorsEcho',
+                urlPattern: '.*',
+                method: 'GET',
+                enabled: true,
+                statusCode: 200,
+                delay: 0,
+                bodyType: 'inline',
+                headers: {
+                    'Access-Control-Allow-Origin': '{origin}',
+                    'Access-Control-Allow-Credentials': 'true',
+                },
+                body: '{"ok":true}',
+            }
+            let writtenHeaders: Record<string, string> = {}
+            handler.sendMockResponse(
+                {
+                    headers: { host: 'plus.wps.cn', origin: 'https://solution.wps.cn' },
+                    on: () => {},
+                    resume: () => {},
+                },
+                {
+                    writeHead: (_status: number, headers: Record<string, string>) => { writtenHeaders = headers },
+                    end: () => {},
+                },
+                rule as any,
+                { method: 'GET', source: 'https://plus.wps.cn/api', target: 'https://plus.wps.cn/api' },
+            )
+            expect(writtenHeaders['access-control-allow-origin'] || writtenHeaders['Access-Control-Allow-Origin']).toBe('https://solution.wps.cn')
+            expect(writtenHeaders['access-control-allow-credentials'] || writtenHeaders['Access-Control-Allow-Credentials']).toBe('true')
         })
     })
 })

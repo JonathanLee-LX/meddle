@@ -69,4 +69,35 @@ describe('builtin mock plugin', () => {
         })
         expect(calledAt - start >= 10).toBeTruthy()
     })
+
+    it('resolves {origin} placeholder for credentials CORS', async () => {
+        const plugin = createBuiltinMockPlugin({
+            findMatch: () => ({
+                id: 4,
+                name: 'cors',
+                statusCode: 200,
+                headers: {
+                    'Access-Control-Allow-Origin': '{origin}',
+                    'Access-Control-Allow-Credentials': 'true',
+                },
+                bodyType: 'inline',
+                body: '{"ok":true}',
+            }),
+        })
+        let shortRes: any = null
+        await plugin.onBeforeProxy({
+            request: {
+                method: 'GET',
+                url: 'https://plus.wps.cn/api',
+                headers: { origin: 'https://open.wps.cn' },
+            },
+            meta: {},
+            respond(res: any) {
+                shortRes = res
+            },
+        } as any)
+        expect(shortRes).toBeTruthy()
+        expect(shortRes.headers['Access-Control-Allow-Origin'] || shortRes.headers['access-control-allow-origin']).toBe('https://open.wps.cn')
+        expect(shortRes.headers['Access-Control-Allow-Credentials'] || shortRes.headers['access-control-allow-credentials']).toBe('true')
+    })
 })
