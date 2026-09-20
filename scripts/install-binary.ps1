@@ -28,6 +28,10 @@ if ($Version -eq "latest") {
 $Tag = "v$Version"
 $Url = "https://github.com/$Repo/releases/download/$Tag/$Asset"
 $ShaUrl = "$Url.sha256"
+# Prefer GH_TOKEN, then GITHUB_TOKEN (private release assets).
+$Token = if ($env:GH_TOKEN) { $env:GH_TOKEN } elseif ($env:GITHUB_TOKEN) { $env:GITHUB_TOKEN } else { "" }
+$Headers = @{}
+if ($Token) { $Headers["Authorization"] = "Bearer $Token" }
 
 Write-Host "Installing meddle $Tag (windows-$Arch)..."
 
@@ -41,10 +45,15 @@ Write-Host "Downloading $Url..."
 $retries = 3
 for ($i = 1; $i -le $retries; $i++) {
     try {
-        Invoke-WebRequest -Uri $Url -OutFile $TmpFile -UseBasicParsing
+        Invoke-WebRequest -Uri $Url -OutFile $TmpFile -UseBasicParsing -Headers $Headers
         break
     } catch {
-        if ($i -eq $retries) { throw }
+        if ($i -eq $retries) {
+            if (-not $Token) {
+                Write-Error "Download failed. Private releases need GH_TOKEN or GITHUB_TOKEN (repo / contents:read), or: gh release download $Tag -R $Repo -p '$Asset*'"
+            }
+            throw
+        }
         Write-Host "Retry $i/$retries..."
         Start-Sleep -Seconds 2
     }
@@ -52,7 +61,7 @@ for ($i = 1; $i -le $retries; $i++) {
 
 Write-Host "Verifying checksum..."
 try {
-    $expectedSha = (Invoke-WebRequest -Uri $ShaUrl -UseBasicParsing).Content.Trim().Split(" ")[0]
+    $expectedSha = (Invoke-WebRequest -Uri $ShaUrl -UseBasicParsing -Headers $Headers).Content.Trim().Split(" ")[0]
     $actualSha = (Get-FileHash -Path $TmpFile -Algorithm SHA256).Hash.ToLower()
     if ($actualSha -ne $expectedSha) {
         Write-Error "Checksum mismatch! Expected: $expectedSha, Got: $actualSha"

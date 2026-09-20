@@ -42,6 +42,12 @@ fi
 TAG="v${VERSION}"
 URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET}"
 SHA_URL="${URL}.sha256"
+# Prefer GH_TOKEN, then GITHUB_TOKEN (private release assets).
+TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+AUTH_ARGS=()
+if [ -n "$TOKEN" ]; then
+    AUTH_ARGS=(-H "Authorization: Bearer ${TOKEN}")
+fi
 
 echo "==> Installing meddle ${TAG} (${OS_TAG}/${ARCH_TAG})"
 
@@ -50,10 +56,18 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
 echo "    Downloading ${ASSET}..."
-curl -fL --retry 3 --progress-bar -o "${TMP}/${ASSET}" "$URL"
+if ! curl -fL --retry 3 --progress-bar "${AUTH_ARGS[@]}" -o "${TMP}/${ASSET}" "$URL"; then
+    if [ -z "$TOKEN" ]; then
+        echo "error: download failed (HTTP error). Private releases need GH_TOKEN or GITHUB_TOKEN (repo / contents:read)," >&2
+        echo "       or: gh release download ${TAG} -R ${REPO} -p '${ASSET}*'" >&2
+    else
+        echo "error: download failed; token may lack repo/contents:read access to ${REPO}" >&2
+    fi
+    exit 1
+fi
 
 printf "    Verifying checksum..."
-if curl -fsSL --retry 3 -o "${TMP}/${ASSET}.sha256" "$SHA_URL" 2>/dev/null; then
+if curl -fsSL --retry 3 "${AUTH_ARGS[@]}" -o "${TMP}/${ASSET}.sha256" "$SHA_URL" 2>/dev/null; then
     (cd "$TMP" && sha256sum -c "${ASSET}.sha256" --quiet 2>/dev/null || shasum -a 256 -c "${ASSET}.sha256" >/dev/null)
     echo " ok"
 else
