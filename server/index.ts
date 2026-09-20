@@ -56,6 +56,7 @@ export interface ServerContext {
         id: number
         name: string
         urlPattern: string
+        query?: string
         method: string
         statusCode: number
         delay: number

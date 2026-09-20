@@ -32,18 +32,22 @@ Mock Commands:
   meddle mock enable <id>             Enable a mock rule
   meddle mock disable <id>            Disable a mock rule
 
-Add Options:
+Add / Update Options:
   --name <n>       Rule name
-  --pattern <p>    URL pattern (regex or string)
+  --pattern <p>    URL pattern (regex or string; may include query)
+  --query <q>      Query match condition (URL search substring, e.g. window_key=A)
   --method <m>     HTTP method (GET, POST, *, default: *)
   --status <s>     Response status code (default: 200)
   --body <b>       Response body content
   --delay <d>      Response delay in ms (default: 0)
+  --headers <json> Response headers JSON (values may use {origin})
+  --cors           Shortcut: credentials-friendly CORS headers with {origin}
 
 Examples:
   meddle mock list
   meddle mock add --name "API Mock" --pattern "example.com/api" --status 200
-  meddle mock update 1 --status 404
+  meddle mock add --name "Policy A" --pattern "/ops/.*/policy" --query "window_key=A" --body '{"key":"A"}' --cors
+  meddle mock update 1 --status 404 --headers '{"X-Debug":"1"}'
   meddle mock delete 1
 `)
     process.exit(1)

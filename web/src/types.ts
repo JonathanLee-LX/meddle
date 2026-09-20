@@ -59,6 +59,8 @@ export interface MockRule {
   id: number
   name: string
   urlPattern: string
+  /** Optional query condition (URL search substring tokens). */
+  query?: string
   method: string
   statusCode: number
   delay: number // milliseconds, 0 = no delay

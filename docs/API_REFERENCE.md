@@ -436,6 +436,7 @@ List all mock rules.
     "id": 1,
     "name": "Mock API",
     "urlPattern": "/api/user",
+    "query": "",
     "method": "GET",
     "statusCode": 200,
     "headers": {...},

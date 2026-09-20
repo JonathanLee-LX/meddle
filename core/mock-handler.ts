@@ -6,6 +6,12 @@ import { appendProxyRecord } from './proxy-record'
 import { getRequestClientIdentity } from './client-identity'
 import { safeBodyToDetail } from './body-utils'
 import type { ProxyContext, MockHandler, MockRuleEntry } from './types'
+import {
+    matchUrlPattern,
+    matchQueryCondition,
+    resolveHeaderPlaceholders,
+    mergeResponseHeaders,
+} from './mock-utils'
 
 const proxyDebug = _debug('proxy')
 
@@ -80,21 +86,28 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
         return ctx.mockRules.find(rule => {
             if (!rule.enabled) return false
             if (rule.method && rule.method !== '*' && rule.method.toUpperCase() !== method.toUpperCase()) return false
-            try { return new RegExp(rule.urlPattern).test(url) } catch { return url.includes(rule.urlPattern) }
+            if (!matchUrlPattern(url, rule.urlPattern)) return false
+            if (!matchQueryCondition(url, rule.query)) return false
+            return true
         }) || null
     }
 
-    function buildMockResponseForTest(rule: MockRuleEntry): { statusCode: number; headers: Record<string, string>; body: string } {
+    function buildMockResponseForTest(rule: MockRuleEntry, requestHeaders?: Record<string, any>): { statusCode: number; headers: Record<string, string>; body: string } {
         const statusCode = rule.statusCode || 200
         const ruleHeaders: Record<string, string> = {}
         for (const [key, value] of Object.entries(rule.headers || {})) {
             ruleHeaders[key.toLowerCase()] = value
         }
-        const headers: Record<string, string> = {
-            'x-mock-rule': encodeURIComponent(rule.name || rule.id?.toString() || rule.urlPattern || ''),
-            'content-type': ruleHeaders['content-type'] || 'application/json',
-            ...ruleHeaders,
-        }
+        const headers: Record<string, string> = resolveHeaderPlaceholders(
+            mergeResponseHeaders(
+                {
+                    'x-mock-rule': encodeURIComponent(rule.name || rule.id?.toString() || rule.urlPattern || ''),
+                    'content-type': 'application/json',
+                },
+                ruleHeaders,
+            ),
+            requestHeaders,
+        )
         let body = ''
         if (rule.bodyType === 'file' && rule.body) {
             let filePath = rule.body.replace(/^file:\/\//, '').replace(/^\/[A-Za-z]:\//, '')
@@ -128,13 +141,18 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
             for (const [key, value] of Object.entries(rule.headers || {})) {
                 ruleHeaders[key.toLowerCase()] = value
             }
-            const responseHeaders: Record<string, any> = {
-                'X-Mock-Rule': encodeURIComponent(mockRuleName),
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': '*',
-                'Access-Control-Allow-Headers': '*',
-                ...ruleHeaders
-            }
+            const responseHeaders: Record<string, any> = resolveHeaderPlaceholders(
+                mergeResponseHeaders(
+                    {
+                        'X-Mock-Rule': encodeURIComponent(mockRuleName),
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Allow-Methods': '*',
+                        'Access-Control-Allow-Headers': '*',
+                    },
+                    ruleHeaders,
+                ),
+                req.headers,
+            )
             let finalStatusCode = statusCode
             let statusMessage = 'OK (Mock)'
 

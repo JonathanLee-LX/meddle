@@ -19,6 +19,7 @@ export function createMockRule(ctx: ServerContext, data: MockRuleInput): MockRul
         id: ctx.mockIdSeq++,
         name: data.name || '',
         urlPattern: data.urlPattern || '',
+        query: data.query || '',
         method: data.method || '*',
         statusCode: data.statusCode || 200,
         delay: data.delay || 0,

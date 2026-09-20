@@ -28,6 +28,7 @@ interface MockEditorPanelProps {
 const EMPTY_RULE: Omit<MockRule, 'id'> = {
   name: '',
   urlPattern: '',
+  query: '',
   method: '*',
   statusCode: 200,
   delay: 0,
@@ -49,6 +50,7 @@ export function MockEditorPanel({
       return {
         name: rule.name,
         urlPattern: rule.urlPattern,
+        query: rule.query || '',
         method: rule.method,
         statusCode: rule.statusCode,
         delay: rule.delay || 0,
@@ -238,6 +240,16 @@ export function MockEditorPanel({
             value={form.urlPattern}
             onChange={(event) => updateField('urlPattern', event.target.value)}
             placeholder="如：/api/console/user/corp/.*"
+            className="font-mono"
+          />
+        </div>
+
+        <div className="app-field-group">
+          <Label>Query 匹配（可选）</Label>
+          <Input
+            value={form.query || ''}
+            onChange={(event) => updateField('query', event.target.value)}
+            placeholder="如：window_key=A"
             className="font-mono"
           />
         </div>

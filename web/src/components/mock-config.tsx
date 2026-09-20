@@ -39,6 +39,7 @@ interface MockConfigProps {
 const EMPTY_RULE: Omit<MockRule, 'id'> = {
   name: '',
   urlPattern: '',
+  query: '',
   method: '*',
   statusCode: 200,
   delay: 0,
@@ -472,6 +473,16 @@ export function MockConfig({ mockRules, fetchMocks, createMock, updateMock, dele
                 value={editForm.urlPattern}
                 onChange={(e) => updateField('urlPattern', e.target.value)}
                 placeholder="如：/api/console/user/corp/.*"
+                className="h-8 font-mono text-sm"
+              />
+            </div>
+            {/* Query 匹配 */}
+            <div className="app-field-group">
+              <label className="text-xs font-medium text-muted-foreground">Query 匹配（可选，同 path 不同 query 用）</label>
+              <Input
+                value={editForm.query || ''}
+                onChange={(e) => updateField('query', e.target.value)}
+                placeholder="如：window_key=A"
                 className="h-8 font-mono text-sm"
               />
             </div>

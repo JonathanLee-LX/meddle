@@ -48,6 +48,7 @@ async function run() {
     output.section('Active Rules')
     active.forEach(rule => {
       output.success(`#${rule.id}: ${rule.name} (${rule.urlPattern})`)
+      if (rule.query) output.kv('Query', rule.query, 4)
       output.kv('Status', rule.statusCode, 4)
       output.kv('Method', rule.method || '*', 4)
       output.kv('Delay', `${rule.delay || 0}ms`, 4)
