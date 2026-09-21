@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0-beta.12] - 2026-09-21
+
+### Added
+
+- Rule file Tab drag-and-drop reorder + `ruleFileOrder` persistence (#81/#82): drag rule-file tabs (≥2) to change display order; order is stored in `settings.ruleFileOrder` (including disabled files). Enabled files keep merge / overview / `activeRuleFiles` relative order aligned with the Tab bar. Uses `@dnd-kit` with a distance activation constraint so toggle, select, rename, and delete are not misfired.
+
+### Changed
+
+- Reminder: private-repo installs still need `GH_TOKEN` (preferred) or `GITHUB_TOKEN` (`repo` or fine-grained `contents:read`) for `meddle update` / `meddle update --beta` and Release asset downloads; without a token, downloads look like 404 (checksum sidecar missing). See README.
+
 ## [0.5.0-beta.11] - 2026-09-20
 
 ### Fixed
