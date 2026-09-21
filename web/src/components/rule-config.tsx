@@ -33,6 +33,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
+import { restrictToHorizontalAxis, tabDragTransformStyle } from '@/lib/rule-tab-dnd'
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, horizontalListSortingStrategy } from '@dnd-kit/sortable'
 import { getRuleFileTabOrder, getRuleRowOrder, reorderItemsByRowIds } from '@/lib/rule-order'
 import { CSS } from '@dnd-kit/utilities'
@@ -341,9 +342,10 @@ function SortableRuleFileTab({
     disabled: dragDisabled,
   })
 
+  // Translate-only + y locked: avoids scale jitter and vertical strip growth while dragging.
   const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
+    transform: tabDragTransformStyle(transform),
+    transition: isDragging ? undefined : transition,
     opacity: isDragging ? 0.85 : 1,
     position: 'relative',
     zIndex: isDragging ? 1 : undefined,
@@ -357,6 +359,18 @@ function SortableRuleFileTab({
       className="group relative flex-none gap-1.5"
       data-dragging={isDragging ? 'true' : undefined}
     >
+      {!dragDisabled && (
+        <span
+          className="shrink-0 cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
+          title="拖拽排序"
+          data-slot="rule-file-tab-drag-handle"
+          {...attributes}
+          {...listeners}
+          aria-label={`拖拽排序 ${file.name}`}
+        >
+          <GripVertical className="size-3.5" />
+        </span>
+      )}
       <span
         role="button"
         tabIndex={0}
@@ -405,14 +419,11 @@ function SortableRuleFileTab({
         />
       ) : (
         <span
-          className={dragDisabled ? undefined : 'cursor-grab active:cursor-grabbing'}
           onDoubleClick={(event) => {
             event.stopPropagation()
             beginRename(file.name)
           }}
-          title={dragDisabled ? '双击重命名' : '拖拽排序 · 双击重命名'}
-          {...attributes}
-          {...listeners}
+          title="双击重命名"
         >
           {file.name}
         </span>
@@ -1005,11 +1016,12 @@ export function RuleConfig(props: RuleConfigProps) {
                 <div
                   data-slot="rule-file-tabs-scroll"
                   ref={ruleFileTabsScroll.ref}
-                  className="meddle-tabs-scroll min-w-0 flex-1 overflow-x-auto"
+                  className="meddle-tabs-scroll min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
                 >
                 <DndContext
                   sensors={tabSensors}
                   collisionDetection={closestCenter}
+                  modifiers={[restrictToHorizontalAxis]}
                   onDragEnd={handleTabDragEnd}
                 >
                   <Tabs
