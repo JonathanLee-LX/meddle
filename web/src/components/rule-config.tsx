@@ -361,7 +361,7 @@ function SortableRuleFileTab({
     >
       {!dragDisabled && (
         <span
-          className="shrink-0 cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
+          className="shrink-0 cursor-grab touch-none text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-data-[dragging=true]:opacity-100 active:cursor-grabbing"
           title="拖拽排序"
           data-slot="rule-file-tab-drag-handle"
           {...attributes}

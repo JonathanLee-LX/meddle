@@ -32,12 +32,26 @@ function renderWithFiles(names: string[], activeFileName = names[0]) {
 }
 
 describe('RuleConfig rule-file tab drag handle', () => {
-  it('shows a six-dot drag handle on each tab when there are two or more files', () => {
+  it('mounts a six-dot drag handle per tab when there are two or more files', () => {
     renderWithFiles(['alpha', 'beta'])
 
     expect(screen.getByRole('button', { name: '拖拽排序 alpha' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '拖拽排序 beta' })).toBeInTheDocument()
     expect(document.querySelectorAll('[data-slot="rule-file-tab-drag-handle"]')).toHaveLength(2)
+  })
+
+  it('keeps the drag handle hidden until the tab is hovered (or dragging)', () => {
+    renderWithFiles(['alpha', 'beta'])
+
+    const handle = screen.getByRole('button', { name: '拖拽排序 alpha' })
+    expect(handle).toHaveClass('opacity-0')
+    expect(handle).toHaveClass('group-hover:opacity-100')
+    expect(handle).toHaveClass('group-data-[dragging=true]:opacity-100')
+    expect(handle).toHaveClass('transition-opacity')
+
+    // Same reveal pattern as the per-tab delete control on the group TabsTrigger.
+    const tab = screen.getByRole('tab', { name: /alpha/ })
+    expect(tab.className.split(/\s+/)).toContain('group')
   })
 
   it('hides the drag handle when only one rule file exists', () => {
