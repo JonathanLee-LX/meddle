@@ -22,3 +22,51 @@ export function reorderItemsByRowIds<T>(items: T[], rowIds: string[], orderedRow
 
   return orderedRowIds.map((id) => itemById.get(id) as T)
 }
+
+/** Reorder rule-file tab ids after a dnd-kit drag (same semantics as rule rows). */
+export function getRuleFileTabOrder(
+  fileNames: string[],
+  activeId: string | number,
+  overId: string | number | null | undefined,
+): string[] {
+  return getRuleRowOrder(fileNames, activeId, overId)
+}
+
+/** Enabled-file merge order follows their relative order in the tab bar. */
+export function syncActiveRuleFilesToTabOrder(activeNames: string[], tabOrder: string[]): string[] {
+  const activeSet = new Set(activeNames)
+  const synced = tabOrder.filter((name) => activeSet.has(name))
+  for (const name of activeNames) {
+    if (!synced.includes(name)) synced.push(name)
+  }
+  return synced
+}
+
+/**
+ * Resolve display order: prefer persisted order; when empty, seed with active
+ * names first (preserve merge order) then remaining disk names.
+ */
+export function resolveRuleFileTabOrder(
+  diskNames: string[],
+  storedOrder: string[],
+  activeNames: string[],
+): string[] {
+  const diskSet = new Set(diskNames)
+  const ordered: string[] = []
+  const seen = new Set<string>()
+
+  const pushUnique = (name: string) => {
+    if (!diskSet.has(name) || seen.has(name)) return
+    ordered.push(name)
+    seen.add(name)
+  }
+
+  if (storedOrder.length > 0) {
+    for (const name of storedOrder) pushUnique(name)
+  } else {
+    for (const name of activeNames) pushUnique(name)
+  }
+
+  for (const name of diskNames) pushUnique(name)
+  return ordered
+}

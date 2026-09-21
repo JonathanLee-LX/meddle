@@ -8,6 +8,9 @@ import {
     ensureRouteRules,
     buildRuleOverview,
     registerRuleFilesRoutes,
+    setRuleFileOrder,
+    resolveRuleFileOrder,
+    syncActiveRuleFilesToOrder,
 } from '../server/rule-files'
 
 describe('rule-files', () => {
@@ -422,9 +425,66 @@ describe('rule-files', () => {
             expect(mockApp.get).toHaveBeenCalledWith('/api/rule-files/overview', expect.any(Function))
             expect(mockApp.post).toHaveBeenCalledWith('/api/rule-files', expect.any(Function))
             expect(mockApp.get).toHaveBeenCalledWith('/api/rule-files/:name/content', expect.any(Function))
+            expect(mockApp.put).toHaveBeenCalledWith('/api/rule-files/order', expect.any(Function))
             expect(mockApp.put).toHaveBeenCalledWith('/api/rule-files/:name/content', expect.any(Function))
             expect(mockApp.put).toHaveBeenCalledWith('/api/rule-files/:name', expect.any(Function))
             expect(mockApp.delete).toHaveBeenCalledWith('/api/rule-files/:name', expect.any(Function))
+        })
+    })
+
+    describe('ruleFileOrder persistence', () => {
+        it('lists files in persisted tab order including disabled files', () => {
+            const ruleDir = path.join(tempDir, 'route-rules')
+            fs.mkdirSync(ruleDir, { recursive: true })
+            fs.writeFileSync(path.join(ruleDir, 'a.txt'), 'a.com http://a')
+            fs.writeFileSync(path.join(ruleDir, 'b.txt'), 'b.com http://b')
+            fs.writeFileSync(path.join(ruleDir, 'c.txt'), 'c.com http://c')
+            fs.writeFileSync(
+                ctx.settingsPath,
+                JSON.stringify({
+                    activeRuleFiles: ['a', 'c'],
+                    ruleFileOrder: ['c', 'b', 'a'],
+                }),
+            )
+
+            expect(listRuleFiles(ctx).map((file) => file.name)).toEqual(['c', 'b', 'a'])
+            expect(listRuleFiles(ctx).map((file) => file.enabled)).toEqual([true, false, true])
+        })
+
+        it('setRuleFileOrder reorders tabs and syncs activeRuleFiles merge order', () => {
+            const ruleDir = path.join(tempDir, 'route-rules')
+            fs.mkdirSync(ruleDir, { recursive: true })
+            fs.writeFileSync(path.join(ruleDir, 'a.txt'), '/api http://a')
+            fs.writeFileSync(path.join(ruleDir, 'b.txt'), '/api http://b')
+            fs.writeFileSync(path.join(ruleDir, 'c.txt'), '/api http://c')
+            fs.writeFileSync(
+                ctx.settingsPath,
+                JSON.stringify({
+                    activeRuleFiles: ['a', 'c'],
+                    ruleFileOrder: ['a', 'b', 'c'],
+                }),
+            )
+
+            setRuleFileOrder(ctx, ['c', 'b', 'a'])
+
+            const settings = JSON.parse(fs.readFileSync(ctx.settingsPath, 'utf8'))
+            expect(settings.ruleFileOrder).toEqual(['c', 'b', 'a'])
+            expect(settings.activeRuleFiles).toEqual(['c', 'a'])
+            expect(listRuleFiles(ctx).map((file) => file.name)).toEqual(['c', 'b', 'a'])
+
+            const merged = mergeActiveRules(ctx)
+            expect(merged.rules[0].target).toBe('http://c')
+            expect(merged.rules[1].target).toBe('http://a')
+
+            const overview = buildRuleOverview(ctx)
+            expect(overview.files.map((file) => file.name)).toEqual(['c', 'b', 'a'])
+            // same pattern last-write-wins for overview winner; matching order still c then a
+            expect(overview.mergedRules[0].file).toBe('a')
+        })
+
+        it('resolve/sync helpers keep enabled relative order aligned with tabs', () => {
+            expect(resolveRuleFileOrder(['a', 'b', 'c'], [], ['c', 'a'])).toEqual(['c', 'a', 'b'])
+            expect(syncActiveRuleFilesToOrder(['a', 'c'], ['c', 'b', 'a'])).toEqual(['c', 'a'])
         })
     })
 })

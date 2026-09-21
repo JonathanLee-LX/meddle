@@ -990,6 +990,7 @@ function App() {
                       toggleRuleFile={store.toggleRuleFile}
                       renameRuleFile={store.renameRuleFile}
                       deleteRuleFile={store.deleteRuleFile}
+                      reorderRuleFiles={store.reorderRuleFiles}
                     />
                 </Suspense>
               </TabsContent>

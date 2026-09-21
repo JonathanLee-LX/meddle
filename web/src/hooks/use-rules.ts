@@ -144,6 +144,36 @@ export function useRules() {
     }
   }, [fetchRuleFiles, activeFileName])
 
+  const reorderRuleFiles = useCallback(async (order: string[]): Promise<boolean> => {
+    const previous = ruleFiles
+    const byName = new Map(previous.map((file) => [file.name, file]))
+    const optimistic = order.map((name) => byName.get(name)).filter((file): file is RuleFile => Boolean(file))
+    if (optimistic.length === order.length) {
+      setRuleFiles(optimistic)
+    }
+
+    try {
+      const res = await fetch('/api/rule-files/order', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        await fetchRuleFiles()
+        return true
+      }
+      setRuleFiles(previous)
+      await fetchRuleFiles()
+      return false
+    } catch (err) {
+      console.error('Failed to reorder rule files:', err)
+      setRuleFiles(previous)
+      await fetchRuleFiles()
+      return false
+    }
+  }, [fetchRuleFiles, ruleFiles])
+
   return {
     rules,
     setRules,
@@ -158,5 +188,6 @@ export function useRules() {
     toggleRuleFile,
     renameRuleFile,
     deleteRuleFile,
+    reorderRuleFiles,
   }
 }

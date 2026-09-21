@@ -33,8 +33,8 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { getRuleRowOrder, reorderItemsByRowIds } from '@/lib/rule-order'
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, horizontalListSortingStrategy } from '@dnd-kit/sortable'
+import { getRuleFileTabOrder, getRuleRowOrder, reorderItemsByRowIds } from '@/lib/rule-order'
 import { CSS } from '@dnd-kit/utilities'
 import { buildRuleGraph } from '@/utils/rule-graph'
 import { RouteCanvas } from '@/components/route-canvas'
@@ -66,6 +66,7 @@ interface RuleConfigProps {
   toggleRuleFile: (name: string, enabled: boolean) => Promise<boolean>
   renameRuleFile: (name: string, newName: string) => Promise<{ success: boolean; name?: string; error?: string }>
   deleteRuleFile: (name: string) => Promise<boolean>
+  reorderRuleFiles: (order: string[]) => Promise<boolean>
 }
 
 interface RouteRuleHighlightEventDetail {
@@ -305,6 +306,146 @@ function RuleTableHeaderCells({ showDragColumn }: { showDragColumn: boolean }) {
   )
 }
 
+
+interface SortableRuleFileTabProps {
+  file: RuleFile
+  canDelete: boolean
+  renamingFileName: string | null
+  renameDraft: string
+  setRenameDraft: (value: string) => void
+  setRenameError: (value: string | null) => void
+  beginRename: (name: string) => void
+  cancelRename: () => void
+  commitRename: () => void
+  toggleRuleFile: (name: string, enabled: boolean) => Promise<boolean>
+  onDelete: (name: string) => void
+  dragDisabled: boolean
+}
+
+function SortableRuleFileTab({
+  file,
+  canDelete,
+  renamingFileName,
+  renameDraft,
+  setRenameDraft,
+  setRenameError,
+  beginRename,
+  cancelRename,
+  commitRename,
+  toggleRuleFile,
+  onDelete,
+  dragDisabled,
+}: SortableRuleFileTabProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: file.name,
+    disabled: dragDisabled,
+  })
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.85 : 1,
+    position: 'relative',
+    zIndex: isDragging ? 1 : undefined,
+  }
+
+  return (
+    <TabsTrigger
+      ref={setNodeRef}
+      style={style}
+      value={file.name}
+      className="group relative flex-none gap-1.5"
+      data-dragging={isDragging ? 'true' : undefined}
+    >
+      <span
+        role="button"
+        tabIndex={0}
+        className="shrink-0"
+        onClick={(e) => {
+          e.stopPropagation()
+          void toggleRuleFile(file.name, !file.enabled)
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            event.stopPropagation()
+            void toggleRuleFile(file.name, !file.enabled)
+          }
+        }}
+        onPointerDown={(event) => event.stopPropagation()}
+        title={file.enabled ? '点击禁用路由' : '点击启用路由'}
+      >
+        {file.enabled ? <ToggleRight className="size-4 text-primary" /> : <ToggleLeft className="size-4 text-muted-foreground" />}
+      </span>
+      {renamingFileName === file.name ? (
+        <input
+          value={renameDraft}
+          onChange={(event) => {
+            setRenameDraft(event.target.value)
+            setRenameError(null)
+          }}
+          onClick={(event) => event.stopPropagation()}
+          onDoubleClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+          onFocus={(event) => event.currentTarget.select()}
+          onBlur={() => void commitRename()}
+          onKeyDown={(event) => {
+            event.stopPropagation()
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              void commitRename()
+            } else if (event.key === 'Escape') {
+              event.preventDefault()
+              cancelRename()
+            }
+          }}
+          className="h-6 w-28 rounded border bg-background px-1.5 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
+          aria-label={`重命名规则文件 ${file.name}`}
+          autoFocus
+        />
+      ) : (
+        <span
+          className={dragDisabled ? undefined : 'cursor-grab active:cursor-grabbing'}
+          onDoubleClick={(event) => {
+            event.stopPropagation()
+            beginRename(file.name)
+          }}
+          title={dragDisabled ? '双击重命名' : '拖拽排序 · 双击重命名'}
+          {...attributes}
+          {...listeners}
+        >
+          {file.name}
+        </span>
+      )}
+      <Badge variant="secondary" className="text-[10px] px-1 py-0">
+        {file.ruleCount}
+      </Badge>
+      {canDelete && (
+        <span
+          role="button"
+          tabIndex={0}
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete(file.name)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              event.stopPropagation()
+              onDelete(file.name)
+            }
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          title="删除规则文件"
+        >
+          <X className="size-3" />
+        </span>
+      )}
+    </TabsTrigger>
+  )
+}
+
 export function RuleConfig(props: RuleConfigProps) {
   const {
     rules,
@@ -320,6 +461,7 @@ export function RuleConfig(props: RuleConfigProps) {
     toggleRuleFile,
     renameRuleFile,
     deleteRuleFile,
+    reorderRuleFiles,
   } = props
 
   const [saving, setSaving] = useState(false)
@@ -711,6 +853,42 @@ export function RuleConfig(props: RuleConfigProps) {
     }),
   )
 
+  const tabSensors = useSensors(
+    useSensor(PointerSensor, {
+      // Avoid misfiring click/select, enable toggle, double-click rename, or delete
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
+
+  const suppressTabSelectRef = useRef(false)
+  const ruleFileNames = useMemo(() => ruleFiles.map((file) => file.name), [ruleFiles])
+
+  const handleTabDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event
+      if (!over) return
+      const nextOrder = getRuleFileTabOrder(ruleFileNames, active.id, over.id)
+      if (sameRowOrder(nextOrder, ruleFileNames)) return
+      suppressTabSelectRef.current = true
+      void reorderRuleFiles(nextOrder)
+    },
+    [reorderRuleFiles, ruleFileNames],
+  )
+
+  const handleTabValueChange = useCallback(
+    (value: string) => {
+      if (suppressTabSelectRef.current) {
+        suppressTabSelectRef.current = false
+        return
+      }
+      handleSelectFile(value)
+    },
+    [handleSelectFile],
+  )
+
   useEffect(() => {
     if (highlightIndex == null) return
     const raf = requestAnimationFrame(() => {
@@ -829,97 +1007,39 @@ export function RuleConfig(props: RuleConfigProps) {
                   ref={ruleFileTabsScroll.ref}
                   className="meddle-tabs-scroll min-w-0 flex-1 overflow-x-auto"
                 >
-                <Tabs
-                  className="min-w-max"
-                  value={activeFileName || ''}
-                  onValueChange={handleSelectFile}
+                <DndContext
+                  sensors={tabSensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleTabDragEnd}
                 >
-                  <TabsList className="h-auto min-w-max justify-start gap-1 rounded-none bg-transparent p-0">
-                    {ruleFiles.map((rf) => (
-                      <TabsTrigger key={rf.name} value={rf.name} className="group relative flex-none gap-1.5">
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          className="shrink-0"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            toggleRuleFile(rf.name, !rf.enabled)
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault()
-                              event.stopPropagation()
-                              toggleRuleFile(rf.name, !rf.enabled)
-                            }
-                          }}
-                          title={rf.enabled ? '点击禁用路由' : '点击启用路由'}
-                        >
-                          {rf.enabled ? <ToggleRight className="size-4 text-primary" /> : <ToggleLeft className="size-4 text-muted-foreground" />}
-                        </span>
-                        {renamingFileName === rf.name ? (
-                          <input
-                            value={renameDraft}
-                            onChange={(event) => {
-                              setRenameDraft(event.target.value)
-                              setRenameError(null)
-                            }}
-                            onClick={(event) => event.stopPropagation()}
-                            onDoubleClick={(event) => event.stopPropagation()}
-                            onFocus={(event) => event.currentTarget.select()}
-                            onBlur={() => void commitRename()}
-                            onKeyDown={(event) => {
-                              event.stopPropagation()
-                              if (event.key === 'Enter') {
-                                event.preventDefault()
-                                void commitRename()
-                              } else if (event.key === 'Escape') {
-                                event.preventDefault()
-                                cancelRename()
-                              }
-                            }}
-                            className="h-6 w-28 rounded border bg-background px-1.5 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
-                            aria-label={`重命名规则文件 ${rf.name}`}
-                            autoFocus
+                  <Tabs
+                    className="min-w-max"
+                    value={activeFileName || ''}
+                    onValueChange={handleTabValueChange}
+                  >
+                    <SortableContext items={ruleFileNames} strategy={horizontalListSortingStrategy}>
+                      <TabsList className="h-auto min-w-max justify-start gap-1 rounded-none bg-transparent p-0">
+                        {ruleFiles.map((rf) => (
+                          <SortableRuleFileTab
+                            key={rf.name}
+                            file={rf}
+                            canDelete={ruleFiles.length > 1}
+                            renamingFileName={renamingFileName}
+                            renameDraft={renameDraft}
+                            setRenameDraft={setRenameDraft}
+                            setRenameError={setRenameError}
+                            beginRename={beginRename}
+                            cancelRename={cancelRename}
+                            commitRename={() => void commitRename()}
+                            toggleRuleFile={toggleRuleFile}
+                            onDelete={handleDelete}
+                            dragDisabled={ruleFiles.length < 2}
                           />
-                        ) : (
-                          <span
-                            onDoubleClick={(event) => {
-                              event.stopPropagation()
-                              beginRename(rf.name)
-                            }}
-                            title="双击重命名"
-                          >
-                            {rf.name}
-                          </span>
-                        )}
-                        <Badge variant="secondary" className="text-[10px] px-1 py-0">
-                          {rf.ruleCount}
-                        </Badge>
-                        {ruleFiles.length > 1 && (
-                          <span
-                            role="button"
-                            tabIndex={0}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleDelete(rf.name)
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter' || event.key === ' ') {
-                                event.preventDefault()
-                                event.stopPropagation()
-                                handleDelete(rf.name)
-                              }
-                            }}
-                            title="删除规则文件"
-                          >
-                            <X className="size-3" />
-                          </span>
-                        )}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
+                        ))}
+                      </TabsList>
+                    </SortableContext>
+                  </Tabs>
+                </DndContext>
                 </div>
               </div>
               <div data-slot="rule-file-actions" className="ml-2 flex shrink-0 items-center border-l pl-2">
