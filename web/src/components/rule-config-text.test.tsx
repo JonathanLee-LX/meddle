@@ -51,13 +51,16 @@ describe('RuleConfig text view', () => {
           toggleRuleFile={toggleRuleFile}
           renameRuleFile={renameRuleFile}
           deleteRuleFile={deleteRuleFile}
+          reorderRuleFiles={vi.fn().mockResolvedValue(true)}
         />
       )
     }
 
     const user = userEvent.setup()
     render(<Harness />)
-    const viewSwitcher = screen.getByRole('group', { name: '规则视图' })
+    // Prefer label over role: CI (radix roving-focus merge) exposes role="group",
+    // while some local installs expose role="radiogroup" for type="single".
+    const viewSwitcher = screen.getByLabelText('规则视图')
     const contentCard = viewSwitcher.closest('[data-slot="card"]')
     const stickyControls = contentCard?.querySelector('[data-slot="rule-config-sticky-controls"]')
     const tableHeaderBar = contentCard?.querySelector('[data-slot="rule-table-header"]')
@@ -123,6 +126,7 @@ describe('RuleConfig text view', () => {
           toggleRuleFile={toggleRuleFile}
           renameRuleFile={renameRuleFile}
           deleteRuleFile={deleteRuleFile}
+          reorderRuleFiles={vi.fn().mockResolvedValue(true)}
         />
       )
     }

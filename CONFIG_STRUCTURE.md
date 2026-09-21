@@ -173,6 +173,11 @@ https://localhost:13001/micro/app?a=1
     "默认规则",
     "beta-rules"
   ],
+  "ruleFileOrder": [
+    "默认规则",
+    "beta-rules",
+    "disabled-rules"
+  ],
   "mocksFilePath": "",
   "pluginMode": "off",
   "clientAliases": {
@@ -198,6 +203,7 @@ https://localhost:13001/micro/app?a=1
 | `fontSize` | 界面缩放百分比字符串，例如 `100` |
 | `detailBodySizeKB` | 日志详情保存的请求/响应体截断阈值（KB），默认 `256`；调大可保留更大 body 便于排查，但会增加内存占用（最多 `MAX_DETAIL_SIZE=200` 条同时驻留）。作用范围为单个 session，解析顺序：当前 session 的 `settings.json` → 默认 session（`~/.meddle/settings.json`，仅非默认 session 继承）→ 环境变量 `MEDDLE_MAX_DETAIL_BODY_KB` → 默认 `256`。修改后下次请求即生效（基于 mtime 缓存检测） |
 | `activeRuleFiles` | 当前启用的路由规则文件名称，顺序即合并顺序 |
+| `ruleFileOrder` | Web 规则文件 Tab 的完整显示顺序（含禁用文件）；启用文件的合并顺序与其在该数组中的相对顺序一致 |
 | `mocksFilePath` | 自定义 Mock JSON 路径；空值使用默认位置 |
 | `pluginMode` | 插件 Pipeline 模式：`off`、`shadow` 或 `on` |
 | `clientAliases` | 客户端 IP 到设备名称的映射 |
@@ -223,8 +229,8 @@ https://localhost:13001/micro/app?a=1
 
 ### 路由规则
 
-1. 读取 `~/.meddle/settings.json` 中的 `activeRuleFiles`。
-2. 按数组顺序读取 `~/.meddle/route-rules/<名称>.txt`。
+1. 读取 `~/.meddle/settings.json` 中的 `activeRuleFiles`（及可选的 `ruleFileOrder`）。
+2. 按 `activeRuleFiles` 数组顺序读取 `~/.meddle/route-rules/<名称>.txt`。启用文件的相对顺序与 Tab 栏（`ruleFileOrder`）中启用文件的相对顺序保持一致。
 3. 合并规则并按顺序匹配。
 4. 如果目录为空，首次启动会创建一个默认规则文件并将其设为启用状态。
 5. 规则文件修改后会自动重新加载。

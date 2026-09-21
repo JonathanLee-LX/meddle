@@ -46,3 +46,41 @@ describe('useRules createRuleFile', () => {
     expect(createResult).toEqual({ success: false, error: 'Failed to fetch' })
   })
 })
+
+
+describe('useRules reorderRuleFiles', () => {
+  it('persists tab order via PUT /api/rule-files/order and refreshes the list', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'success', order: ['b', 'a'] }), {
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { name: 'b', enabled: true, ruleCount: 1 },
+        { name: 'a', enabled: false, ruleCount: 1 },
+      ]), {
+        headers: { 'Content-Type': 'application/json' },
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() => useRules())
+
+    await act(async () => {
+      // seed local state
+      result.current.ruleFiles.length
+    })
+
+    // Manually seed by calling fetchRuleFiles first path through reorder's optimistic path
+    // Start with empty then reorder with names that will optimistic-skip if empty
+    let ok = false
+    await act(async () => {
+      ok = await result.current.reorderRuleFiles(['b', 'a'])
+    })
+
+    expect(ok).toBe(true)
+    expect(fetchMock).toHaveBeenCalledWith('/api/rule-files/order', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ order: ['b', 'a'] }),
+    }))
+    expect(result.current.ruleFiles.map((file) => file.name)).toEqual(['b', 'a'])
+  })
+})

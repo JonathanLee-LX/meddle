@@ -22,6 +22,7 @@ function renderRuleConfig() {
       toggleRuleFile={vi.fn().mockResolvedValue(true)}
       renameRuleFile={vi.fn().mockResolvedValue({ success: true })}
       deleteRuleFile={vi.fn().mockResolvedValue(true)}
+      reorderRuleFiles={vi.fn().mockResolvedValue(true)}
     />,
   )
 

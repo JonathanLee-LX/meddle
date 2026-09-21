@@ -56,6 +56,115 @@ function setActiveFileNames(ctx: ServerContext, names: string[]): void {
     saveSettings(ctx, settings)
 }
 
+function getStoredRuleFileOrder(ctx: ServerContext): string[] {
+    const settings = loadSettings(ctx)
+    const arr = settings.ruleFileOrder
+    return Array.isArray(arr) ? arr.filter((name): name is string => typeof name === 'string') : []
+}
+
+function setStoredRuleFileOrder(ctx: ServerContext, names: string[]): void {
+    const settings = loadSettings(ctx)
+    settings.ruleFileOrder = names
+    saveSettings(ctx, settings)
+}
+
+/**
+ * Resolve display/tab order for rule files.
+ * Prefer persisted ruleFileOrder; when empty, seed as activeRuleFiles then remaining disk names
+ * so existing merge order is preserved for enabled files.
+ */
+export function resolveRuleFileOrder(diskNames: string[], storedOrder: string[], activeNames: string[]): string[] {
+    const diskSet = new Set(diskNames)
+    const ordered: string[] = []
+    const seen = new Set<string>()
+
+    const pushUnique = (name: string) => {
+        if (!diskSet.has(name) || seen.has(name)) return
+        ordered.push(name)
+        seen.add(name)
+    }
+
+    if (storedOrder.length > 0) {
+        for (const name of storedOrder) pushUnique(name)
+    } else {
+        for (const name of activeNames) pushUnique(name)
+    }
+
+    for (const name of diskNames) pushUnique(name)
+    return ordered
+}
+
+/** Keep activeRuleFiles relative order aligned with tab/file order. */
+export function syncActiveRuleFilesToOrder(activeNames: string[], fileOrder: string[]): string[] {
+    const activeSet = new Set(activeNames)
+    const synced = fileOrder.filter((name) => activeSet.has(name))
+    for (const name of activeNames) {
+        if (!synced.includes(name)) synced.push(name)
+    }
+    return synced
+}
+
+function readDiskRuleFileNames(ctx: ServerContext): string[] {
+    const dir = getRulesDir(ctx)
+    ensureRulesDir(ctx)
+    return fs.readdirSync(dir)
+        .filter((f) => f.endsWith('.txt'))
+        .map((f) => f.replace(/\.txt$/, ''))
+}
+
+function ensureRuleFileInOrder(ctx: ServerContext, name: string): string[] {
+    const diskNames = readDiskRuleFileNames(ctx)
+    const ordered = resolveRuleFileOrder(diskNames, getStoredRuleFileOrder(ctx), getActiveFileNames(ctx))
+    if (!ordered.includes(name)) ordered.push(name)
+    setStoredRuleFileOrder(ctx, ordered)
+    return ordered
+}
+
+function renameRuleFileInOrder(ctx: ServerContext, oldName: string, newName: string): void {
+    const diskNames = readDiskRuleFileNames(ctx)
+    const ordered = resolveRuleFileOrder(diskNames, getStoredRuleFileOrder(ctx), getActiveFileNames(ctx))
+    const next: string[] = []
+    const seen = new Set<string>()
+    for (const name of ordered) {
+        const resolved = name === oldName ? newName : name
+        if (seen.has(resolved)) continue
+        next.push(resolved)
+        seen.add(resolved)
+    }
+    if (!seen.has(newName)) next.push(newName)
+    setStoredRuleFileOrder(ctx, next)
+}
+
+function removeRuleFileFromOrder(ctx: ServerContext, name: string): void {
+    const ordered = getStoredRuleFileOrder(ctx).filter((item) => item !== name)
+    setStoredRuleFileOrder(ctx, ordered)
+}
+
+export function setRuleFileOrder(ctx: ServerContext, names: string[]): string[] {
+    ensureRulesDir(ctx)
+    const diskNames = readDiskRuleFileNames(ctx)
+    const diskSet = new Set(diskNames)
+    const safeNames = names.map((name) => normalizeRuleFileName(name))
+
+    if (
+        safeNames.length !== diskNames.length
+        || new Set(safeNames).size !== safeNames.length
+        || safeNames.some((name) => !diskSet.has(name))
+    ) {
+        throw new Error('规则文件顺序必须包含全部现有文件且无重复')
+    }
+
+    const activeNames = getActiveFileNames(ctx)
+    const syncedActive = syncActiveRuleFilesToOrder(activeNames, safeNames)
+
+    const settings = loadSettings(ctx)
+    settings.ruleFileOrder = safeNames
+    settings.activeRuleFiles = syncedActive
+    saveSettings(ctx, settings)
+    ctx.reloadAllRuleFiles()
+    return safeNames
+}
+
 export interface RuleFileInfo {
     name: string
     enabled: boolean
@@ -97,12 +206,13 @@ export function createRuleFile(ctx: ServerContext, name: string, content = '', e
     }
 
     fs.writeFileSync(filePath, content, 'utf8')
+    ensureRuleFileInOrder(ctx, safeName)
 
     if (enabled) {
         const activeNames = getActiveFileNames(ctx)
         if (!activeNames.includes(safeName)) {
-            activeNames.push(safeName)
-            setActiveFileNames(ctx, activeNames)
+            const fileOrder = resolveRuleFileOrder(readDiskRuleFileNames(ctx), getStoredRuleFileOrder(ctx), activeNames)
+            setActiveFileNames(ctx, syncActiveRuleFilesToOrder([...activeNames, safeName], fileOrder))
         }
     }
 
@@ -125,6 +235,38 @@ export function setActiveRuleFileNames(ctx: ServerContext, names: string[]): str
     }
 
     setActiveFileNames(ctx, safeNames)
+
+    // Keep tab order's enabled-file relative positions aligned with activeRuleFiles
+    const diskNames = readDiskRuleFileNames(ctx)
+    const currentOrder = resolveRuleFileOrder(diskNames, getStoredRuleFileOrder(ctx), safeNames)
+    const activeSet = new Set(safeNames)
+    let activeIndex = 0
+    const nextOrder = currentOrder.map((name) => {
+        if (!activeSet.has(name)) return name
+        const replacement = safeNames[activeIndex]
+        activeIndex += 1
+        return replacement
+    })
+    while (activeIndex < safeNames.length) {
+        nextOrder.push(safeNames[activeIndex])
+        activeIndex += 1
+    }
+    // Deduplicate while preserving first occurrence
+    const deduped: string[] = []
+    const seen = new Set<string>()
+    for (const name of nextOrder) {
+        if (seen.has(name)) continue
+        deduped.push(name)
+        seen.add(name)
+    }
+    for (const name of diskNames) {
+        if (!seen.has(name)) {
+            deduped.push(name)
+            seen.add(name)
+        }
+    }
+    setStoredRuleFileOrder(ctx, deduped)
+
     ctx.reloadAllRuleFiles()
     return safeNames
 }
@@ -133,15 +275,22 @@ export function setActiveRuleFileNames(ctx: ServerContext, names: string[]): str
  * Scan the route-rules directory and return file info list.
  */
 export function listRuleFiles(ctx: ServerContext): RuleFileInfo[] {
-    const dir = getRulesDir(ctx)
     ensureRulesDir(ctx)
     const activeNames = getActiveFileNames(ctx)
+    const files = readDiskRuleFileNames(ctx)
+    const orderedNames = resolveRuleFileOrder(files, getStoredRuleFileOrder(ctx), activeNames)
 
-    const files = fs.readdirSync(dir)
-        .filter(f => f.endsWith('.txt'))
-        .map(f => f.replace(/\.txt$/, ''))
+    // Persist seeded order and newly discovered / deleted names so tabs stay stable
+    const stored = getStoredRuleFileOrder(ctx)
+    const needsPersist =
+        stored.length === 0
+        || orderedNames.some((name) => !stored.includes(name))
+        || stored.some((name) => !orderedNames.includes(name))
+    if (needsPersist) {
+        setStoredRuleFileOrder(ctx, orderedNames)
+    }
 
-    return files.map(name => {
+    return orderedNames.map(name => {
         const filePath = ruleFilePath(ctx, name)
         let ruleCount = 0
         let excludeCount = 0
@@ -342,12 +491,17 @@ export function ensureRouteRules(ctx: ServerContext): string[] {
     }
 
     let activeNames = getActiveFileNames(ctx)
+    const allFiles = readDiskRuleFileNames(ctx)
     if (activeNames.length === 0) {
-        const allFiles = fs.readdirSync(dir).filter(f => f.endsWith('.txt')).map(f => f.replace(/\.txt$/, ''))
         if (allFiles.length > 0) {
             activeNames = [allFiles[0]]
             setActiveFileNames(ctx, activeNames)
         }
+    }
+
+    const ordered = resolveRuleFileOrder(allFiles, getStoredRuleFileOrder(ctx), activeNames)
+    if (getStoredRuleFileOrder(ctx).length === 0 && ordered.length > 0) {
+        setStoredRuleFileOrder(ctx, ordered)
     }
 
     return activeNames
@@ -368,6 +522,26 @@ export function registerRuleFilesRoutes(app: Application, ctx: ServerContext): v
         res.end()
     })
 
+    // PUT /api/rule-files/order - 持久化 Tab / 文件顺序，并同步启用文件合并顺序
+    app.put('/api/rule-files/order', (req: Request, res: Response) => {
+        res.setHeader('Content-Type', 'application/json')
+        try {
+            const order = req.body?.order
+            if (!Array.isArray(order) || order.some((name: unknown) => typeof name !== 'string')) {
+                res.statusCode = 400
+                res.write(JSON.stringify({ error: '缺少有效的 order 数组' }))
+                res.end()
+                return
+            }
+            const nextOrder = setRuleFileOrder(ctx, order)
+            res.write(JSON.stringify({ status: 'success', order: nextOrder }))
+        } catch (err) {
+            res.statusCode = 400
+            res.write(JSON.stringify({ error: (err as Error).message }))
+        }
+        res.end()
+    })
+
     // POST /api/rule-files - 创建新规则文件
     app.post('/api/rule-files', (req: Request, res: Response) => {
         res.setHeader('Content-Type', 'application/json')
@@ -380,34 +554,16 @@ export function registerRuleFilesRoutes(app: Application, ctx: ServerContext): v
                 return
             }
 
-            const safeName = name.trim().replace(/[/\\:*?"<>|]/g, '_')
-            const filePath = ruleFilePath(ctx, safeName)
-
-            if (fs.existsSync(filePath)) {
-                res.statusCode = 409
-                res.write(JSON.stringify({ error: `规则文件 "${safeName}" 已存在` }))
-                res.end()
-                return
-            }
-
-            ensureRulesDir(ctx)
-            fs.writeFileSync(filePath, content, 'utf8')
-
-            if (enabled) {
-                const activeNames = getActiveFileNames(ctx)
-                if (!activeNames.includes(safeName)) {
-                    activeNames.push(safeName)
-                    setActiveFileNames(ctx, activeNames)
-                }
-            }
-
-            ctx.reloadAllRuleFiles()
-
-            const ruleCount = Object.keys(parseEprcWithExclusions(content).ruleMap).length
-            res.write(JSON.stringify({ status: 'success', ruleFile: { name: safeName, enabled, ruleCount } }))
+            const ruleFile = createRuleFile(ctx, name, content, enabled !== false)
+            res.write(JSON.stringify({ status: 'success', ruleFile: { name: ruleFile.name, enabled: ruleFile.enabled, ruleCount: ruleFile.ruleCount } }))
         } catch (err) {
-            res.statusCode = 500
-            res.write(JSON.stringify({ error: (err as Error).message }))
+            const message = (err as Error).message
+            if (message.includes('已存在')) {
+                res.statusCode = 409
+            } else {
+                res.statusCode = 500
+            }
+            res.write(JSON.stringify({ error: message }))
         }
         res.end()
     })
@@ -486,6 +642,7 @@ export function registerRuleFilesRoutes(app: Application, ctx: ServerContext): v
                 const idx = activeNames.indexOf(name)
                 if (idx !== -1) activeNames[idx] = safeName
                 currentName = safeName
+                renameRuleFileInOrder(ctx, name, safeName)
             }
 
             if (enabled !== undefined) {
@@ -497,7 +654,12 @@ export function registerRuleFilesRoutes(app: Application, ctx: ServerContext): v
                 }
             }
 
-            setActiveFileNames(ctx, activeNames)
+            const fileOrder = resolveRuleFileOrder(
+                readDiskRuleFileNames(ctx),
+                getStoredRuleFileOrder(ctx),
+                activeNames,
+            )
+            setActiveFileNames(ctx, syncActiveRuleFilesToOrder(activeNames, fileOrder))
             ctx.reloadAllRuleFiles()
 
             res.write(JSON.stringify({ status: 'success', name: currentName }))
@@ -530,6 +692,7 @@ export function registerRuleFilesRoutes(app: Application, ctx: ServerContext): v
                 activeNames.splice(idx, 1)
                 setActiveFileNames(ctx, activeNames)
             }
+            removeRuleFileFromOrder(ctx, name)
 
             ctx.reloadAllRuleFiles()
             res.write(JSON.stringify({ status: 'success' }))

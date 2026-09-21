@@ -167,6 +167,30 @@ function getRuleFilePath(name) {
 /**
  * List all rule files
  */
+function getRuleFileOrderNames() {
+  const settings = loadSettings()
+  const arr = settings.ruleFileOrder
+  return Array.isArray(arr) ? arr.filter((name) => typeof name === 'string') : []
+}
+
+function resolveRuleFileOrder(diskNames, storedOrder, activeNames) {
+  const diskSet = new Set(diskNames)
+  const ordered = []
+  const seen = new Set()
+  const pushUnique = (name) => {
+    if (!diskSet.has(name) || seen.has(name)) return
+    ordered.push(name)
+    seen.add(name)
+  }
+  if (storedOrder.length > 0) {
+    for (const name of storedOrder) pushUnique(name)
+  } else {
+    for (const name of activeNames) pushUnique(name)
+  }
+  for (const name of diskNames) pushUnique(name)
+  return ordered
+}
+
 function listRuleFiles() {
   ensureRouteRulesDir()
   const activeNames = getActiveRuleFileNames()
@@ -175,7 +199,9 @@ function listRuleFiles() {
     .filter(f => f.endsWith('.txt'))
     .map(f => f.replace(/\.txt$/, ''))
 
-  return files.map(name => {
+  const ordered = resolveRuleFileOrder(files, getRuleFileOrderNames(), activeNames)
+
+  return ordered.map(name => {
     const filePath = getRuleFilePath(name)
     let ruleCount = 0
     let excludeCount = 0
