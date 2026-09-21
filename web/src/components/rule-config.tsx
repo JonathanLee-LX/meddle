@@ -176,10 +176,17 @@ const SortableRuleRow = memo(
       <TableRow
         ref={setRowRef}
         style={style}
-        className={highlighted ? RULE_ROW_HIGHLIGHT_CLASS : undefined}
+        className={highlighted ? `group ${RULE_ROW_HIGHLIGHT_CLASS}` : 'group'}
+        data-dragging={isDragging ? 'true' : undefined}
       >
-        <TableCell className="w-8 cursor-grab active:cursor-grabbing" {...attributes} {...listeners}>
-          <GripVertical className="h-4 w-4 text-muted-foreground" />
+        <TableCell
+          className="w-8 cursor-grab active:cursor-grabbing"
+          data-slot="rule-row-drag-handle"
+          {...attributes}
+          {...listeners}
+          aria-label="拖拽排序"
+        >
+          <GripVertical className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-data-[dragging=true]:opacity-100" />
         </TableCell>
         <TableCell className="w-12">
           <Checkbox checked={item.enabled} onCheckedChange={handleToggle} />
