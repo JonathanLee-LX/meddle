@@ -75,11 +75,16 @@ async function run() {
       delete ruleMap[internalKey]
       const newContent = ruleMapToEprcText(ruleMap)
       saveRuleFileContent(fileName, newContent)
+      output.warnFileOnlyMode()
 
       if (jsonFlag) {
-        output.jsonRaw({ success: true, file: fileName, pattern: pat })
+        output.jsonRaw({ success: true, file: fileName, pattern: pat,
+        fileOnly: true,
+        warning: output.FILE_ONLY_WARNING
+      })
         return
       }
+
 
       output.header('Route Rule Deleted')
       output.success(pat)
@@ -102,11 +107,16 @@ async function run() {
     delete ruleMap[internalKey]
     const newContent = ruleMapToEprcText(ruleMap)
     saveRuleFileContent(fileName, newContent)
+    output.warnFileOnlyMode()
 
     if (jsonFlag) {
-      output.jsonRaw({ success: true, file: fileName, pattern: pat })
+      output.jsonRaw({ success: true, file: fileName, pattern: pat,
+      fileOnly: true,
+      warning: output.FILE_ONLY_WARNING
+    })
       return
     }
+
 
     output.header('Route Rule Deleted')
     output.success(pat)

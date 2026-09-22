@@ -654,6 +654,8 @@ export interface MockHandler {
     buildMockResponseForTest(rule: MockRuleEntry, requestHeaders?: Record<string, any>): { statusCode: number; headers: Record<string, string>; body: string };
     sendMockResponse(req: any, res: any, rule: MockRuleEntry, logInfo: { method: string; source: string; target: string }): void;
     loadCustomPathsFromSettings(): { mocksFilePath: string | null };
+    /** Watch mocks file for external edits; optional onReload syncs serverContext + broadcasts. */
+    initMockFileWatcher(onReload?: () => void): void;
 }
 
 export interface DiagnosticCheck {

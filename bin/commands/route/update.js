@@ -81,11 +81,16 @@ async function run() {
       ruleMap[internalKey] = bm ? tgt + bm[0] : tgt
       const newContent = ruleMapToEprcText(ruleMap)
       saveRuleFileContent(fileName, newContent)
+      output.warnFileOnlyMode()
 
       if (jsonFlag) {
-        output.jsonRaw({ success: true, file: fileName, pattern: pat, newTarget: tgt })
+        output.jsonRaw({ success: true, file: fileName, pattern: pat, newTarget: tgt,
+        fileOnly: true,
+        warning: output.FILE_ONLY_WARNING
+      })
         return
       }
+
 
       output.header('Route Rule Updated')
       output.success(`${pat} -> ${tgt}`)
@@ -108,11 +113,16 @@ async function run() {
     ruleMap[internalKey] = bm ? tgt + bm[0] : tgt
     const newContent = ruleMapToEprcText(ruleMap)
     saveRuleFileContent(fileName, newContent)
+    output.warnFileOnlyMode()
 
     if (jsonFlag) {
-      output.jsonRaw({ success: true, file: fileName, pattern: pat, newTarget: tgt })
+      output.jsonRaw({ success: true, file: fileName, pattern: pat, newTarget: tgt,
+      fileOnly: true,
+      warning: output.FILE_ONLY_WARNING
+    })
       return
     }
+
 
     output.header('Route Rule Updated')
     output.success(`${pat} -> ${tgt}`)

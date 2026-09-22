@@ -64,8 +64,10 @@ async function run() {
         // Disable all, then enable target
         files.forEach(f => setRuleFileEnabled(f.name, f.name === targetFile))
 
+        output.warnFileOnlyMode()
+
         if (jsonFlag) {
-          output.jsonRaw({ success: true, activeFile: targetFile })
+          output.jsonRaw({ success: true, activeFile: targetFile, fileOnly: true, warning: output.FILE_ONLY_WARNING })
           return
         }
 
@@ -83,8 +85,10 @@ async function run() {
 
       files.forEach(f => setRuleFileEnabled(f.name, f.name === targetFile))
 
+      output.warnFileOnlyMode()
+
       if (jsonFlag) {
-        output.jsonRaw({ success: true, activeFile: targetFile })
+        output.jsonRaw({ success: true, activeFile: targetFile, fileOnly: true, warning: output.FILE_ONLY_WARNING })
         return
       }
 

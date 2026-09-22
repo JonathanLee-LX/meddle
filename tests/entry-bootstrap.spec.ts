@@ -89,3 +89,26 @@ describe('bin/main.js — env dispatch end-to-end (real spawn, node context)', (
         })
     }, 12000)
 })
+
+describe('proxy probe file always written (issue #85)', () => {
+    it('writes mcp-proxy-url.json on normal start (no MEDDLE_MCP)', () => {
+        const home = mkdtempSync(join(tmpdir(), 'meddle-probe-write-'))
+        tmpHomes.push(home)
+        const mcpFile = join(home, 'mcp-proxy-url.json')
+        const { args, options } = buildProxySpawn({
+            baseEnv: { ...process.env, MEDDLE_HOME: home, MEDDLE_HEADLESS: '1' },
+            reentryArgv: getReentryArgv(),
+            // Explicitly omit MEDDLE_MCP — probe file must still be written
+            extraEnv: { DEBUG: '' },
+        })
+        // Ensure MEDDLE_MCP is not set
+        delete options.env.MEDDLE_MCP
+        const child = spawn(process.execPath, args, { ...options, stdio: ['ignore', 'pipe', 'pipe'] })
+        children.push(child)
+        return waitForFile(mcpFile, 12000).then((d) => {
+            expect(d.proxyUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/)
+            expect(d.pid).toBeTypeOf('number')
+            expect(d.startedAt).toBeTruthy()
+        })
+    }, 15000)
+})

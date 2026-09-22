@@ -24,6 +24,7 @@ async function run() {
 
   const running = await isProxyRunning()
 
+  let fileOnly = false
   if (running) {
     try {
       await apiDelete(`/api/mocks/${id}`)
@@ -34,6 +35,7 @@ async function run() {
         output.error(`Mock rule not found: id=${id}`)
         process.exit(1)
       }
+      fileOnly = true
     }
   } else {
     const deleted = deleteMockRule(id)
@@ -41,10 +43,15 @@ async function run() {
       output.error(`Mock rule not found: id=${id}`)
       process.exit(1)
     }
+    fileOnly = true
   }
 
+  if (fileOnly) output.warnFileOnlyMode()
+
   if (jsonFlag) {
-    output.jsonRaw({ success: true, id })
+    output.jsonRaw(fileOnly
+      ? { success: true, id, fileOnly: true, warning: output.FILE_ONLY_WARNING }
+      : { success: true, id })
     return
   }
 

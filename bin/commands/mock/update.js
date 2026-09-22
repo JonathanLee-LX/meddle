@@ -72,6 +72,7 @@ async function run() {
   const running = await isProxyRunning()
 
   let result
+  let fileOnly = false
   if (running) {
     try {
       result = await apiPut(`/api/mocks/${id}`, options)
@@ -83,6 +84,7 @@ async function run() {
         output.error(`Mock rule not found: id=${id}`)
         process.exit(1)
       }
+      fileOnly = true
     }
   } else {
     result = updateMockRule(id, options)
@@ -90,10 +92,15 @@ async function run() {
       output.error(`Mock rule not found: id=${id}`)
       process.exit(1)
     }
+    fileOnly = true
   }
 
+  if (fileOnly) output.warnFileOnlyMode()
+
   if (jsonFlag) {
-    output.jsonRaw(result)
+    output.jsonRaw(fileOnly
+      ? { ...result, fileOnly: true, warning: output.FILE_ONLY_WARNING }
+      : result)
     return
   }
 
