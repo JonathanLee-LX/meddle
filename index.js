@@ -265,6 +265,12 @@ const expressApp = createApp(serverContext)
 // ===== 加载 Mock 和路由规则 =====
 serverContext.loadMockRules()
 routeLoader.initRouteRules()
+// Hot-reload mocks when the file is edited externally (CLI file-mode / hand edit). Issue #85.
+mockHandler.initMockFileWatcher(() => {
+    serverContext.mockRules = ctx.mockRules
+    serverContext.mockIdSeq = ctx.mockIdSeq
+    serverContext.broadcastToAllClients({ type: 'mocksUpdated', rules: ctx.mockRules })
+})
 
 // ===== Cross-Origin 插件 =====
 const plugins = [{
@@ -531,9 +537,11 @@ localWSServer.on('connection', (client, req) => {})
         if (ctx.requestPipeline.mode === 'on') {
             proxyDebug('plugin on host allowlist: ' + (ctx.PLUGIN_ON_HOSTS.size > 0 ? Array.from(ctx.PLUGIN_ON_HOSTS).join(',') : '(all)'))
         }
-        if (process.env.MEDDLE_MCP) {
+        // Always write probe file so CLI can find this instance (issue #85).
+        // Previously only wrote under MEDDLE_MCP, leaving stale ports after normal starts.
+        {
             const mcpFile = path.join(ctx.meddleDir, 'mcp-proxy-url.json')
-            const mcpData = { proxyUrl }
+            const mcpData = { proxyUrl, pid: process.pid, startedAt: new Date().toISOString() }
             if (process.env.MEDDLE_OPEN_CHROMEDEVTOOLS) mcpData.remoteDebuggingPort = 9222
             fs.writeFileSync(mcpFile, JSON.stringify(mcpData), 'utf8')
         }

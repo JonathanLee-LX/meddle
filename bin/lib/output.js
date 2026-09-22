@@ -128,6 +128,23 @@ function tableRow(columns, widths) {
   console.log('  ' + row)
 }
 
+/**
+ * Shared downgrade warning when CLI mutates config but cannot reach a live proxy
+ * (issue #85). Same wording for mock + route families.
+ */
+const FILE_ONLY_WARNING =
+  'Config written to file, but could not connect to a running proxy — restart required for changes to take effect.'
+
+/**
+ * Emit the file-only downgrade warning. Always prints to stderr (including
+ * --json mode) so the failure mode is never silent.
+ * @returns {string} the warning message
+ */
+function warnFileOnlyMode() {
+  console.error(chalk.yellow('  ⚠'), FILE_ONLY_WARNING)
+  return FILE_ONLY_WARNING
+}
+
 module.exports = {
   setJsonMode,
   isJsonMode,
@@ -142,5 +159,7 @@ module.exports = {
   plain,
   kv,
   bullet,
-  tableRow
+  tableRow,
+  FILE_ONLY_WARNING,
+  warnFileOnlyMode,
 }

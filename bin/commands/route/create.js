@@ -34,6 +34,7 @@ async function run() {
   const running = await isProxyRunning()
 
   let result
+  let fileOnly = false
   if (running) {
     try {
       result = await apiPost('/api/rule-files', {
@@ -46,6 +47,7 @@ async function run() {
       // Fallback to file mode
       try {
         result = createRuleFile(fileName, content, true)
+        fileOnly = true
       } catch (err) {
         output.error(err.message)
         process.exit(1)
@@ -54,14 +56,19 @@ async function run() {
   } else {
     try {
       result = createRuleFile(fileName, content, true)
+      fileOnly = true
     } catch (err) {
       output.error(err.message)
       process.exit(1)
     }
   }
 
+  if (fileOnly) output.warnFileOnlyMode()
+
   if (jsonFlag) {
-    output.jsonRaw(result)
+    output.jsonRaw(fileOnly
+      ? { ...result, fileOnly: true, warning: output.FILE_ONLY_WARNING }
+      : result)
     return
   }
 

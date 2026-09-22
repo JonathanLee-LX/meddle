@@ -1,5 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
+import chokidar from 'chokidar'
 import _debug from 'debug'
 import { getMimeType } from './map-local'
 import { appendProxyRecord } from './proxy-record'
@@ -64,6 +65,10 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
                 }
                 ctx.mockIdSeq = (data.nextId || Math.max(0, ...ctx.mockRules.map(r => r.id || 0))) + 1
                 proxyDebug(`已加载 ${ctx.mockRules.length} 条 Mock 规则 (${mockFile})`)
+            } else {
+                // File removed / never created — clear in-memory rules (watcher unlink).
+                ctx.mockRules = []
+                proxyDebug(`Mock 规则文件不存在，已清空内存规则 (${mockFile})`)
             }
         } catch (err: any) {
             console.error('加载 mock 规则失败:', err.message)
@@ -278,8 +283,39 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
         if (delay > 0) { setTimeout(doSend, delay) } else { doSend() }
     }
 
+    /**
+     * Watch the mocks file for external edits (CLI file-mode / hand edits).
+     * Aligns with route-rules watcher so file-only writes still hot-reload (issue #85).
+     */
+    function initMockFileWatcher(onReload?: () => void): void {
+        const mockFile = getMockFilePath()
+        const dir = path.dirname(mockFile)
+        const base = path.basename(mockFile)
+        try {
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+        } catch (_) { /* ignore */ }
+
+        // Watch the directory (not only the file) so atomic replace / recreate
+        // still triggers — same pattern as route-rules watcher.
+        const watcher = chokidar.watch(dir, {
+            ignoreInitial: true,
+            awaitWriteFinish: { stabilityThreshold: 50, pollInterval: 25 },
+        })
+        const reload = (event: string, changedPath?: string) => {
+            if (changedPath && path.basename(changedPath) !== base) return
+            proxyDebug(`mocks file ${event}: ${base}`)
+            loadMockRules()
+            if (onReload) onReload()
+        }
+        watcher.on('change', (p: string) => reload('changed', p))
+        watcher.on('add', (p: string) => reload('added', p))
+        watcher.on('unlink', (p: string) => reload('removed', p))
+        proxyDebug(`watching mocks file: ${mockFile}`)
+    }
+
     return {
         getMockFilePath, loadMockRules, saveMockRules, matchMockRule,
         buildMockResponseForTest, sendMockResponse, loadCustomPathsFromSettings,
+        initMockFileWatcher,
     }
 }

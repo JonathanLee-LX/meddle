@@ -81,11 +81,16 @@ async function run() {
 
       const newContent = ruleMapToEprcText(ruleMap)
       saveRuleFileContent(fileName, newContent)
+      output.warnFileOnlyMode()
 
       if (jsonFlag) {
-        output.jsonRaw({ success: true, file: fileName, pattern: pat, target: tgt })
+        output.jsonRaw({ success: true, file: fileName, pattern: pat, target: tgt,
+        fileOnly: true,
+        warning: output.FILE_ONLY_WARNING
+      })
         return
       }
+
 
       output.header('Route Rule Added')
       output.success(`${pat} -> ${tgt}`)
@@ -109,11 +114,16 @@ async function run() {
 
     const newContent = ruleMapToEprcText(ruleMap)
     saveRuleFileContent(fileName, newContent)
+    output.warnFileOnlyMode()
 
     if (jsonFlag) {
-      output.jsonRaw({ success: true, file: fileName, pattern: pat, target: tgt })
+      output.jsonRaw({ success: true, file: fileName, pattern: pat, target: tgt,
+      fileOnly: true,
+      warning: output.FILE_ONLY_WARNING
+    })
       return
     }
+
 
     output.header('Route Rule Added')
     output.success(`${pat} -> ${tgt}`)
