@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0-beta.14] - 2026-09-23
+
+### Fixed
+
+- Always write `mcp-proxy-url.json` on proxy start (not only when `MEDDLE_MCP` is set) (#85/#86).
+- Probe fallback: stale file port → default port / live resolve + cache (#85/#86).
+- Explicit warning when mock/route CLI falls back to file-only (not silent success) (#85/#86).
+
+### Added
+
+- Mocks file watcher for hot reload (#85/#86).
+
 ## [0.5.0-beta.13] - 2026-09-22
 
 ### Fixed
