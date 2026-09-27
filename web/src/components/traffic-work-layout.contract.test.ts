@@ -40,6 +40,23 @@ describe('traffic B layout contract (P2 / #89)', () => {
     expect(detail).toContain('detail-empty-state')
   })
 
+
+  it('keeps work shell flush: no outer Card, ≤8px outer pad, single hit code box', () => {
+    const app = readSource('../App.tsx')
+    const workStart = app.indexOf('data-testid="shell-work"')
+    const configStart = app.indexOf('data-testid="shell-config"')
+    const workSlice = app.slice(workStart, configStart)
+    expect(workSlice).not.toMatch(/<Card[\s>]/)
+    expect(workSlice).not.toContain('ui-page-padding')
+    expect(app).toMatch(/shellMode === 'work'[\s\S]*?px-2 pt-2/)
+
+    const detail = readSource('./detail-panel.tsx')
+    const overview = detail.slice(detail.indexOf('function OverviewHitPane'))
+    // Exactly one detail-hit-box; no nested bordered shell around it
+    expect(overview.match(/data-testid="detail-hit-box"/g)?.length).toBe(1)
+    expect(overview).not.toContain('border-2')
+  })
+
   it('selects row without opening global panel on wide B', () => {
     const app = readSource('../App.tsx')
     expect(app).toContain('isNarrowTraffic')

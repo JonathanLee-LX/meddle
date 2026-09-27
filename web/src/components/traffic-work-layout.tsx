@@ -112,7 +112,7 @@ export function TrafficWorkLayout({ master, detail, drawer, className }: Traffic
       </div>
       <div
         data-testid="traffic-detail"
-        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-l bg-muted/20"
+        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       >
         {detail}
       </div>

@@ -633,8 +633,15 @@ function OverviewHitPane({ record, detail }: { record: ProxyRecord; detail: Reco
   const hit = getTrafficHitSummary(record)
   const headerEntries = Object.entries(detail.requestHeaders || {}).slice(0, 6)
 
+  const hitCode =
+    hit.kind === 'rule'
+      ? `source: ${record.source}\ntarget: ${record.target}`
+      : hit.kind === 'mock'
+        ? `mock: true · ${record.source}`
+        : `pass · ${record.source}`
+
   return (
-    <div className="space-y-4 pt-3" data-testid="detail-overview-hit">
+    <div className="space-y-3 pt-3" data-testid="detail-overview-hit">
       <div className="grid grid-cols-[72px_1fr] gap-x-3 gap-y-1.5 text-xs">
         <div className="text-muted-foreground">方法</div>
         <div className="font-mono font-medium">{record.method}</div>
@@ -649,34 +656,24 @@ function OverviewHitPane({ record, detail }: { record: ProxyRecord; detail: Reco
       </div>
 
       <div>
-        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           命中规则 / Mock
         </h4>
-        <div
-          className="rounded-md border-2 border-border bg-muted/40 p-3"
+        <div className="mb-1 text-sm font-semibold">{hit.title}</div>
+        <p className="mb-2 text-xs text-muted-foreground">{hit.description}</p>
+        {/* At most ONE equal-width code box for hit display (wireframe B). */}
+        <pre
+          className="w-full overflow-x-auto rounded border bg-muted/30 px-2 py-1.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all"
           data-testid="detail-hit-box"
           data-hit-kind={hit.kind}
         >
-          <div className="mb-1 text-sm font-semibold">{hit.title}</div>
-          <p className="text-xs text-muted-foreground">{hit.description}</p>
-          {hit.kind === 'rule' && (
-            <code className="mt-2 block rounded border bg-background px-2 py-1.5 font-mono text-[11px] leading-relaxed">
-              source: {record.source}
-              <br />
-              target: {record.target}
-            </code>
-          )}
-          {hit.kind === 'mock' && (
-            <code className="mt-2 block rounded border bg-background px-2 py-1.5 font-mono text-[11px]">
-              mock: true · {record.source}
-            </code>
-          )}
-        </div>
+          {hitCode}
+        </pre>
       </div>
 
       {headerEntries.length > 0 && (
         <div>
-          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             请求 Headers（节选）
           </h4>
           <div className="grid grid-cols-[minmax(72px,90px)_1fr] gap-x-3 gap-y-1 text-xs">
@@ -817,8 +814,8 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
   // Embedded (TrafficWorkLayout right pane / global-panel body): never use Sheet*
   // primitives — they require Dialog context and white-screen #root otherwise.
   const header = embedded ? (
-        <div className="px-4 pt-4 pb-2" data-testid="detail-panel-header">
-          <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
+        <div className="px-3 pt-2.5 pb-1.5" data-testid="detail-panel-header">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
             {headerInner}
           </h2>
         </div>

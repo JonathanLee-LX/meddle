@@ -28,8 +28,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { LogFilter } from '@/components/log-filter'
 import { LogTable } from '@/components/log-table'
@@ -925,68 +924,67 @@ function App() {
         />
 
         {/* Shell content: work (traffic B host) XOR config (full-width) — never stacked */}
-        <main className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 px-4 pt-4 lg:px-6">
+        {/* Work: flush under header (≤8px outer pad, no floating Card). Config keeps card chrome. */}
+        <main
+          className={
+            shellMode === 'work'
+              ? 'flex min-h-0 w-full flex-1 px-2 pt-2'
+              : 'mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 px-4 pt-4 lg:px-6'
+          }
+        >
           {shellMode === 'work' ? (
             <div
               data-testid="shell-work"
               data-shell-mode="work"
               className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden"
             >
-              <Card className="h-full min-h-0 w-full flex-1 gap-0 overflow-hidden rounded-b-none py-0">
-                <div className="flex shrink-0 items-center gap-3 border-b px-4 py-2">
-                  <span className="text-sm font-medium text-muted-foreground">流量</span>
-                  <Badge variant={recording ? 'default' : 'secondary'} className="ml-auto shrink-0">
-                    <span className={recording ? 'size-1.5 rounded-full bg-current opacity-70' : 'size-1.5 rounded-full bg-current opacity-50'} />
-                    {recording ? '记录中' : '已暂停'}
-                  </Badge>
-                </div>
-                <div className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden p-[var(--ui-page-padding)]">
-                  <TrafficWorkLayout
-                    master={
-                      <Card data-testid="log-panel-card" className="flex h-full min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0 shadow-none">
-                        <CardHeader className="block shrink-0 border-b px-3 py-2 [.border-b]:pb-2">
-                          <CardTitle className="sr-only">请求日志</CardTitle>
-                          <LogFilter
-                            filterText={filterText}
-                            setFilterText={setFilterText}
-                            resourceTypeFilter={resourceTypeFilter}
-                            setResourceTypeFilter={setResourceTypeFilter}
-                            clientSourceFilter={clientSourceFilter}
-                            setClientSourceFilter={setClientSourceFilter}
-                            totalCount={store.records.length}
-                            filteredCount={filteredRecords.length}
-                            onClear={store.clearRecords}
-                            recording={recording}
-                            onToggleRecording={() => setRecording((r) => !r)}
-                          />
-                        </CardHeader>
-                        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-                          <LogTable
-                            records={displayRecords}
-                            selectedRecordId={store.selectedRecordId}
-                            onSelect={handleSelectRecord}
-                            autoScroll={autoScroll}
-                          />
-                        </CardContent>
-                      </Card>
-                    }
-                    detail={
-                      <Suspense fallback={<LoadingPlaceholder />}>
-                        <DetailPanel
-                          embedded
-                          detail={store.recordDetail}
-                          loading={store.detailLoading}
-                          error={store.detailError}
-                          selectedRecord={store.records.find((r) => r.id === store.selectedRecordId)}
-                          onCreateMock={handleCreateMockFromLog}
-                          onReplay={handleReplay}
-                          onJumpToRule={handleJumpToRule}
-                        />
-                      </Suspense>
-                    }
-                  />
-                </div>
-              </Card>
+              <TrafficWorkLayout
+                master={
+                  <div
+                    data-testid="log-panel-card"
+                    className="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
+                  >
+                    <div className="shrink-0 border-b px-2 py-1.5">
+                      <span className="sr-only">请求日志</span>
+                      <LogFilter
+                        filterText={filterText}
+                        setFilterText={setFilterText}
+                        resourceTypeFilter={resourceTypeFilter}
+                        setResourceTypeFilter={setResourceTypeFilter}
+                        clientSourceFilter={clientSourceFilter}
+                        setClientSourceFilter={setClientSourceFilter}
+                        totalCount={store.records.length}
+                        filteredCount={filteredRecords.length}
+                        onClear={store.clearRecords}
+                        recording={recording}
+                        onToggleRecording={() => setRecording((r) => !r)}
+                      />
+                    </div>
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                      <LogTable
+                        records={displayRecords}
+                        selectedRecordId={store.selectedRecordId}
+                        onSelect={handleSelectRecord}
+                        autoScroll={autoScroll}
+                      />
+                    </div>
+                  </div>
+                }
+                detail={
+                  <Suspense fallback={<LoadingPlaceholder />}>
+                    <DetailPanel
+                      embedded
+                      detail={store.recordDetail}
+                      loading={store.detailLoading}
+                      error={store.detailError}
+                      selectedRecord={store.records.find((r) => r.id === store.selectedRecordId)}
+                      onCreateMock={handleCreateMockFromLog}
+                      onReplay={handleReplay}
+                      onJumpToRule={handleJumpToRule}
+                    />
+                  </Suspense>
+                }
+              />
             </div>
           ) : (
             <div
