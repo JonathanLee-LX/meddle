@@ -723,10 +723,8 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
     }
   }
 
-  const body = (
-    <>
-        <SheetHeader className="px-4 pt-4 pb-2">
-          <SheetTitle className="flex items-center gap-2 text-base">
+  const headerInner = (
+            <>
             请求详情
             {detail && (
               <Badge className={`${getStatusColor(detail.statusCode)} border-0`}>
@@ -813,8 +811,28 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
                 </Button>
               )}
             </div>
+            </>
+  )
+
+  // Embedded (TrafficWorkLayout right pane / global-panel body): never use Sheet*
+  // primitives — they require Dialog context and white-screen #root otherwise.
+  const header = embedded ? (
+        <div className="px-4 pt-4 pb-2" data-testid="detail-panel-header">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
+            {headerInner}
+          </h2>
+        </div>
+  ) : (
+        <SheetHeader className="px-4 pt-4 pb-2">
+          <SheetTitle className="flex items-center gap-2 text-base">
+            {headerInner}
           </SheetTitle>
         </SheetHeader>
+  )
+
+  const body = (
+    <>
+        {header}
 
         <Separator />
 
