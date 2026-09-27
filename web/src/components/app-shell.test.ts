@@ -38,3 +38,14 @@ describe('app shell layout contract (P1 / #88)', () => {
     expect(app.indexOf('<LogTable', workCard)).toBeGreaterThan(workCard)
   })
 })
+
+describe('app shell traffic B host (P2 / #89)', () => {
+  it('wires TrafficWorkLayout inside shell-work only', () => {
+    const app = readSource('../App.tsx')
+    const workStart = app.indexOf('data-testid="shell-work"')
+    const configStart = app.indexOf('data-testid="shell-config"')
+    expect(app.indexOf('<TrafficWorkLayout', workStart)).toBeGreaterThan(workStart)
+    expect(app.indexOf('<TrafficWorkLayout', workStart)).toBeLessThan(configStart)
+    expect(app.slice(configStart)).not.toContain('TrafficWorkLayout')
+  })
+})

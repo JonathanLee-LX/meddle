@@ -1,4 +1,4 @@
-import { useState, useMemo, type ReactNode } from 'react'
+import { Fragment, useState, useMemo, type ReactNode } from 'react'
 import {
   Sheet,
   SheetContent,
@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Loader2, Wand2, RotateCw, Activity, XCircle, ArrowRight, ArrowDown, Clock, CornerDownRight, Flag, Route, ShieldCheck, ChevronDown, ChevronRight, Monitor, Server } from 'lucide-react'
+import { Loader2, Wand2, RotateCw, Activity, XCircle, ArrowRight, ArrowDown, Clock, CornerDownRight, Flag, Route, ShieldCheck, ChevronDown, ChevronRight, Monitor, Server, ExternalLink } from 'lucide-react'
+import { getTrafficHitSummary } from '@/lib/traffic-hit'
 import { diffLines } from 'diff'
 import { ApplicationIcon } from '@/components/application-icon'
 import type { RecordDetail, ProxyRecord, InspectionStage } from '@/types'
@@ -27,6 +28,8 @@ interface DetailPanelProps {
   selectedRecord?: ProxyRecord
   onCreateMock?: (data: { source: string; responseBody: string; statusCode: number; responseHeaders?: Record<string, string> }) => void
   onReplay?: (id: number) => Promise<unknown>
+  /** Jump to matching route rule in config shell (display entry point). */
+  onJumpToRule?: (record: ProxyRecord) => void
 }
 
 function getStatusColor(code: number) {
@@ -619,7 +622,78 @@ function InspectionView({ inspection }: { inspection: NonNullable<RecordDetail['
   )
 }
 
-export function DetailPanel({ open = false, onClose, embedded = false, detail, loading, error, selectedRecord, onCreateMock, onReplay }: DetailPanelProps) {
+
+function formatDurationMs(ms: number | undefined) {
+  if (ms == null) return '—'
+  if (ms < 1000) return `${ms} ms`
+  return `${(ms / 1000).toFixed(1)} s`
+}
+
+function OverviewHitPane({ record, detail }: { record: ProxyRecord; detail: RecordDetail }) {
+  const hit = getTrafficHitSummary(record)
+  const headerEntries = Object.entries(detail.requestHeaders || {}).slice(0, 6)
+
+  return (
+    <div className="space-y-4 pt-3" data-testid="detail-overview-hit">
+      <div className="grid grid-cols-[72px_1fr] gap-x-3 gap-y-1.5 text-xs">
+        <div className="text-muted-foreground">方法</div>
+        <div className="font-mono font-medium">{record.method}</div>
+        <div className="text-muted-foreground">URL</div>
+        <div className="break-all font-mono">{record.source}</div>
+        <div className="text-muted-foreground">状态</div>
+        <div className="font-mono">
+          {detail.statusCode} {detail.statusMessage}
+        </div>
+        <div className="text-muted-foreground">延迟</div>
+        <div className="font-mono tabular-nums">{formatDurationMs(record.duration)}</div>
+      </div>
+
+      <div>
+        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          命中规则 / Mock
+        </h4>
+        <div
+          className="rounded-md border-2 border-border bg-muted/40 p-3"
+          data-testid="detail-hit-box"
+          data-hit-kind={hit.kind}
+        >
+          <div className="mb-1 text-sm font-semibold">{hit.title}</div>
+          <p className="text-xs text-muted-foreground">{hit.description}</p>
+          {hit.kind === 'rule' && (
+            <code className="mt-2 block rounded border bg-background px-2 py-1.5 font-mono text-[11px] leading-relaxed">
+              source: {record.source}
+              <br />
+              target: {record.target}
+            </code>
+          )}
+          {hit.kind === 'mock' && (
+            <code className="mt-2 block rounded border bg-background px-2 py-1.5 font-mono text-[11px]">
+              mock: true · {record.source}
+            </code>
+          )}
+        </div>
+      </div>
+
+      {headerEntries.length > 0 && (
+        <div>
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            请求 Headers（节选）
+          </h4>
+          <div className="grid grid-cols-[minmax(72px,90px)_1fr] gap-x-3 gap-y-1 text-xs">
+            {headerEntries.map(([key, value]) => (
+              <Fragment key={key}>
+                <div className="truncate text-muted-foreground" title={key}>{key}</div>
+                <div className="truncate font-mono" title={value}>{value}</div>
+              </Fragment>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function DetailPanel({ open = false, onClose, embedded = false, detail, loading, error, selectedRecord, onCreateMock, onReplay, onJumpToRule }: DetailPanelProps) {
   const [replaying, setReplaying] = useState(false)
 
   const handleCreateMock = () => {
@@ -715,11 +789,24 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
                   {replaying ? '重放中...' : '重放'}
                 </Button>
               )}
+              {selectedRecord && onJumpToRule && selectedRecord.source !== selectedRecord.target && !selectedRecord.mock && (
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={() => onJumpToRule(selectedRecord)}
+                  title="跳转到路由规则配置"
+                  data-testid="detail-jump-to-rule"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                  查看规则
+                </Button>
+              )}
               {detail && onCreateMock && !selectedRecord?.mock && (
                 <Button
                   variant="outline"
                   size="xs"
                   onClick={handleCreateMock}
+                  data-testid="detail-create-mock"
                 >
                   <Wand2 className="h-3.5 w-3.5 mr-1" />
                   创建 Mock
@@ -747,9 +834,10 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
           <div className="flex-1 flex items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : detail ? (
-          <Tabs defaultValue="request" className="flex-1 flex flex-col min-h-0">
+        ) : detail && selectedRecord ? (
+          <Tabs defaultValue="overview" className="flex-1 flex flex-col min-h-0">
             <TabsList className="mx-4 mt-2 w-fit">
+              <TabsTrigger value="overview" data-testid="detail-tab-overview">概览</TabsTrigger>
               <TabsTrigger value="request">请求</TabsTrigger>
               <TabsTrigger value="response">响应</TabsTrigger>
               <TabsTrigger value="inspect">
@@ -757,6 +845,11 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
                 Inspect
               </TabsTrigger>
             </TabsList>
+            <TabsContent value="overview" className="flex-1 min-h-0 mt-0">
+              <ScrollArea className="h-full px-4 pb-4">
+                <OverviewHitPane record={selectedRecord} detail={detail} />
+              </ScrollArea>
+            </TabsContent>
             <TabsContent value="request" className="flex-1 min-h-0 mt-0">
               <ScrollArea className="h-full px-4 pb-4">
                 <div className="space-y-3 pt-3">
@@ -803,18 +896,21 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
               </ScrollArea>
             </TabsContent>
           </Tabs>
-        ) : (
+        ) : selectedRecord ? (
           <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm px-6 text-center">
-            {selectedRecord ? (
-              <div className="space-y-2">
-                <div>详情数据暂不可用</div>
-                <div className="text-xs font-mono break-all">
-                  {selectedRecord.method} {selectedRecord.source}
-                </div>
+            <div className="space-y-2">
+              <div>详情数据暂不可用</div>
+              <div className="text-xs font-mono break-all">
+                {selectedRecord.method} {selectedRecord.source}
               </div>
-            ) : (
-              <div>无法加载详情</div>
-            )}
+            </div>
+          </div>
+        ) : (
+          <div
+            data-testid="detail-empty-state"
+            className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground"
+          >
+            选择左侧一条流量以查看详情 / 命中信息
           </div>
         )}
     </>

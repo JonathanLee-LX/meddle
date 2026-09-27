@@ -75,7 +75,7 @@ describe('application layout standard', () => {
   })
 
   it('keeps secondary cards flat', () => {
-    expect(readSource('../App.tsx')).toContain('data-testid="log-panel-card" className="min-h-0 flex-1 gap-0 overflow-hidden py-0 shadow-none"')
+    expect(readSource('../App.tsx')).toMatch(/data-testid="log-panel-card"[^>]*shadow-none/)
     expect(readSource('./rule-config.tsx')).toContain('className="min-h-0 flex-1 gap-0 overflow-hidden py-0 shadow-none')
     expect(readSource('./mobile-proxy-panel.tsx').match(/<Card className="[^"]*shadow-none[^"]*">/g)).toHaveLength(2)
   })
