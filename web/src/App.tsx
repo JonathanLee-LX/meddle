@@ -28,7 +28,6 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -42,6 +41,7 @@ import { GlobalPanelProvider } from '@/components/global-panel/global-panel-cont
 import { toast } from '@/components/ui/toast'
 import type { CommandAction, GlobalPanelApi, GlobalPanelRoute } from '@/components/global-panel/types'
 import type { MockRule, ResourceType } from '@/types'
+import { getPathForTab, getShellMode, getTabFromPath, type ShellTab } from '@/lib/shell-mode'
 
 const RuleConfig = lazy(() =>
   import('@/components/rule-config').then((module) => ({
@@ -135,30 +135,11 @@ function App() {
   const [recording, setRecording] = useState(true)
   const [autoScroll, setAutoScroll] = useState(true)
 
-  // 从 URL 路径获取当前 tab
-  const getTabFromPath = (pathname: string): string => {
-    const tabMap: Record<string, string> = {
-      '/': 'logs',
-      '/logs': 'logs',
-      '/config': 'config',
-      '/mock': 'mock',
-      '/plugins': 'plugins',
-      '/health': 'health',
-    }
-    return tabMap[pathname] || 'logs'
-  }
-
   const activeTab = getTabFromPath(location.pathname)
+  const shellMode = getShellMode(activeTab)
 
-  const handleTabChange = (tab: string) => {
-    const pathMap: Record<string, string> = {
-      logs: '/logs',
-      config: '/config',
-      mock: '/mock',
-      plugins: '/plugins',
-      health: '/health',
-    }
-    navigate(pathMap[tab] || '/')
+  const handleTabChange = (tab: ShellTab) => {
+    navigate(getPathForTab(tab))
   }
 
   const handleCreateMockFromLog = useCallback(
@@ -895,6 +876,9 @@ function App() {
     >
       <div className="flex h-dvh flex-col overflow-hidden bg-muted/20">
         <AppHeader
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          mockEnabledCount={store.mockRules.filter((r) => r.enabled).length}
           onSettingsClick={() =>
             openPanelRoute({
               id: 'settings',
@@ -914,131 +898,124 @@ function App() {
           }
         />
 
-        {/* Main Content */}
+        {/* Shell content: work (traffic B host) XOR config (full-width) — never stacked */}
         <main className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 px-4 pt-4 lg:px-6">
-          <Card className="h-full min-h-0 w-full flex-1 gap-0 overflow-hidden rounded-b-none py-0">
-            <Tabs value={activeTab} onValueChange={handleTabChange} className="min-h-0 flex-1 gap-0">
-              <div className="flex shrink-0 items-center gap-3 border-b px-4 py-2">
-                <TabsList className="!h-auto max-w-full justify-start gap-1 overflow-x-auto p-1">
-                  <TabsTrigger value="logs" className="h-8 flex-none px-3" title="查看经过代理的本机、远程设备和插件测试流量">
-                    <Globe />
-                    日志
-                  </TabsTrigger>
-                  <TabsTrigger value="config" className="h-8 flex-none px-3" title="管理代理转发规则，并在表格、文本和图表视图间切换">
-                    <FileText />
-                    路由规则
-                  </TabsTrigger>
-                  <TabsTrigger value="mock" className="h-8 flex-none px-3" title="匹配请求后返回本地响应，用于联调和异常场景测试">
-                    <ClipboardList />
-                    Mock
-                    {store.mockRules.filter((r) => r.enabled).length > 0 && <Badge variant="secondary">{store.mockRules.filter((r) => r.enabled).length}</Badge>}
-                  </TabsTrigger>
-                  <TabsTrigger value="plugins" className="h-8 flex-none px-3" title="控制内置、自定义和第三方插件的运行状态">
-                    <Plug />
-                    扩展插件
-                  </TabsTrigger>
-                  <TabsTrigger value="health" className="h-8 flex-none px-3" title="查看进程健康、连接、守护策略和日志限流状态">
-                    <Activity />
-                    健康
-                  </TabsTrigger>
-                </TabsList>
-                {activeTab === 'logs' && (
+          {shellMode === 'work' ? (
+            <div
+              data-testid="shell-work"
+              data-shell-mode="work"
+              className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden"
+            >
+              {/* P2 will fill B master-detail here; P1 keeps current traffic UI inside the work host */}
+              <Card className="h-full min-h-0 w-full flex-1 gap-0 overflow-hidden rounded-b-none py-0">
+                <div className="flex shrink-0 items-center gap-3 border-b px-4 py-2">
+                  <span className="text-sm font-medium text-muted-foreground">流量</span>
                   <Badge variant={recording ? 'default' : 'secondary'} className="ml-auto shrink-0">
                     <span className={recording ? 'size-1.5 rounded-full bg-current opacity-70' : 'size-1.5 rounded-full bg-current opacity-50'} />
                     {recording ? '记录中' : '已暂停'}
                   </Badge>
+                </div>
+                <div className="mt-0 flex min-h-0 flex-1 flex-col p-[var(--ui-page-padding)]">
+                  <Card data-testid="log-panel-card" className="min-h-0 flex-1 gap-0 overflow-hidden py-0 shadow-none">
+                    <CardHeader className="block shrink-0 border-b px-3 py-3 [.border-b]:pb-3">
+                      <CardTitle className="sr-only">请求日志</CardTitle>
+                      <LogFilter
+                        filterText={filterText}
+                        setFilterText={setFilterText}
+                        resourceTypeFilter={resourceTypeFilter}
+                        setResourceTypeFilter={setResourceTypeFilter}
+                        clientSourceFilter={clientSourceFilter}
+                        setClientSourceFilter={setClientSourceFilter}
+                        totalCount={store.records.length}
+                        filteredCount={filteredRecords.length}
+                        onClear={store.clearRecords}
+                        recording={recording}
+                        onToggleRecording={() => setRecording((r) => !r)}
+                      />
+                    </CardHeader>
+                    <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+                      <LogTable records={displayRecords} selectedRecordId={store.selectedRecordId} onSelect={handleSelectRecord} autoScroll={autoScroll} />
+                    </CardContent>
+                  </Card>
+                </div>
+              </Card>
+            </div>
+          ) : (
+            <div
+              data-testid="shell-config"
+              data-shell-mode="config"
+              className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden"
+            >
+              <Card className="h-full min-h-0 w-full flex-1 gap-0 overflow-hidden rounded-b-none py-0">
+                {activeTab === 'config' && (
+                  <div className="mt-0 flex min-h-0 flex-1 flex-col p-[var(--ui-page-padding)]">
+                    <Suspense fallback={<LoadingPlaceholder />}>
+                      <RuleConfig
+                        rules={store.rules}
+                        setRules={store.setRules}
+                        ruleFiles={store.ruleFiles}
+                        activeFileName={store.activeFileName}
+                        fetchRuleFiles={store.fetchRuleFiles}
+                        fetchFileContent={store.fetchFileContent}
+                        fetchRuleFileRawContent={store.fetchRuleFileRawContent}
+                        saveRuleFileRawContent={store.saveRuleFileRawContent}
+                        saveFileContent={store.saveFileContent}
+                        createRuleFile={store.createRuleFile}
+                        toggleRuleFile={store.toggleRuleFile}
+                        renameRuleFile={store.renameRuleFile}
+                        deleteRuleFile={store.deleteRuleFile}
+                        reorderRuleFiles={store.reorderRuleFiles}
+                      />
+                    </Suspense>
+                  </div>
                 )}
-              </div>
-
-              <TabsContent value="logs" className="mt-0 flex min-h-0 flex-col p-[var(--ui-page-padding)]">
-                <Card data-testid="log-panel-card" className="min-h-0 flex-1 gap-0 overflow-hidden py-0 shadow-none">
-                  <CardHeader className="block shrink-0 border-b px-3 py-3 [.border-b]:pb-3">
-                    <CardTitle className="sr-only">请求日志</CardTitle>
-                    <LogFilter
-                      filterText={filterText}
-                      setFilterText={setFilterText}
-                      resourceTypeFilter={resourceTypeFilter}
-                      setResourceTypeFilter={setResourceTypeFilter}
-                      clientSourceFilter={clientSourceFilter}
-                      setClientSourceFilter={setClientSourceFilter}
-                      totalCount={store.records.length}
-                      filteredCount={filteredRecords.length}
-                      onClear={store.clearRecords}
-                      recording={recording}
-                      onToggleRecording={() => setRecording((r) => !r)}
-                    />
-                  </CardHeader>
-                  <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-                    <LogTable records={displayRecords} selectedRecordId={store.selectedRecordId} onSelect={handleSelectRecord} autoScroll={autoScroll} />
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="config" className="mt-0 flex min-h-0 flex-1 flex-col p-[var(--ui-page-padding)]">
-                <Suspense fallback={<LoadingPlaceholder />}>
-                  <RuleConfig
-                      rules={store.rules}
-                      setRules={store.setRules}
-                      ruleFiles={store.ruleFiles}
-                      activeFileName={store.activeFileName}
-                      fetchRuleFiles={store.fetchRuleFiles}
-                      fetchFileContent={store.fetchFileContent}
-                      fetchRuleFileRawContent={store.fetchRuleFileRawContent}
-                      saveRuleFileRawContent={store.saveRuleFileRawContent}
-                      saveFileContent={store.saveFileContent}
-                      createRuleFile={store.createRuleFile}
-                      toggleRuleFile={store.toggleRuleFile}
-                      renameRuleFile={store.renameRuleFile}
-                      deleteRuleFile={store.deleteRuleFile}
-                      reorderRuleFiles={store.reorderRuleFiles}
-                    />
-                </Suspense>
-              </TabsContent>
-
-              <TabsContent value="mock" className="mt-0 min-h-0 overflow-y-auto">
-                <CardContent className="app-workspace-content">
-                  <Suspense fallback={<LoadingPlaceholder />}>
-                    <MockConfig
-                      mockRules={store.mockRules}
-                      fetchMocks={store.fetchMocks}
-                      createMock={store.createMock}
-                      updateMock={store.updateMock}
-                      deleteMock={store.deleteMock}
-                    />
-                  </Suspense>
-                </CardContent>
-              </TabsContent>
-
-              <TabsContent value="plugins" className="mt-0 min-h-0 overflow-y-auto">
-                <CardContent className="app-workspace-content">
-                  <Suspense fallback={<LoadingPlaceholder />}>
-                    <PluginConfig
-                      // 插件列表相关
-                      plugins={store.plugins}
-                      pluginMode={store.pluginMode}
-                      switchPluginMode={store.switchPluginMode}
-                      fetchPlugins={store.fetchPlugins}
-                      startPlugin={store.startPlugin}
-                      stopPlugin={store.stopPlugin}
-                      togglePlugin={store.togglePlugin}
-                      // 第三方插件相关
-                      thirdPartyPlugins={store.thirdPartyPlugins}
-                      thirdPartySecurity={store.thirdPartySecurity}
-                      fetchThirdPartyPlugins={store.fetchThirdPartyPlugins}
-                      loadThirdPartyPlugin={store.loadThirdPartyPlugin}
-                      unloadThirdPartyPlugin={store.unloadThirdPartyPlugin}
-                    />
-                  </Suspense>
-                </CardContent>
-              </TabsContent>
-
-              <TabsContent value="health" className="mt-0 min-h-0 overflow-y-auto">
-                <Suspense fallback={<LoadingPlaceholder />}>
-                  <HealthPanel />
-                </Suspense>
-              </TabsContent>
-            </Tabs>
-          </Card>
+                {activeTab === 'mock' && (
+                  <div className="mt-0 min-h-0 flex-1 overflow-y-auto">
+                    <CardContent className="app-workspace-content">
+                      <Suspense fallback={<LoadingPlaceholder />}>
+                        <MockConfig
+                          mockRules={store.mockRules}
+                          fetchMocks={store.fetchMocks}
+                          createMock={store.createMock}
+                          updateMock={store.updateMock}
+                          deleteMock={store.deleteMock}
+                        />
+                      </Suspense>
+                    </CardContent>
+                  </div>
+                )}
+                {activeTab === 'plugins' && (
+                  <div className="mt-0 min-h-0 flex-1 overflow-y-auto">
+                    <CardContent className="app-workspace-content">
+                      <Suspense fallback={<LoadingPlaceholder />}>
+                        <PluginConfig
+                          plugins={store.plugins}
+                          pluginMode={store.pluginMode}
+                          switchPluginMode={store.switchPluginMode}
+                          fetchPlugins={store.fetchPlugins}
+                          startPlugin={store.startPlugin}
+                          stopPlugin={store.stopPlugin}
+                          togglePlugin={store.togglePlugin}
+                          thirdPartyPlugins={store.thirdPartyPlugins}
+                          thirdPartySecurity={store.thirdPartySecurity}
+                          fetchThirdPartyPlugins={store.fetchThirdPartyPlugins}
+                          loadThirdPartyPlugin={store.loadThirdPartyPlugin}
+                          unloadThirdPartyPlugin={store.unloadThirdPartyPlugin}
+                        />
+                      </Suspense>
+                    </CardContent>
+                  </div>
+                )}
+                {activeTab === 'health' && (
+                  <div className="mt-0 min-h-0 flex-1 overflow-y-auto">
+                    <Suspense fallback={<LoadingPlaceholder />}>
+                      <HealthPanel />
+                    </Suspense>
+                  </div>
+                )}
+              </Card>
+            </div>
+          )}
         </main>
       </div>
     </GlobalPanelProvider>
