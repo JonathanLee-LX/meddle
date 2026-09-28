@@ -1,9 +1,12 @@
 /**
  * Traffic work-shell B split width helpers (display-only, localStorage).
- * Default ~60% left / 40% right per wireframe b.
+ * Default ~60% left / 40% right per wireframe b (#95).
+ * Fresh profiles (no localStorage) use TRAFFIC_SPLIT_DEFAULT_PCT;
+ * an existing meddle-traffic-split-pct value always wins.
  */
 
 export const TRAFFIC_SPLIT_STORAGE_KEY = 'meddle-traffic-split-pct'
+/** Left pane % for fresh profiles — wireframe b ~60/40 (#95). */
 export const TRAFFIC_SPLIT_DEFAULT_PCT = 60
 export const TRAFFIC_SPLIT_MIN_PCT = 35
 export const TRAFFIC_SPLIT_MAX_PCT = 75

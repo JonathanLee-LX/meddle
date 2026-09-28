@@ -89,8 +89,8 @@ export function TrafficWorkLayout({ master, detail, drawer, className }: Traffic
     >
       <div
         data-testid="traffic-master"
-        className="flex min-h-0 min-w-0 flex-col overflow-hidden"
-        style={{ width: `${leftPct}%` }}
+        className="flex min-h-0 min-w-0 shrink-0 flex-col overflow-hidden"
+        style={{ flex: `0 0 ${leftPct}%`, width: `${leftPct}%` }}
       >
         {master}
       </div>

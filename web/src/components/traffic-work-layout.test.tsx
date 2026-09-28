@@ -53,6 +53,22 @@ describe('TrafficWorkLayout (P2 / #89)', () => {
     expect(screen.getByTestId('traffic-work-layout')).toHaveAttribute('data-split-pct', '60')
   })
 
+  it('fresh profile uses ~60% left pane; stored pct overrides (#95)', () => {
+    mockMatchMedia(false)
+    const { unmount } = render(
+      <TrafficWorkLayout master={<div>m</div>} detail={<div>d</div>} />,
+    )
+    const master = screen.getByTestId('traffic-master')
+    expect(screen.getByTestId('traffic-work-layout')).toHaveAttribute('data-split-pct', '60')
+    expect(master).toHaveStyle({ width: '60%', flex: '0 0 60%' })
+    unmount()
+
+    localStorage.setItem(TRAFFIC_SPLIT_STORAGE_KEY, '48')
+    render(<TrafficWorkLayout master={<div>m</div>} detail={<div>d</div>} />)
+    expect(screen.getByTestId('traffic-work-layout')).toHaveAttribute('data-split-pct', '48')
+    expect(screen.getByTestId('traffic-master')).toHaveStyle({ width: '48%', flex: '0 0 48%' })
+  })
+
   it('persists drag width to localStorage on mouseup', () => {
     mockMatchMedia(false)
     render(
