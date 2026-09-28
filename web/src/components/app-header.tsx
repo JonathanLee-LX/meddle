@@ -56,7 +56,7 @@ export function AppHeader({
         <nav
           data-testid="app-shell-nav"
           aria-label="主导航"
-          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+          className="meddle-thin-scroll flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
         >
           {SHELL_NAV.map((item) => {
             const Icon = TAB_ICONS[item.tab]
