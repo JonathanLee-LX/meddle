@@ -27,7 +27,8 @@ describe('traffic B layout contract (P2 / #89)', () => {
     expect(table).toContain("from '@tanstack/react-virtual'")
     expect(table).toContain('useVirtualizer')
     expect(table).toMatch(/LOG_ROW_HEIGHT\s*=\s*22/)
-    expect(table).toContain('getTrafficHitSummary')
+    expect(table).toContain('TrafficHitBadge')
+    expect(table).toContain("from '@/components/traffic-hit-badge'")
   })
 
   it('shows hit overview by default (0 extra click path)', () => {
