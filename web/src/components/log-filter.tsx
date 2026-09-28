@@ -111,7 +111,7 @@ export function LogFilter({
           onValueChange={(value) => setClientSourceFilter(value as ClientSourceFilter)}
         >
           <SelectTrigger
-            className="h-8 w-[7.5rem] shrink-0 text-xs"
+            className="h-8 w-auto max-w-[8rem] shrink-0 text-xs"
             aria-label="流量来源"
             data-testid="log-filter-source-select"
           >
@@ -136,7 +136,7 @@ export function LogFilter({
           variant="outline"
           size="sm"
           spacing={1}
-          className="flex-nowrap justify-start"
+          className="min-w-0 flex-1 flex-nowrap justify-start"
           aria-label="资源类型"
         >
           {RESOURCE_TYPES.map((type) => (

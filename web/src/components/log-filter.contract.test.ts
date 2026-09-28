@@ -16,6 +16,7 @@ describe('log filter source select contract (#100)', () => {
     expect(source).toContain("value: 'plugin', label: '插件测试'")
     // Source control is SelectTrigger + SelectItem over CLIENT_SOURCES
     expect(source).toMatch(/SelectTrigger[\s\S]*?aria-label="流量来源"/)
+    expect(source).toContain('className="h-8 w-auto max-w-[8rem] shrink-0 text-xs"')
     expect(source).toContain('CLIENT_SOURCES.map((source) => (')
     expect(source).toContain('<SelectItem key={source.value}')
     // No ToggleGroup bound to clientSourceFilter
@@ -31,6 +32,7 @@ describe('log filter source select contract (#100)', () => {
     expect(source).toMatch(
       /data-testid="log-filter-source-type-row"[\s\S]*?log-filter-source-select[\s\S]*?aria-label="资源类型"/,
     )
+    expect(source).toContain('className="min-w-0 flex-1 flex-nowrap justify-start"')
     // Search stays its own row (proxy-log-filter outside the source/type row)
     const rowStart = source.indexOf('data-testid="log-filter-source-type-row"')
     expect(source.indexOf('id="proxy-log-filter"')).toBeGreaterThan(-1)
