@@ -176,7 +176,55 @@ describe('LogTable application source', () => {
 
     expect(screen.getByText('命中')).toBeInTheDocument()
     // virtualizer mock only renders first row
-    expect(screen.getByText('Rule')).toBeInTheDocument()
+    const badge = screen.getByRole('status')
+    expect(badge).toHaveAttribute('data-hit-kind', 'rule')
+    expect(badge).toHaveTextContent('Rule')
+  })
+
+  it('renders muted pass hit badge when source equals target', () => {
+    render(
+      <LogTable
+        records={[
+          {
+            id: 1,
+            method: 'GET',
+            source: 'https://cdn.example/a.js',
+            target: 'https://cdn.example/a.js',
+            time: '10:00:00',
+          },
+        ]}
+        selectedRecordId={null}
+        onSelect={vi.fn()}
+        autoScroll={false}
+      />,
+    )
+
+    const badge = screen.getByRole('status')
+    expect(badge).toHaveAttribute('data-hit-kind', 'pass')
+    expect(badge).toHaveTextContent('—')
+  })
+
+  it('keeps row selection working with hit badges present', () => {
+    const onSelect = vi.fn()
+    render(
+      <LogTable
+        records={[
+          {
+            id: 7,
+            method: 'PUT',
+            source: 'https://api.example/cart',
+            target: 'https://staging.example/cart',
+            time: '10:00:00',
+          },
+        ]}
+        selectedRecordId={null}
+        onSelect={onSelect}
+        autoScroll={false}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('https://api.example/cart'))
+    expect(onSelect).toHaveBeenCalledWith(7)
   })
 
   it('shows the application name and process metadata', () => {

@@ -8,7 +8,7 @@ import { ArrowDown, ArrowUp, Inbox } from 'lucide-react'
 import { ApplicationIcon } from '@/components/application-icon'
 import { cn } from '@/lib/utils'
 import type { ProxyRecord } from '@/types'
-import { getTrafficHitSummary } from '@/lib/traffic-hit'
+import { TrafficHitBadge } from '@/components/traffic-hit-badge'
 
 type TimeSortOrder = 'asc' | 'desc'
 
@@ -256,7 +256,6 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
                         {record.source}
                       </div>
                       <div className="flex h-full min-w-[200px] flex-1 items-center truncate px-2 font-mono" title={record.target}>
-                        {record.mock && <Badge className={cn(tableBadgeClassName, 'mr-1')}>MOCK</Badge>}
                         {record.target}
                       </div>
                       <div className="flex h-full w-14 items-center px-2">
@@ -271,21 +270,7 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
                       </div>
                       <div className="flex h-full w-24 items-center px-1.5 font-mono text-[10px] text-muted-foreground">{record.time}</div>
                       <div className="flex h-full w-14 items-center px-1.5">
-                        {(() => {
-                          const hit = getTrafficHitSummary(record)
-                          if (hit.kind === 'pass') {
-                            return <span className="text-[10px] text-muted-foreground">—</span>
-                          }
-                          return (
-                            <Badge
-                              variant={hit.kind === 'mock' ? 'default' : 'secondary'}
-                              className={tableBadgeClassName}
-                              data-hit-kind={hit.kind}
-                            >
-                              {hit.badge}
-                            </Badge>
-                          )
-                        })()}
+                        <TrafficHitBadge record={record} />
                       </div>
                     </div>
                   )
