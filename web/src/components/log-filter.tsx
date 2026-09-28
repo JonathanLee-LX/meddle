@@ -55,17 +55,17 @@ export function LogFilter({
   onToggleRecording,
 }: LogFilterProps) {
   return (
-    <div className="flex flex-col gap-3">
-      {/* Search and actions */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+    <div className="flex flex-col gap-1.5">
+      {/* Search + actions — single dense row */}
+      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
         <div className="relative min-w-0 flex-1">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             id="proxy-log-filter"
-            placeholder="过滤请求... (支持 method:GET domain:xxx client:iPhone app:Chrome)"
+            placeholder="过滤 method / url / status..."
             value={filterText}
             onChange={(e) => setFilterText(e.target.value)}
-            className="pl-9 font-mono"
+            className="h-8 pl-8 font-mono text-xs"
             aria-label="过滤代理请求"
           />
         </div>
@@ -75,7 +75,7 @@ export function LogFilter({
               <X />
             </Button>
           )}
-          <Badge variant="secondary" className="shrink-0">
+          <Badge variant="secondary" className="shrink-0 text-[10px]">
             {filterText || resourceTypeFilter !== 'all' || clientSourceFilter !== 'all' ? `${filteredCount} / ${totalCount}` : `${totalCount} 条`}
           </Badge>
           <Button
@@ -100,8 +100,8 @@ export function LogFilter({
         </div>
       </div>
 
-      {/* Resource type filters */}
-      <div className="flex flex-col gap-2">
+      {/* Source + resource filters compressed into one wrap row */}
+      <div className="flex flex-wrap items-center gap-1.5">
         <ToggleGroup
           type="single"
           value={clientSourceFilter}

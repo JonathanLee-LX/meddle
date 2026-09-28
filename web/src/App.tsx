@@ -28,11 +28,11 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { LogFilter } from '@/components/log-filter'
 import { LogTable } from '@/components/log-table'
+import { TrafficWorkLayout } from '@/components/traffic-work-layout'
 import { AppHeader } from '@/components/app-header'
 import { useProxyStore } from '@/hooks/use-proxy-store'
 import { useFuzzyFilter } from '@/hooks/use-fuzzy-filter'
@@ -40,8 +40,10 @@ import { createMockFromLog, type CreateMockFromLogData } from '@/utils/mock-fact
 import { GlobalPanelProvider } from '@/components/global-panel/global-panel-context'
 import { toast } from '@/components/ui/toast'
 import type { CommandAction, GlobalPanelApi, GlobalPanelRoute } from '@/components/global-panel/types'
-import type { MockRule, ResourceType } from '@/types'
+import type { MockRule, ProxyRecord, ResourceType } from '@/types'
 import { getPathForTab, getShellMode, getTabFromPath, type ShellTab } from '@/lib/shell-mode'
+import { TRAFFIC_NARROW_MAX_WIDTH_PX } from '@/lib/traffic-split'
+import { useMediaQuery } from '@/hooks/use-media-query'
 
 const RuleConfig = lazy(() =>
   import('@/components/rule-config').then((module) => ({
@@ -137,10 +139,29 @@ function App() {
 
   const activeTab = getTabFromPath(location.pathname)
   const shellMode = getShellMode(activeTab)
+  const isNarrowTraffic = useMediaQuery(`(max-width: ${TRAFFIC_NARROW_MAX_WIDTH_PX}px)`)
 
   const handleTabChange = (tab: ShellTab) => {
     navigate(getPathForTab(tab))
   }
+
+  const handleJumpToRule = useCallback(
+    (record: ProxyRecord) => {
+      store.closeDetail()
+      navigate('/config')
+      window.setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent('route-rule:highlight', {
+            detail: {
+              pattern: record.source,
+              target: record.target,
+            },
+          }),
+        )
+      }, 120)
+    },
+    [navigate, store],
+  )
 
   const handleCreateMockFromLog = useCallback(
     (data: CreateMockFromLogData) => {
@@ -182,9 +203,12 @@ function App() {
   const handleSelectRecord = useCallback(
     (id: number) => {
       void store.fetchDetail(id)
-      openPanelRoute({ id: 'request.detail', title: '请求详情', size: 'lg' })
+      // Narrow (layout A-like): open Sheet/global panel. Wide B: right pane shows detail with 0 extra click.
+      if (isNarrowTraffic) {
+        openPanelRoute({ id: 'request.detail', title: '请求详情', size: 'lg' })
+      }
     },
-    [openPanelRoute, store],
+    [isNarrowTraffic, openPanelRoute, store],
   )
 
   const createCommands = useCallback(
@@ -726,6 +750,7 @@ function App() {
               selectedRecord={store.records.find((r) => r.id === store.selectedRecordId)}
               onCreateMock={handleCreateMockFromLog}
               onReplay={handleReplay}
+              onJumpToRule={handleJumpToRule}
             />
           )
         case 'plugin.generate':
@@ -858,7 +883,7 @@ function App() {
           return <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">未找到这个面板</div>
       }
     },
-    [handleCreateMockFromLog, handleReplay, navigate, store],
+    [handleCreateMockFromLog, handleJumpToRule, handleReplay, navigate, store],
   )
 
   // When paused, keep a snapshot of records
@@ -899,26 +924,28 @@ function App() {
         />
 
         {/* Shell content: work (traffic B host) XOR config (full-width) — never stacked */}
-        <main className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 px-4 pt-4 lg:px-6">
+        {/* Work: flush under header (≤8px outer pad, no floating Card). Config keeps card chrome. */}
+        <main
+          className={
+            shellMode === 'work'
+              ? 'flex min-h-0 w-full flex-1 px-2 pt-2'
+              : 'mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 px-4 pt-4 lg:px-6'
+          }
+        >
           {shellMode === 'work' ? (
             <div
               data-testid="shell-work"
               data-shell-mode="work"
               className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden"
             >
-              {/* P2 will fill B master-detail here; P1 keeps current traffic UI inside the work host */}
-              <Card className="h-full min-h-0 w-full flex-1 gap-0 overflow-hidden rounded-b-none py-0">
-                <div className="flex shrink-0 items-center gap-3 border-b px-4 py-2">
-                  <span className="text-sm font-medium text-muted-foreground">流量</span>
-                  <Badge variant={recording ? 'default' : 'secondary'} className="ml-auto shrink-0">
-                    <span className={recording ? 'size-1.5 rounded-full bg-current opacity-70' : 'size-1.5 rounded-full bg-current opacity-50'} />
-                    {recording ? '记录中' : '已暂停'}
-                  </Badge>
-                </div>
-                <div className="mt-0 flex min-h-0 flex-1 flex-col p-[var(--ui-page-padding)]">
-                  <Card data-testid="log-panel-card" className="min-h-0 flex-1 gap-0 overflow-hidden py-0 shadow-none">
-                    <CardHeader className="block shrink-0 border-b px-3 py-3 [.border-b]:pb-3">
-                      <CardTitle className="sr-only">请求日志</CardTitle>
+              <TrafficWorkLayout
+                master={
+                  <div
+                    data-testid="log-panel-card"
+                    className="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
+                  >
+                    <div className="shrink-0 border-b px-2 py-1.5">
+                      <span className="sr-only">请求日志</span>
                       <LogFilter
                         filterText={filterText}
                         setFilterText={setFilterText}
@@ -932,13 +959,32 @@ function App() {
                         recording={recording}
                         onToggleRecording={() => setRecording((r) => !r)}
                       />
-                    </CardHeader>
-                    <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-                      <LogTable records={displayRecords} selectedRecordId={store.selectedRecordId} onSelect={handleSelectRecord} autoScroll={autoScroll} />
-                    </CardContent>
-                  </Card>
-                </div>
-              </Card>
+                    </div>
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                      <LogTable
+                        records={displayRecords}
+                        selectedRecordId={store.selectedRecordId}
+                        onSelect={handleSelectRecord}
+                        autoScroll={autoScroll}
+                      />
+                    </div>
+                  </div>
+                }
+                detail={
+                  <Suspense fallback={<LoadingPlaceholder />}>
+                    <DetailPanel
+                      embedded
+                      detail={store.recordDetail}
+                      loading={store.detailLoading}
+                      error={store.detailError}
+                      selectedRecord={store.records.find((r) => r.id === store.selectedRecordId)}
+                      onCreateMock={handleCreateMockFromLog}
+                      onReplay={handleReplay}
+                      onJumpToRule={handleJumpToRule}
+                    />
+                  </Suspense>
+                }
+              />
             </div>
           ) : (
             <div

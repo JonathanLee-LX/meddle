@@ -8,12 +8,14 @@ import { ArrowDown, ArrowUp, Inbox } from 'lucide-react'
 import { ApplicationIcon } from '@/components/application-icon'
 import { cn } from '@/lib/utils'
 import type { ProxyRecord } from '@/types'
+import { getTrafficHitSummary } from '@/lib/traffic-hit'
 
 type TimeSortOrder = 'asc' | 'desc'
 
-const tableBadgeClassName = 'h-[18px] px-[5px] py-0 font-mono text-[10px] leading-none'
-const headerCellClassName = 'flex h-9 shrink-0 items-center px-2 leading-none'
-const LOG_ROW_HEIGHT = 36
+const tableBadgeClassName = 'h-[16px] px-[4px] py-0 font-mono text-[10px] leading-none'
+const headerCellClassName = 'flex h-7 shrink-0 items-center px-1.5 leading-none'
+/** Dense B-layout row height (~20–22px → ~28–32 rows @ ~700px). */
+export const LOG_ROW_HEIGHT = 22
 const LIVE_EDGE_THRESHOLD_PX = LOG_ROW_HEIGHT
 
 interface LogTableProps {
@@ -141,9 +143,9 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
 
   return (
     <div className="relative flex min-h-0 flex-1 overflow-x-auto">
-      <div className="flex min-h-0 min-w-[1080px] flex-1 flex-col">
+      <div className="flex min-h-0 min-w-[960px] flex-1 flex-col">
         {/* Header - Sticky */}
-        <div className="z-10 flex h-9 shrink-0 items-stretch border-b bg-muted/70 text-xs font-medium backdrop-blur supports-[backdrop-filter]:bg-muted/90">
+        <div className="z-10 flex h-7 shrink-0 items-stretch border-b bg-muted/70 text-[11px] font-medium backdrop-blur supports-[backdrop-filter]:bg-muted/90">
           <div className={cn(headerCellClassName, 'w-16')}>方法</div>
           <div className={cn(headerCellClassName, 'w-14')}>状态</div>
           <div className={cn(headerCellClassName, 'w-24')}>来源</div>
@@ -152,18 +154,19 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
           <div className={cn(headerCellClassName, 'min-w-[200px] flex-1')}>目标地址</div>
           <div className={cn(headerCellClassName, 'w-14')}>协议</div>
           <div className={cn(headerCellClassName, 'w-16')}>耗时</div>
-          <div className={cn(headerCellClassName, 'w-28')}>
+          <div className={cn(headerCellClassName, 'w-24')}>
             <Button
               variant="ghost"
               size="xs"
               onClick={toggleTimeSortOrder}
-              className="-ml-2 h-7"
+              className="-ml-1 h-6 px-1.5 text-[11px]"
               title={timeSortOrder === 'desc' ? '倒序（新→旧），点击切换为正序' : '正序（旧→新），点击切换为倒序'}
             >
               时间
               {timeSortOrder === 'desc' ? <ArrowDown data-icon="inline-end" /> : <ArrowUp data-icon="inline-end" />}
             </Button>
           </div>
+          <div className={cn(headerCellClassName, 'w-14')}>命中</div>
         </div>
         <ScrollArea className="min-h-0 flex-1" ref={scrollRef}>
           <div className="min-w-full">
@@ -195,7 +198,7 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
                     <div
                       key={record.id ?? virtualRow.index}
                       className={cn(
-                        'absolute flex w-full items-center cursor-pointer border-b border-border/50 text-xs transition-colors',
+                        'absolute flex w-full items-center cursor-pointer border-b border-border/40 text-[11px] transition-colors',
                         isSelected ? 'bg-accent' : 'hover:bg-muted/50',
                       )}
                       onClick={() => record.id != null && onSelect(record.id)}
@@ -266,7 +269,24 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
                       <div className="flex h-full w-16 items-center px-2 font-mono text-[10px] text-muted-foreground">
                         {record.duration != null && formatDuration(record.duration)}
                       </div>
-                      <div className="flex h-full w-28 items-center px-2 font-mono text-muted-foreground">{record.time}</div>
+                      <div className="flex h-full w-24 items-center px-1.5 font-mono text-[10px] text-muted-foreground">{record.time}</div>
+                      <div className="flex h-full w-14 items-center px-1.5">
+                        {(() => {
+                          const hit = getTrafficHitSummary(record)
+                          if (hit.kind === 'pass') {
+                            return <span className="text-[10px] text-muted-foreground">—</span>
+                          }
+                          return (
+                            <Badge
+                              variant={hit.kind === 'mock' ? 'default' : 'secondary'}
+                              className={tableBadgeClassName}
+                              data-hit-kind={hit.kind}
+                            >
+                              {hit.badge}
+                            </Badge>
+                          )
+                        })()}
+                      </div>
                     </div>
                   )
                 })}

@@ -8,8 +8,8 @@ const { scrollToOffsetMock } = vi.hoisted(() => ({
 
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: () => ({
-    getVirtualItems: () => [{ index: 0, key: 0, size: 36, start: 0 }],
-    getTotalSize: () => 36,
+    getVirtualItems: () => [{ index: 0, key: 0, size: 22, start: 0 }],
+    getTotalSize: () => 22,
     scrollToOffset: scrollToOffsetMock,
   }),
 }))
@@ -146,6 +146,37 @@ describe('LogTable application source', () => {
     expect(requestAnimationFrameSpy).toHaveBeenCalledTimes(1)
     expect(viewport.scrollTop).toBe(0)
     requestAnimationFrameSpy.mockRestore()
+  })
+
+  it('renders a hit badge column for mock / rule rows', () => {
+    render(
+      <LogTable
+        records={[
+          {
+            id: 1,
+            method: 'GET',
+            source: 'https://a.example/x',
+            target: 'https://b.example/x',
+            time: '10:00:00',
+          },
+          {
+            id: 2,
+            method: 'POST',
+            source: 'https://a.example/y',
+            target: 'https://a.example/y',
+            time: '10:00:01',
+            mock: true,
+          },
+        ]}
+        selectedRecordId={null}
+        onSelect={vi.fn()}
+        autoScroll={false}
+      />,
+    )
+
+    expect(screen.getByText('命中')).toBeInTheDocument()
+    // virtualizer mock only renders first row
+    expect(screen.getByText('Rule')).toBeInTheDocument()
   })
 
   it('shows the application name and process metadata', () => {
