@@ -58,7 +58,7 @@ describe('application layout standard', () => {
     ['./health-panel.tsx', 'app-workspace-content'],
     ['./plugin-config.tsx', 'app-page-stack'],
     ['./rule-config.tsx', 'app-page-stack'],
-    ['./mock-config.tsx', 'app-page-stack'],
+    ['./mock-config.tsx', 'mock-config-layout'],
   ])('%s uses %s', (path, className) => {
     expect(readSource(path)).toContain(className)
   })
