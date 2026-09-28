@@ -397,7 +397,7 @@ export function HealthPanel() {
   ]
 
   return (
-    <div className="app-workspace-content overflow-y-auto">
+    <div className="meddle-thin-scroll app-workspace-content overflow-y-auto">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">

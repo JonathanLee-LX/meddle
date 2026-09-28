@@ -276,7 +276,7 @@ function CompactBodyDiff({
         <CopyButton text={before} label="变更前 Body" />
         <CopyButton text={after} label="变更后 Body" />
       </div>
-      <DiffLinePreview lines={previewLines} className="max-h-40 overflow-auto" />
+      <DiffLinePreview lines={previewLines} className="meddle-thin-scroll max-h-40 overflow-auto" />
       {!hasBinaryBody && (
         <>
           <Button variant="ghost" size="xs" onClick={() => setExpanded((value) => !value)}>
@@ -663,7 +663,7 @@ function OverviewHitPane({ record, detail }: { record: ProxyRecord; detail: Reco
         <p className="mb-2 text-xs text-muted-foreground">{hit.description}</p>
         {/* At most ONE equal-width code box for hit display (wireframe B). */}
         <pre
-          className="w-full overflow-x-auto rounded border bg-muted/30 px-2 py-1.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all"
+          className="meddle-thin-scroll w-full overflow-x-auto rounded border bg-muted/30 px-2 py-1.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all"
           data-testid="detail-hit-box"
           data-hit-kind={hit.kind}
         >

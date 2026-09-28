@@ -1016,7 +1016,7 @@ function App() {
                   </div>
                 )}
                 {activeTab === 'mock' && (
-                  <div className="mt-0 min-h-0 flex-1 overflow-y-auto">
+                  <div className="meddle-thin-scroll mt-0 min-h-0 flex-1 overflow-y-auto">
                     <CardContent className="app-workspace-content">
                       <Suspense fallback={<LoadingPlaceholder />}>
                         <MockConfig
@@ -1031,7 +1031,7 @@ function App() {
                   </div>
                 )}
                 {activeTab === 'plugins' && (
-                  <div className="mt-0 min-h-0 flex-1 overflow-y-auto">
+                  <div className="meddle-thin-scroll mt-0 min-h-0 flex-1 overflow-y-auto">
                     <CardContent className="app-workspace-content">
                       <Suspense fallback={<LoadingPlaceholder />}>
                         <PluginConfig
@@ -1053,7 +1053,7 @@ function App() {
                   </div>
                 )}
                 {activeTab === 'health' && (
-                  <div className="mt-0 min-h-0 flex-1 overflow-y-auto">
+                  <div className="meddle-thin-scroll mt-0 min-h-0 flex-1 overflow-y-auto">
                     <Suspense fallback={<LoadingPlaceholder />}>
                       <HealthPanel />
                     </Suspense>

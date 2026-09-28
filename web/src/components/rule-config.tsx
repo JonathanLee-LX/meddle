@@ -1337,7 +1337,7 @@ export function RuleConfig(props: RuleConfigProps) {
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <div
                 data-slot="rule-table-header"
-                className="z-10 shrink-0 overflow-x-auto bg-card"
+                className="meddle-thin-scroll z-10 shrink-0 overflow-x-auto bg-card"
               >
                 <Table className="table-fixed">
                   <RuleTableColGroup showDragColumn={showDragColumn} />

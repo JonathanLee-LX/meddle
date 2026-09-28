@@ -286,7 +286,7 @@ export function RuleOverviewPanel({ rules, activeFileName, onLocateRule, onSelec
 
   const renderMergedTable = () => (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border">
-      <div className="shrink-0 overflow-x-auto bg-card">
+      <div className="meddle-thin-scroll shrink-0 overflow-x-auto bg-card">
         <Table className="table-fixed">
           <colgroup>
             <col style={{ width: '6rem' }} />
@@ -368,7 +368,7 @@ export function RuleOverviewPanel({ rules, activeFileName, onLocateRule, onSelec
 
   const renderFilesTable = () => (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border">
-      <div className="shrink-0 overflow-x-auto bg-card">
+      <div className="meddle-thin-scroll shrink-0 overflow-x-auto bg-card">
         <Table className="table-fixed">
           <colgroup>
             <col style={{ width: '3.5rem' }} />

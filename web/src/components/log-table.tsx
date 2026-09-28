@@ -142,7 +142,7 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
   }, [records.length, autoScroll, timeSortOrder])
 
   return (
-    <div className="relative flex min-h-0 flex-1 overflow-x-auto">
+    <div className="meddle-thin-scroll relative flex min-h-0 flex-1 overflow-x-auto">
       <div className="flex min-h-0 min-w-[960px] flex-1 flex-col">
         {/* Header - Sticky */}
         <div className="z-10 flex h-7 shrink-0 items-stretch border-b bg-muted/70 text-[11px] font-medium backdrop-blur supports-[backdrop-filter]:bg-muted/90">
