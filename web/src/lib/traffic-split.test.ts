@@ -23,6 +23,19 @@ describe('traffic-split width memory', () => {
     expect(clampTrafficSplitPct(Number.NaN)).toBe(TRAFFIC_SPLIT_DEFAULT_PCT)
   })
 
+  it('fresh profile (no localStorage) defaults to ~60 left / 40 right (#95)', () => {
+    expect(localStorage.getItem(TRAFFIC_SPLIT_STORAGE_KEY)).toBeNull()
+    expect(TRAFFIC_SPLIT_DEFAULT_PCT).toBe(60)
+    expect(loadTrafficSplitPct()).toBe(60)
+  })
+
+  it('existing stored meddle-traffic-split-pct wins over the default (#95)', () => {
+    localStorage.setItem(TRAFFIC_SPLIT_STORAGE_KEY, '42')
+    expect(loadTrafficSplitPct()).toBe(42)
+    localStorage.setItem(TRAFFIC_SPLIT_STORAGE_KEY, '90')
+    expect(loadTrafficSplitPct()).toBe(TRAFFIC_SPLIT_MAX_PCT)
+  })
+
   it('persists and restores width via localStorage', () => {
     expect(loadTrafficSplitPct()).toBe(TRAFFIC_SPLIT_DEFAULT_PCT)
     expect(saveTrafficSplitPct(48)).toBe(48)
