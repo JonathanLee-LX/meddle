@@ -2,6 +2,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Search, X, Trash2, Pause, Play } from 'lucide-react'
 import type { ClientSourceFilter, ResourceType } from '@/types'
 
@@ -100,26 +101,32 @@ export function LogFilter({
         </div>
       </div>
 
-      {/* Source + resource filters compressed into one wrap row */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <ToggleGroup
-          type="single"
+      {/* Source Select + resource types — one compact filter row (scroll on narrow) */}
+      <div
+        data-testid="log-filter-source-type-row"
+        className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto"
+      >
+        <Select
           value={clientSourceFilter}
-          onValueChange={(value) => {
-            if (value) setClientSourceFilter(value as ClientSourceFilter)
-          }}
-          variant="outline"
-          size="sm"
-          spacing={1}
-          className="flex-wrap justify-start"
-          aria-label="流量来源"
+          onValueChange={(value) => setClientSourceFilter(value as ClientSourceFilter)}
         >
-          {CLIENT_SOURCES.map((source) => (
-            <ToggleGroupItem key={source.value} value={source.value}>
-              {source.label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+          <SelectTrigger
+            className="h-8 w-[7.5rem] shrink-0 text-xs"
+            aria-label="流量来源"
+            data-testid="log-filter-source-select"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {CLIENT_SOURCES.map((source) => (
+                <SelectItem key={source.value} value={source.value} className="text-xs">
+                  {source.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
         <ToggleGroup
           type="single"
           value={resourceTypeFilter}
@@ -129,11 +136,11 @@ export function LogFilter({
           variant="outline"
           size="sm"
           spacing={1}
-          className="flex-wrap justify-start"
+          className="flex-nowrap justify-start"
           aria-label="资源类型"
         >
           {RESOURCE_TYPES.map((type) => (
-            <ToggleGroupItem key={type.value} value={type.value}>
+            <ToggleGroupItem key={type.value} value={type.value} className="shrink-0">
               {type.label}
             </ToggleGroupItem>
           ))}
