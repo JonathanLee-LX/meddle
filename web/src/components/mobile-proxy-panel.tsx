@@ -233,8 +233,8 @@ export function MobileProxyPanel() {
   }
 
   return (
-    <div className="app-panel-content h-full">
-      <div className="mx-auto grid w-full max-w-3xl gap-6 md:grid-cols-[340px_1fr]">
+    <div className="app-panel-content h-full w-full">
+      <div data-testid="mobile-proxy-fullwidth" className="mx-auto grid w-full max-w-6xl gap-6 md:grid-cols-[340px_minmax(0,1fr)]">
         <Card className="gap-0 overflow-hidden py-0 shadow-none">
           <CardHeader className="border-b py-4">
             <CardTitle className="flex items-center gap-2">

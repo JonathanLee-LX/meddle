@@ -37,6 +37,7 @@ import { AppHeader } from '@/components/app-header'
 import { useProxyStore } from '@/hooks/use-proxy-store'
 import { useFuzzyFilter } from '@/hooks/use-fuzzy-filter'
 import { createMockFromLog, type CreateMockFromLogData } from '@/utils/mock-factory'
+import { MOCK_OPEN_CREATE_EVENT, type MockOpenCreateDetail } from '@/lib/mock-config-events'
 import { GlobalPanelProvider } from '@/components/global-panel/global-panel-context'
 import { toast } from '@/components/ui/toast'
 import type { CommandAction, GlobalPanelApi, GlobalPanelRoute } from '@/components/global-panel/types'
@@ -168,16 +169,14 @@ function App() {
       const mockData = createMockFromLog(data)
       store.closeDetail()
       navigate('/mock')
-      window.dispatchEvent(
-        new CustomEvent('global-panel:open-panel', {
-          detail: {
-            id: 'mock.create',
-            title: '新建 Mock 规则',
-            size: 'lg',
-            params: { initialData: mockData },
-          },
-        }),
-      )
+      // Open in-page list|edit editor (02-mock); return still lands on traffic B via tab.
+      window.setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent(MOCK_OPEN_CREATE_EVENT, {
+            detail: { initialData: mockData } satisfies MockOpenCreateDetail,
+          }),
+        )
+      }, 120)
     },
     [navigate, store],
   )
@@ -720,13 +719,9 @@ function App() {
           icon: Brush,
           keywords: ['settings', 'theme', 'zoom', '主题', '缩放'],
           closeOnRun: false,
-          run: () =>
-            panel.openPanel({
-              id: 'settings',
-              title: '系统设置',
-              description: '打开偏好设置',
-              size: 'lg',
-            }),
+          run: () => {
+            navigate('/settings')
+          },
         },
       ]
     },
@@ -904,23 +899,9 @@ function App() {
           activeTab={activeTab}
           onTabChange={handleTabChange}
           mockEnabledCount={store.mockRules.filter((r) => r.enabled).length}
-          onSettingsClick={() =>
-            openPanelRoute({
-              id: 'settings',
-              title: '系统设置',
-              description: '管理系统偏好、配置和 AI 功能',
-              size: 'lg',
-            })
-          }
+          onSettingsClick={() => navigate('/settings')}
           onCommandClick={openCommandPanel}
-          onMobileProxyClick={() =>
-            openPanelRoute({
-              id: 'mobile-proxy',
-              title: '手机代理',
-              description: '扫描二维码，在手机上配置代理与 HTTPS 证书',
-              size: 'md',
-            })
-          }
+          onMobileProxyClick={() => navigate('/mobile')}
         />
 
         {/* Shell content: work (traffic B host) XOR config (full-width) — never stacked */}
@@ -929,7 +910,7 @@ function App() {
           className={
             shellMode === 'work'
               ? 'flex min-h-0 w-full flex-1 px-2 pt-2'
-              : 'mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 px-4 pt-4 lg:px-6'
+              : 'flex min-h-0 w-full flex-1 px-4 pt-4 lg:px-6'
           }
         >
           {shellMode === 'work' ? (
@@ -994,7 +975,10 @@ function App() {
             >
               <Card className="h-full min-h-0 w-full flex-1 gap-0 overflow-hidden rounded-b-none py-0">
                 {activeTab === 'config' && (
-                  <div className="mt-0 flex min-h-0 flex-1 flex-col p-[var(--ui-page-padding)]">
+                  <div
+                    data-testid="config-page-rules"
+                    className="mt-0 flex min-h-0 flex-1 flex-col p-[var(--ui-page-padding)]"
+                  >
                     <Suspense fallback={<LoadingPlaceholder />}>
                       <RuleConfig
                         rules={store.rules}
@@ -1016,22 +1000,26 @@ function App() {
                   </div>
                 )}
                 {activeTab === 'mock' && (
-                  <div className="meddle-thin-scroll mt-0 min-h-0 flex-1 overflow-y-auto">
-                    <CardContent className="app-workspace-content">
-                      <Suspense fallback={<LoadingPlaceholder />}>
-                        <MockConfig
-                          mockRules={store.mockRules}
-                          fetchMocks={store.fetchMocks}
-                          createMock={store.createMock}
-                          updateMock={store.updateMock}
-                          deleteMock={store.deleteMock}
-                        />
-                      </Suspense>
-                    </CardContent>
+                  <div
+                    data-testid="config-page-mock"
+                    className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden p-[var(--ui-page-padding)]"
+                  >
+                    <Suspense fallback={<LoadingPlaceholder />}>
+                      <MockConfig
+                        mockRules={store.mockRules}
+                        fetchMocks={store.fetchMocks}
+                        createMock={store.createMock}
+                        updateMock={store.updateMock}
+                        deleteMock={store.deleteMock}
+                      />
+                    </Suspense>
                   </div>
                 )}
                 {activeTab === 'plugins' && (
-                  <div className="meddle-thin-scroll mt-0 min-h-0 flex-1 overflow-y-auto">
+                  <div
+                    data-testid="config-page-plugins"
+                    className="meddle-thin-scroll mt-0 min-h-0 flex-1 overflow-y-auto"
+                  >
                     <CardContent className="app-workspace-content">
                       <Suspense fallback={<LoadingPlaceholder />}>
                         <PluginConfig
@@ -1053,9 +1041,32 @@ function App() {
                   </div>
                 )}
                 {activeTab === 'health' && (
-                  <div className="meddle-thin-scroll mt-0 min-h-0 flex-1 overflow-y-auto">
+                  <div
+                    data-testid="config-page-health"
+                    className="meddle-thin-scroll mt-0 min-h-0 flex-1 overflow-y-auto"
+                  >
                     <Suspense fallback={<LoadingPlaceholder />}>
                       <HealthPanel />
+                    </Suspense>
+                  </div>
+                )}
+                {activeTab === 'settings' && (
+                  <div
+                    data-testid="config-page-settings"
+                    className="meddle-thin-scroll mt-0 flex min-h-0 flex-1 flex-col overflow-hidden"
+                  >
+                    <Suspense fallback={<LoadingPlaceholder />}>
+                      <SettingsPanel embedded />
+                    </Suspense>
+                  </div>
+                )}
+                {activeTab === 'mobile' && (
+                  <div
+                    data-testid="config-page-mobile"
+                    className="meddle-thin-scroll mt-0 min-h-0 flex-1 overflow-y-auto"
+                  >
+                    <Suspense fallback={<LoadingPlaceholder />}>
+                      <MobileProxyPanel />
                     </Suspense>
                   </div>
                 )}

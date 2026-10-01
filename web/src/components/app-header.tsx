@@ -3,12 +3,12 @@ import { Badge } from '@/components/ui/badge'
 import { AIConfigBadge } from '@/components/ai-settings'
 import { useTheme } from '@/components/theme-provider'
 import { SessionSwitcher } from '@/components/session-switcher'
-import { SHELL_NAV, type ShellTab } from '@/lib/shell-mode'
+import { SHELL_NAV, getPrimaryNavTab, type ShellTab } from '@/lib/shell-mode'
 import { cn } from '@/lib/utils'
 import { Activity, ClipboardList, Command, FileText, Globe, Moon, Sun, Settings, Monitor, Plug, QrCode } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
-const TAB_ICONS: Record<ShellTab, LucideIcon> = {
+const TAB_ICONS: Record<Exclude<ShellTab, 'settings' | 'mobile'>, LucideIcon> = {
   logs: Globe,
   config: FileText,
   mock: ClipboardList,
@@ -38,13 +38,16 @@ export function AppHeader({
   onMobileProxyClick,
 }: AppHeaderProps) {
   const { theme, toggleTheme } = useTheme()
+  const primaryActive = getPrimaryNavTab(activeTab)
+  const settingsActive = activeTab === 'settings'
+  const mobileActive = activeTab === 'mobile'
 
   return (
     <header
       data-testid="app-shell-header"
       className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80"
     >
-      <div className="mx-auto flex h-14 w-full max-w-[1600px] items-center gap-3 px-4 lg:px-6">
+      <div className="flex h-14 w-full items-center gap-3 px-4 lg:px-6">
         <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
           <Globe className="size-4" />
         </div>
@@ -59,8 +62,8 @@ export function AppHeader({
           className="meddle-thin-scroll flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
         >
           {SHELL_NAV.map((item) => {
-            const Icon = TAB_ICONS[item.tab]
-            const active = activeTab === item.tab
+            const Icon = TAB_ICONS[item.tab as keyof typeof TAB_ICONS]
+            const active = primaryActive === item.tab
             const isWork = item.mode === 'work'
             return (
               <button
@@ -98,7 +101,15 @@ export function AppHeader({
         <div className="flex shrink-0 items-center gap-2">
           <AIConfigBadge />
           <SessionSwitcher />
-          <Button variant="outline" size="sm" onClick={onMobileProxyClick} title="手机代理与二维码">
+          <Button
+            variant={mobileActive ? 'selected' : 'outline'}
+            size="sm"
+            onClick={onMobileProxyClick}
+            title="手机代理与二维码"
+            data-testid="shell-utility-mobile"
+            data-state={mobileActive ? 'active' : 'inactive'}
+            aria-current={mobileActive ? 'page' : undefined}
+          >
             <QrCode data-icon="inline-start" />
             <span className="hidden sm:inline">手机代理</span>
           </Button>
@@ -107,7 +118,15 @@ export function AppHeader({
             操作
             <Badge variant="secondary">⌘K</Badge>
           </Button>
-          <Button variant="ghost" size="icon-sm" onClick={onSettingsClick} aria-label="设置">
+          <Button
+            variant={settingsActive ? 'selected' : 'ghost'}
+            size="icon-sm"
+            onClick={onSettingsClick}
+            aria-label="设置"
+            data-testid="shell-utility-settings"
+            data-state={settingsActive ? 'active' : 'inactive'}
+            aria-current={settingsActive ? 'page' : undefined}
+          >
             <Settings />
           </Button>
           <Button

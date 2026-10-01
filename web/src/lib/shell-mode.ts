@@ -1,9 +1,9 @@
 /**
  * App shell mode helpers — work (traffic B host) vs config (full-width).
- * Wireframe: modules/07-shell
+ * Wireframe: modules/07-shell · modules/01–06 (P3 full-width config)
  */
 
-export type ShellTab = 'logs' | 'config' | 'mock' | 'plugins' | 'health'
+export type ShellTab = 'logs' | 'config' | 'mock' | 'plugins' | 'health' | 'settings' | 'mobile'
 export type ShellMode = 'work' | 'config'
 
 export interface ShellNavItem {
@@ -14,7 +14,7 @@ export interface ShellNavItem {
   title: string
 }
 
-/** Top-bar primary nav (left of utility actions). */
+/** Top-bar primary nav (left of utility actions). Settings / mobile open from the right. */
 export const SHELL_NAV: readonly ShellNavItem[] = [
   {
     tab: 'logs',
@@ -53,6 +53,10 @@ export const SHELL_NAV: readonly ShellNavItem[] = [
   },
 ] as const
 
+/** Utility config routes opened from header right (full-width config host, not primary nav). */
+export const SHELL_UTILITY_TABS = ['settings', 'mobile'] as const
+export type ShellUtilityTab = (typeof SHELL_UTILITY_TABS)[number]
+
 const PATH_TO_TAB: Record<string, ShellTab> = {
   '/': 'logs',
   '/logs': 'logs',
@@ -60,6 +64,8 @@ const PATH_TO_TAB: Record<string, ShellTab> = {
   '/mock': 'mock',
   '/plugins': 'plugins',
   '/health': 'health',
+  '/settings': 'settings',
+  '/mobile': 'mobile',
 }
 
 const TAB_TO_PATH: Record<ShellTab, string> = {
@@ -68,6 +74,8 @@ const TAB_TO_PATH: Record<ShellTab, string> = {
   mock: '/mock',
   plugins: '/plugins',
   health: '/health',
+  settings: '/settings',
+  mobile: '/mobile',
 }
 
 export function getTabFromPath(pathname: string): ShellTab {
@@ -84,4 +92,13 @@ export function getShellMode(tab: ShellTab): ShellMode {
 
 export function isWorkModeTab(tab: ShellTab): boolean {
   return getShellMode(tab) === 'work'
+}
+
+export function isUtilityConfigTab(tab: ShellTab): tab is ShellUtilityTab {
+  return (SHELL_UTILITY_TABS as readonly string[]).includes(tab)
+}
+
+/** Primary nav highlight — utility tabs leave primary nav inactive. */
+export function getPrimaryNavTab(tab: ShellTab): ShellTab | null {
+  return isUtilityConfigTab(tab) ? null : tab
 }
