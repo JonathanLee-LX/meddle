@@ -15,15 +15,23 @@ interface TrafficWorkLayoutProps {
   detail: ReactNode
   /** Narrow drawer/Sheet host — rendered only when viewport is narrow */
   drawer?: ReactNode
+  /** Wide only: when false, hide detail + split handle; master fills width (#102) */
+  detailOpen?: boolean
   className?: string
 }
 
 /**
  * Layout B master-detail for shell-work only.
- * Wide: resizable ~60/40 split with localStorage width memory.
+ * Wide: resizable ~60/40 split with localStorage width memory (detail hidden when detailOpen=false).
  * Narrow (≤900px): master full-width; detail collapses to drawer (caller-owned Sheet).
  */
-export function TrafficWorkLayout({ master, detail, drawer, className }: TrafficWorkLayoutProps) {
+export function TrafficWorkLayout({
+  master,
+  detail,
+  drawer,
+  detailOpen = true,
+  className,
+}: TrafficWorkLayoutProps) {
   const isNarrow = useMediaQuery(`(max-width: ${TRAFFIC_NARROW_MAX_WIDTH_PX}px)`)
   const containerRef = useRef<HTMLDivElement>(null)
   const [leftPct, setLeftPct] = useState(loadTrafficSplitPct)
@@ -69,6 +77,7 @@ export function TrafficWorkLayout({ master, detail, drawer, className }: Traffic
       <div
         data-testid="traffic-work-layout"
         data-layout="narrow"
+        data-detail-open={detailOpen ? 'true' : 'false'}
         className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', className)}
       >
         <div data-testid="traffic-master" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -79,11 +88,27 @@ export function TrafficWorkLayout({ master, detail, drawer, className }: Traffic
     )
   }
 
+  if (!detailOpen) {
+    return (
+      <div
+        data-testid="traffic-work-layout"
+        data-layout="master-only"
+        data-detail-open="false"
+        className={cn('flex min-h-0 flex-1 overflow-hidden', className)}
+      >
+        <div data-testid="traffic-master" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {master}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       ref={containerRef}
       data-testid="traffic-work-layout"
       data-layout="split"
+      data-detail-open="true"
       data-split-pct={leftPct}
       className={cn('flex min-h-0 flex-1 overflow-hidden', className)}
     >

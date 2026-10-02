@@ -28,7 +28,7 @@ describe('app shell layout contract (P1 / #88)', () => {
     expect(app).not.toContain('TabsTrigger')
   })
 
-  it('keeps log filters and table inside the work master pane (no nested Card)', () => {
+  it('keeps log filters and table inside one master Card (#102)', () => {
     const app = readSource('../App.tsx')
     const workStart = app.indexOf('data-testid="shell-work"')
     const workMaster = app.indexOf('data-testid="log-panel-card"', workStart)
@@ -36,10 +36,11 @@ describe('app shell layout contract (P1 / #88)', () => {
     expect(workMaster).toBeGreaterThan(workStart)
     expect(app.indexOf('<LogFilter', workMaster)).toBeGreaterThan(workMaster)
     expect(app.indexOf('<LogTable', workMaster)).toBeGreaterThan(workMaster)
-    // Density fix: work shell must not wrap master/detail in Card chrome
     const workEnd = app.indexOf('data-testid="shell-config"')
     const workSlice = app.slice(workStart, workEnd)
-    expect(workSlice).not.toMatch(/<Card[\s>]/)
+    expect(workSlice).toMatch(/<Card[\s\n][^>]*data-testid="log-panel-card"/)
+    expect(workSlice).toContain('detailOpen={store.selectedRecordId != null}')
+    expect(workSlice).toContain('border-b px-0 py-1.5')
   })
 })
 

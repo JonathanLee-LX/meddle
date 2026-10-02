@@ -42,12 +42,14 @@ describe('traffic B layout contract (P2 / #89)', () => {
   })
 
 
-  it('keeps work shell flush: no outer Card, ≤8px outer pad, single hit code box', () => {
+  it('keeps work shell ≤8px outer pad; log master is one Card; detail collapses when empty (#102)', () => {
     const app = readSource('../App.tsx')
     const workStart = app.indexOf('data-testid="shell-work"')
     const configStart = app.indexOf('data-testid="shell-config"')
     const workSlice = app.slice(workStart, configStart)
-    expect(workSlice).not.toMatch(/<Card[\s>]/)
+    expect(workSlice).toMatch(/<Card[\s\n][^>]*data-testid="log-panel-card"/)
+    expect(workSlice).toContain('detailOpen={store.selectedRecordId != null}')
+    expect(workSlice).toContain('border-b px-0 py-1.5')
     expect(workSlice).not.toContain('ui-page-padding')
     expect(app).toMatch(/shellMode === 'work'[\s\S]*?px-2 pt-2/)
 

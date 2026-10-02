@@ -201,6 +201,11 @@ function App() {
 
   const handleSelectRecord = useCallback(
     (id: number) => {
+      // Click selected row again to clear → detail collapses (#102)
+      if (store.selectedRecordId === id) {
+        store.closeDetail()
+        return
+      }
       void store.fetchDetail(id)
       // Narrow (layout A-like): open Sheet/global panel. Wide B: right pane shows detail with 0 extra click.
       if (isNarrowTraffic) {
@@ -920,12 +925,13 @@ function App() {
               className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden"
             >
               <TrafficWorkLayout
+                detailOpen={store.selectedRecordId != null}
                 master={
-                  <div
+                  <Card
                     data-testid="log-panel-card"
-                    className="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
+                    className="flex h-full min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0 shadow-none"
                   >
-                    <div className="shrink-0 border-b px-2 py-1.5">
+                    <div className="shrink-0 border-b px-0 py-1.5">
                       <span className="sr-only">请求日志</span>
                       <LogFilter
                         filterText={filterText}
@@ -949,12 +955,13 @@ function App() {
                         autoScroll={autoScroll}
                       />
                     </div>
-                  </div>
+                  </Card>
                 }
                 detail={
                   <Suspense fallback={<LoadingPlaceholder />}>
                     <DetailPanel
                       embedded
+                      onClose={store.closeDetail}
                       detail={store.recordDetail}
                       loading={store.detailLoading}
                       error={store.detailError}
@@ -977,7 +984,7 @@ function App() {
                 {activeTab === 'config' && (
                   <div
                     data-testid="config-page-rules"
-                    className="mt-0 flex min-h-0 flex-1 flex-col p-[var(--ui-page-padding)]"
+                    className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden p-0"
                   >
                     <Suspense fallback={<LoadingPlaceholder />}>
                       <RuleConfig

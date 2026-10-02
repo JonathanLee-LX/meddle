@@ -109,4 +109,21 @@ describe('TrafficWorkLayout (P2 / #89)', () => {
     expect(screen.queryByTestId('traffic-split-handle')).not.toBeInTheDocument()
     expect(screen.getByTestId('narrow-drawer')).toBeInTheDocument()
   })
+
+  it('hides detail and split handle when detailOpen is false (#102)', () => {
+    mockMatchMedia(false)
+    render(
+      <TrafficWorkLayout
+        detailOpen={false}
+        master={<div>master-full</div>}
+        detail={<div>hidden-detail</div>}
+      />,
+    )
+
+    expect(screen.getByTestId('traffic-work-layout')).toHaveAttribute('data-layout', 'master-only')
+    expect(screen.getByTestId('traffic-work-layout')).toHaveAttribute('data-detail-open', 'false')
+    expect(screen.getByTestId('traffic-master')).toHaveTextContent('master-full')
+    expect(screen.queryByTestId('traffic-detail')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('traffic-split-handle')).not.toBeInTheDocument()
+  })
 })
