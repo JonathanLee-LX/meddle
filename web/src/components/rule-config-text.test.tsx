@@ -60,7 +60,7 @@ describe('RuleConfig text view', () => {
     render(<Harness />)
     // Prefer label over role: CI (radix roving-focus merge) exposes role="group",
     // while some local installs expose role="radiogroup" for type="single".
-    const viewSwitcher = screen.getByLabelText('规则视图')
+    expect(screen.getByLabelText('规则视图')).toBeInTheDocument()
     const layout = screen.getByTestId('rule-config-layout')
     const panel = screen.getByTestId('rule-panel-card')
     const stickyControls = panel.querySelector('[data-slot="rule-config-sticky-controls"]')

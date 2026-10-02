@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0-beta.16] - 2026-10-02
+
+### Changed
+
+- Layout polish from #102 via #103: traffic empty-state hides detail (log Card); traffic filter `px-0`; rules vertical file groups.
+
 ## [0.5.0-beta.15] - 2026-10-02
 
 ### Added
