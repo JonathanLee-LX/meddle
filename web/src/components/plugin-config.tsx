@@ -193,10 +193,10 @@ export function PluginConfig({
     <div className="app-page-stack">
       {/* Built-in Plugins */}
       <section className="app-section">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-[var(--ui-section-gap)]">
           <h3 className="text-sm font-medium">内置插件</h3>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">插件模式:</span>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">插件模式:</span>
             <Select value={pluginMode} onValueChange={(v) => switchPluginMode(v as 'on' | 'off' | 'shadow')}>
               <SelectTrigger className="w-28 h-7 text-xs">
                 <SelectValue />
@@ -278,7 +278,7 @@ export function PluginConfig({
 
       {/* Custom AI Plugins */}
       <section className="app-section">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-[var(--ui-section-gap)]">
           <h3 className="text-sm font-medium">自定义插件</h3>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={fetchCustomPlugins} disabled={loading || hotReloading}>
@@ -395,9 +395,9 @@ export function PluginConfig({
 
       {/* Third-party Plugins */}
       <section className="app-section">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-[var(--ui-section-gap)]">
           <h3 className="text-sm font-medium">第三方插件</h3>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             {thirdPartySecurity.allowAll ? <Shield className="size-4 text-primary" /> : <ShieldAlert className="size-4 text-muted-foreground" />}
             <span className="text-xs text-muted-foreground">
               {thirdPartySecurity.allowAll ? '已信任所有插件' : `已信任: ${thirdPartySecurity.trusted.length} 个`}

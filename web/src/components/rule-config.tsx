@@ -40,6 +40,8 @@ import { buildRuleGraph } from '@/utils/rule-graph'
 import { RouteCanvas } from '@/components/route-canvas'
 import { supportsOpenFilePicker } from '@/types/file-system-access'
 import { FEATURE_FLAGS } from '@/lib/feature-flags'
+import { ruleFilePaneSplit } from '@/lib/rule-file-split'
+import { SplitPane } from '@/components/split-pane'
 import { getEprcTextDiagnostics, normalizeImportedRuleText, parseEprcRules, rulesToEprc } from '@/utils/eprc-parser'
 import { EprcTextarea } from '@/components/eprc-textarea'
 import {
@@ -354,6 +356,8 @@ function SortableRuleFileTab({
     opacity: isDragging ? 0.85 : 1,
     position: 'relative',
     zIndex: isDragging ? 1 : undefined,
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
   }
 
   return (
@@ -361,7 +365,7 @@ function SortableRuleFileTab({
       ref={setNodeRef}
       style={style}
       value={file.name}
-      className="group relative w-full flex-none justify-start gap-1.5 px-2"
+      className="group relative h-auto w-full min-w-0 flex-none justify-start gap-2 rounded-none border-x-0 border-b border-border/40 px-3 py-2 text-sm font-medium shadow-none hover:bg-accent/60 after:hidden group-data-[variant=line]/tabs-list:data-[state=active]:border-x-0 group-data-[variant=line]/tabs-list:data-[state=active]:border-b group-data-[variant=line]/tabs-list:data-[state=active]:border-border/40 group-data-[variant=line]/tabs-list:data-[state=active]:bg-accent group-data-[variant=line]/tabs-list:data-[state=active]:text-accent-foreground group-data-[variant=line]/tabs-list:data-[state=active]:shadow-none group-data-[variant=line]/tabs-list:data-[state=active]:after:opacity-0 dark:group-data-[variant=line]/tabs-list:data-[state=active]:border-x-0 dark:group-data-[variant=line]/tabs-list:data-[state=active]:border-border/40"
       data-dragging={isDragging ? 'true' : undefined}
     >
       {!dragDisabled && (
@@ -418,12 +422,13 @@ function SortableRuleFileTab({
               cancelRename()
             }
           }}
-          className="h-6 w-28 rounded border bg-background px-1.5 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
+          className="h-6 min-w-0 flex-1 rounded border bg-background px-1.5 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
           aria-label={`重命名规则文件 ${file.name}`}
           autoFocus
         />
       ) : (
         <span
+          className="min-w-0 flex-1 truncate text-left"
           onDoubleClick={(event) => {
             event.stopPropagation()
             beginRename(file.name)
@@ -433,7 +438,7 @@ function SortableRuleFileTab({
           {file.name}
         </span>
       )}
-      <Badge variant="secondary" className="text-[10px] px-1 py-0">
+      <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-normal text-muted-foreground">
         {file.ruleCount}
       </Badge>
       {canDelete && (
@@ -999,18 +1004,22 @@ export function RuleConfig(props: RuleConfigProps) {
   const createMoveToTopCallback = useCallback((index: number) => () => moveToTop(index), [moveToTop])
 
   return (
-    <div
-      className="app-page-stack flex min-h-0 flex-1 flex-row overflow-hidden"
-      data-testid="rule-config-layout"
-      data-layout="files-vertical"
-    >
-      <aside
-        data-testid="rule-file-list"
-        data-slot="rule-file-list"
-        className="flex w-52 shrink-0 flex-col border-r bg-muted/20"
-      >
-        <div className="flex shrink-0 items-center justify-between gap-1 border-b px-2 py-2">
-          <span className="text-xs font-medium text-muted-foreground">规则文件</span>
+    <>
+    <SplitPane
+      testId="rule-config-layout"
+      layout="files-vertical"
+      widthAttr="rule-list-width"
+      split={ruleFilePaneSplit}
+      listTestId="rule-file-list"
+      listSlot="rule-file-list"
+      panelTestId="rule-panel-card"
+      panelSlot="rule-panel"
+      separatorTestId="rule-panel-separator"
+      separatorLabel="调整规则文件列表宽度"
+      list={
+      <>
+        <div className="app-pane-bar flex shrink-0 items-center justify-between gap-2 border-b">
+          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">规则文件</div>
           <div data-slot="rule-file-actions" className="flex shrink-0 items-center">
             {isCreating ? (
               <div
@@ -1075,7 +1084,7 @@ export function RuleConfig(props: RuleConfigProps) {
         </div>
         <div
           data-slot="rule-file-tabs-scroll"
-          className="meddle-thin-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-1 py-1"
+          className="meddle-thin-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
         >
           <DndContext
             sensors={tabSensors}
@@ -1092,7 +1101,7 @@ export function RuleConfig(props: RuleConfigProps) {
               <SortableContext items={ruleFileNames} strategy={verticalListSortingStrategy}>
                 <TabsList
                   variant="line"
-                  className="h-auto w-full flex-col items-stretch justify-start gap-0.5 rounded-none bg-transparent p-0"
+                  className="h-auto w-full flex-col items-stretch justify-start gap-0 rounded-none bg-transparent p-0"
                 >
                   {ruleFiles.map((rf) => (
                     <SortableRuleFileTab
@@ -1116,18 +1125,14 @@ export function RuleConfig(props: RuleConfigProps) {
             </Tabs>
           </DndContext>
         </div>
-      </aside>
-
-      <div
-        data-testid="rule-panel-card"
-        data-slot="rule-panel"
-        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card"
-      >
+      </>
+      }
+    >
         <div
           data-slot="rule-config-sticky-controls"
           className="shrink-0 bg-card"
         >
-          <div className="flex flex-row flex-wrap items-center justify-between gap-3 border-b px-3 py-2">
+          <div className="flex flex-row flex-wrap items-center justify-between gap-3 border-b px-[var(--ui-section-gap)] py-[var(--ui-section-gap)]">
             <div className="flex items-center gap-2">
               <ToggleGroup
                 type="single"
@@ -1224,7 +1229,7 @@ export function RuleConfig(props: RuleConfigProps) {
         </div>
 
         {(renameError || createError) && (
-          <div className="flex shrink-0 flex-col gap-1 border-b px-3 py-2 text-xs text-destructive">
+          <div className="app-pane-bar flex shrink-0 flex-col gap-1 border-b text-xs text-destructive">
             {renameError && <p>{renameError}</p>}
             {createError && <p>{createError}</p>}
           </div>
@@ -1318,7 +1323,7 @@ export function RuleConfig(props: RuleConfigProps) {
                     : '请先选择或创建一个规则文件'
                 }
               />
-              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-xs text-muted-foreground">
+              <div className="app-pane-bar flex shrink-0 flex-wrap items-center justify-between gap-2 border-t text-xs text-muted-foreground">
                 <span>
                   {textLoading
                     ? '正在加载规则文本...'
@@ -1425,7 +1430,7 @@ export function RuleConfig(props: RuleConfigProps) {
             </div>
           ) : (
             <ScrollArea className="min-h-0 flex-1">
-              <div className="flex flex-col gap-4 p-4">
+              <div className="flex flex-col gap-[var(--ui-section-gap)] p-[var(--ui-section-gap)]">
               {!activeFileName ? (
                 <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
                   请选择或创建一个规则文件后查看图表
@@ -1447,11 +1452,11 @@ export function RuleConfig(props: RuleConfigProps) {
         </div>
 
         {(ruleFilter || targetFilter) && filteredRules.length > 0 && (
-          <div className="shrink-0 border-t px-4 py-2 text-sm text-muted-foreground">
+          <div className="app-pane-bar shrink-0 border-t text-sm text-muted-foreground">
             显示 {filteredRules.length} / {rules.length} 条规则
           </div>
         )}
-      </div>
+    </SplitPane>
 
       {/* 文本导入弹窗 */}
       <Dialog open={textImportOpen} onOpenChange={setTextImportOpen}>
@@ -1483,8 +1488,9 @@ export function RuleConfig(props: RuleConfigProps) {
             <label className="text-xs font-medium text-muted-foreground" htmlFor="text-import-content">
               规则文本
             </label>
-            <div className="min-h-[220px] flex-1 overflow-hidden rounded-md border">
+            <div className="flex h-[220px] min-h-0 w-full flex-col overflow-hidden rounded-md border">
               <EprcTextarea
+                id="text-import-content"
                 ariaLabel="导入规则文本"
                 value={textImportDraft}
                 onChange={setTextImportDraft}
@@ -1518,6 +1524,6 @@ export function RuleConfig(props: RuleConfigProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   )
 }

@@ -11,8 +11,9 @@ import { Plus, Trash2, FileText, Code } from 'lucide-react'
 import type { MockRule } from '@/types'
 import { MockEditorPanel } from '@/components/mock-editor-panel'
 import { toast } from '@/components/ui/toast'
-import { cn } from '@/lib/utils'
 import { MOCK_OPEN_CREATE_EVENT, type MockOpenCreateDetail } from '@/lib/mock-config-events'
+import { SplitPane } from '@/components/split-pane'
+import { mockPaneSplit } from '@/lib/mock-pane-split'
 
 export { MOCK_OPEN_CREATE_EVENT }
 export type { MockOpenCreateDetail }
@@ -125,32 +126,25 @@ export function MockConfig({
         : 'idle'
 
   return (
-    <div
-      data-testid="mock-config-layout"
-      data-layout="list-edit"
-      className="flex h-full min-h-0 w-full flex-1 flex-col gap-0 overflow-hidden"
-    >
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b px-1 pb-3">
-        <div>
-          <h3 className="text-sm font-medium">Mock 规则</h3>
-          <p className="text-xs text-muted-foreground">左侧列表 · 右侧编辑（全宽配置，非流量 B）</p>
+    <SplitPane
+      testId="mock-config-layout"
+      layout="list-edit"
+      widthAttr="mock-list-width"
+      split={mockPaneSplit}
+      listTestId="mock-config-list"
+      panelTestId="mock-config-edit"
+      separatorTestId="mock-panel-separator"
+      separatorLabel="调整 Mock 列表宽度"
+      list={
+      <>
+        <div className="app-pane-bar flex shrink-0 items-center justify-between gap-2 border-b">
+          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Mock 规则</div>
+          <Button variant="outline" size="sm" onClick={() => openCreate()} data-testid="mock-config-create">
+            <Plus data-icon="inline-start" />
+            新增规则
+          </Button>
         </div>
-        <Button variant="outline" size="sm" onClick={() => openCreate()} data-testid="mock-config-create">
-          <Plus data-icon="inline-start" />
-          新增规则
-        </Button>
-      </div>
-
-      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(0,42%)_minmax(0,58%)]">
-        {/* List pane */}
-        <div
-          data-testid="mock-config-list"
-          className="meddle-thin-scroll flex min-h-0 flex-col overflow-y-auto border-b lg:border-b-0 lg:border-r"
-        >
-          <div className="px-1 py-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            列表
-          </div>
-          <div className="min-h-0 flex-1 overflow-auto rounded-md border lg:rounded-none lg:border-0 lg:border-t">
+        <div className="meddle-thin-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -177,7 +171,7 @@ export function MockConfig({
                         key={rule.id}
                         data-testid={`mock-config-row-${rule.id}`}
                         data-state={selected ? 'selected' : undefined}
-                        className={cn('cursor-pointer', selected && 'bg-muted')}
+                        className="cursor-pointer"
                         onClick={() => openEdit(rule)}
                       >
                         <TableCell onClick={(event) => event.stopPropagation()}>
@@ -236,15 +230,11 @@ export function MockConfig({
                 )}
               </TableBody>
             </Table>
-          </div>
         </div>
-
-        {/* Edit pane */}
-        <div
-          data-testid="mock-config-edit"
-          className="meddle-thin-scroll flex min-h-0 flex-col overflow-hidden bg-muted/20"
-        >
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
+      </>
+      }
+    >
+        <div className="app-pane-bar flex shrink-0 items-center justify-between gap-2 border-b">
             <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
               {editor.kind === 'create'
                 ? '编辑 Mock · 新建'
@@ -282,8 +272,6 @@ export function MockConfig({
               />
             ) : null}
           </div>
-        </div>
-      </div>
-    </div>
+    </SplitPane>
   )
 }

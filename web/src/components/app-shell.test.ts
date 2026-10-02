@@ -40,7 +40,8 @@ describe('app shell layout contract (P1 / #88)', () => {
     const workSlice = app.slice(workStart, workEnd)
     expect(workSlice).toMatch(/<Card[\s\n][^>]*data-testid="log-panel-card"/)
     expect(workSlice).toContain('detailOpen={store.selectedRecordId != null}')
-    expect(workSlice).toContain('border-b px-0 py-1.5')
+    expect(workSlice).toContain('app-page-pad')
+    expect(workSlice).toContain('border-b pb-[var(--ui-section-gap)]')
   })
 })
 

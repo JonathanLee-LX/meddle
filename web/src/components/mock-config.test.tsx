@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { MockConfig, MOCK_OPEN_CREATE_EVENT } from './mock-config'
 import type { MockRule } from '@/types'
+import { MOCK_LIST_STORAGE_KEY } from '@/lib/mock-pane-split'
 
 vi.mock('./mock-editor-panel', () => ({
   MockEditorPanel: ({ rule, initialData }: { rule?: MockRule; initialData?: Partial<MockRule> }) => (
@@ -80,5 +81,41 @@ describe('MockConfig list|edit (P3 / #90)', () => {
       )
     })
     expect(screen.getByTestId('mock-editor-stub')).toHaveTextContent('create:/from-traffic')
+  })
+
+  it('uses a draggable list pane like the rules panel and remembers the width', () => {
+    localStorage.removeItem(MOCK_LIST_STORAGE_KEY)
+    window.matchMedia = vi.fn().mockImplementation(() => ({
+      matches: true,
+      media: '',
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia
+
+    renderMock()
+    const layout = screen.getByTestId('mock-config-layout')
+    const list = screen.getByTestId('mock-config-list')
+    expect(layout).toHaveAttribute('data-mock-list-width', '480')
+    expect(list).toHaveStyle({ width: '480px', flex: '0 0 480px' })
+    expect(screen.getByTestId('mock-panel-separator')).toBeInTheDocument()
+
+    Object.defineProperty(layout, 'getBoundingClientRect', {
+      value: () => ({ left: 0, width: 1400, top: 0, height: 800, right: 1400, bottom: 800, x: 0, y: 0, toJSON: () => {} }),
+    })
+
+    fireEvent.mouseDown(screen.getByTestId('mock-panel-separator'))
+    act(() => {
+      fireEvent.mouseMove(document, { clientX: 560 })
+      fireEvent.mouseUp(document)
+    })
+
+    expect(localStorage.getItem(MOCK_LIST_STORAGE_KEY)).toBe('560')
+    expect(layout).toHaveAttribute('data-mock-list-width', '560')
+    expect(list).toHaveStyle({ width: '560px' })
+    localStorage.removeItem(MOCK_LIST_STORAGE_KEY)
   })
 })

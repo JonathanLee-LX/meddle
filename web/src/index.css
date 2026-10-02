@@ -7,10 +7,10 @@
 :root {
   --font-size-base: 14px;
   --app-scale: 1;
-  --ui-page-padding: 1.5rem;
-  --ui-panel-padding: 1.75rem;
-  --ui-content-gap: 2rem;
-  --ui-section-gap: 1rem;
+  --ui-page-padding: 1rem;
+  --ui-panel-padding: 1.25rem;
+  --ui-content-gap: 1.25rem;
+  --ui-section-gap: 0.75rem;
   --ui-field-gap: 0.75rem;
   --ui-copy-leading: 1.5rem;
 }
@@ -73,6 +73,23 @@
 }
 
 @layer components {
+  .app-shell-main {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    flex: 1 1 0%;
+    padding: var(--ui-page-padding) var(--ui-page-padding) 0;
+  }
+
+  .app-page-pad {
+    padding: var(--ui-page-padding);
+  }
+
+  .app-pane-bar {
+    padding: var(--ui-section-gap);
+  }
+
   .app-workspace-content {
     display: flex;
     min-width: 0;
@@ -337,9 +354,9 @@
 
 @media (max-width: 640px) {
   :root {
-    --ui-page-padding: 1rem;
-    --ui-panel-padding: 1rem;
-    --ui-content-gap: 1.5rem;
+    --ui-page-padding: 0.75rem;
+    --ui-panel-padding: 0.75rem;
+    --ui-content-gap: 1rem;
   }
 }
 

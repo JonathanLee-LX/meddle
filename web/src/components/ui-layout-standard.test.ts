@@ -9,6 +9,9 @@ describe('application layout standard', () => {
 
     expect(css).toContain('--ui-panel-padding')
     expect(css).toContain('--ui-content-gap')
+    expect(css).toContain('.app-shell-main')
+    expect(css).toContain('.app-page-pad')
+    expect(css).toContain('.app-pane-bar')
     expect(css).toContain('.app-workspace-content')
     expect(css).toContain('.app-panel-content')
     expect(css).toContain('.app-section')
@@ -18,10 +21,10 @@ describe('application layout standard', () => {
   it('locks critical spacing and radius token values', () => {
     const css = readSource('../index.css')
 
-    expect(css).toMatch(/--ui-page-padding:\s*1\.5rem/)
-    expect(css).toMatch(/--ui-panel-padding:\s*1\.75rem/)
-    expect(css).toMatch(/--ui-content-gap:\s*2rem/)
-    expect(css).toMatch(/--ui-section-gap:\s*1rem/)
+    expect(css).toMatch(/--ui-page-padding:\s*1rem/)
+    expect(css).toMatch(/--ui-panel-padding:\s*1\.25rem/)
+    expect(css).toMatch(/--ui-content-gap:\s*1\.25rem/)
+    expect(css).toMatch(/--ui-section-gap:\s*0\.75rem/)
     expect(css).toMatch(/--ui-field-gap:\s*0\.75rem/)
     expect(css).toMatch(/--ui-copy-leading:\s*1\.5rem/)
     expect(css).toMatch(/--radius:\s*0\.625rem/)
@@ -30,6 +33,9 @@ describe('application layout standard', () => {
   it('binds layout classes to the spacing tokens', () => {
     const css = readSource('../index.css')
 
+    expect(css).toMatch(/\.app-shell-main[\s\S]*?padding:\s*var\(--ui-page-padding\) var\(--ui-page-padding\) 0/)
+    expect(css).toMatch(/\.app-page-pad[\s\S]*?padding:\s*var\(--ui-page-padding\)/)
+    expect(css).toMatch(/\.app-pane-bar[\s\S]*?padding:\s*var\(--ui-section-gap\)/)
     expect(css).toMatch(/\.app-workspace-content[\s\S]*?gap:\s*var\(--ui-content-gap\)/)
     expect(css).toMatch(/\.app-workspace-content[\s\S]*?padding:\s*var\(--ui-page-padding\)/)
     expect(css).toMatch(/\.app-page-stack[\s\S]*?gap:\s*var\(--ui-content-gap\)/)
@@ -43,9 +49,9 @@ describe('application layout standard', () => {
     const css = readSource('../index.css')
     const mobileBlock = css.match(/@media \(max-width: 640px\) \{[\s\S]*?--ui-page-padding:[\s\S]*?\}/)?.[0] ?? ''
 
-    expect(mobileBlock).toMatch(/--ui-page-padding:\s*1rem/)
-    expect(mobileBlock).toMatch(/--ui-panel-padding:\s*1rem/)
-    expect(mobileBlock).toMatch(/--ui-content-gap:\s*1\.5rem/)
+    expect(mobileBlock).toMatch(/--ui-page-padding:\s*0\.75rem/)
+    expect(mobileBlock).toMatch(/--ui-panel-padding:\s*0\.75rem/)
+    expect(mobileBlock).toMatch(/--ui-content-gap:\s*1rem/)
   })
 
   it.each([
@@ -57,8 +63,8 @@ describe('application layout standard', () => {
     ['./mobile-proxy-panel.tsx', 'app-panel-content'],
     ['./health-panel.tsx', 'app-workspace-content'],
     ['./plugin-config.tsx', 'app-page-stack'],
-    ['./rule-config.tsx', 'app-page-stack'],
-    ['./mock-config.tsx', 'mock-config-layout'],
+    ['./rule-config.tsx', '<SplitPane'],
+    ['./mock-config.tsx', '<SplitPane'],
   ])('%s uses %s', (path, className) => {
     expect(readSource(path)).toContain(className)
   })
@@ -77,9 +83,17 @@ describe('application layout standard', () => {
 
   it('keeps secondary cards flat; rules use vertical file list without nested Card (#102)', () => {
     const rules = readSource('./rule-config.tsx')
-    expect(rules).toContain('data-layout="files-vertical"')
-    expect(rules).toContain('data-testid="rule-file-list"')
+    const split = readSource('./split-pane.tsx')
+    expect(rules).toContain('<SplitPane')
+    expect(rules).toContain('layout="files-vertical"')
+    expect(rules).toContain('listTestId="rule-file-list"')
+    expect(rules).toContain('panelTestId="rule-panel-card"')
+    expect(rules).toContain('widthAttr="rule-list-width"')
     expect(rules).not.toMatch(/<Card[\s>]/)
+    expect(split).toContain('app-page-stack')
+    expect(split).toContain('data-layout={layout}')
+    expect(split).toContain('data-testid={listTestId}')
+    expect(split).toContain('data-testid={panelTestId}')
     expect(readSource('./mobile-proxy-panel.tsx').match(/<Card className="[^"]*shadow-none[^"]*">/g)).toHaveLength(2)
   })
 })

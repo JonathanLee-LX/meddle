@@ -11,6 +11,8 @@ interface EprcTextareaProps {
   disabled?: boolean
   /** textarea 的 aria-label */
   ariaLabel?: string
+  /** textarea 的 id，供外部 label 关联 */
+  id?: string
 }
 
 /**
@@ -26,6 +28,7 @@ export function EprcTextarea({
   className,
   disabled,
   ariaLabel,
+  id,
 }: EprcTextareaProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const preRef = useRef<HTMLPreElement>(null)
@@ -69,6 +72,7 @@ export function EprcTextarea({
         onScroll={handleScroll}
         placeholder={placeholder}
         spellCheck={false}
+        id={id}
         disabled={disabled}
         aria-label={ariaLabel}
         className={`absolute inset-0 resize-none overflow-auto rounded-none border-0 bg-transparent px-4 py-3 ${sharedTextStyle} shadow-none outline-none ring-0 focus-visible:ring-0 ${

@@ -252,13 +252,13 @@ function MetricCard({
 }) {
   return (
     <Card className="gap-0 py-0 shadow-none">
-      <CardHeader className="border-b px-4 py-3">
+      <CardHeader className="border-b px-[var(--ui-section-gap)] py-[var(--ui-section-gap)] [.border-b]:pb-[var(--ui-section-gap)]">
         <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
           <Icon />
           {label}
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-1 p-4">
+      <CardContent className="flex flex-col gap-1 p-[var(--ui-page-padding)]">
         <div className="text-2xl font-semibold tracking-tight">{value}</div>
         <div className="min-h-4 truncate text-xs text-muted-foreground" title={detail}>
           {detail}
@@ -270,7 +270,7 @@ function MetricCard({
 
 function KeyValue({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-lg border bg-background p-3">
+    <div className="flex min-w-0 flex-col gap-1 rounded-lg border bg-background p-[var(--ui-section-gap)]">
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className="truncate text-sm font-medium" title={value}>
         {value}
@@ -289,7 +289,7 @@ function LoadingHealthPanel() {
         </div>
         <Skeleton className="h-8 w-28" />
       </div>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+      <div className="grid gap-[var(--ui-section-gap)] md:grid-cols-2 xl:grid-cols-6">
         {Array.from({ length: 6 }).map((_, index) => (
           <Skeleton key={index} className="h-32 w-full" />
         ))}
@@ -431,15 +431,15 @@ export function HealthPanel() {
         </Alert>
       )}
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+      <div className="grid gap-[var(--ui-section-gap)] md:grid-cols-2 xl:grid-cols-6">
         {metrics.map((metric) => (
           <MetricCard key={metric.label} {...metric} />
         ))}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(360px,0.7fr)]">
+      <div className="grid gap-[var(--ui-section-gap)] xl:grid-cols-[minmax(0,1.3fr)_minmax(360px,0.7fr)]">
         <Card className="gap-0 py-0 shadow-none">
-          <CardHeader className="border-b py-4">
+          <CardHeader className="border-b px-[var(--ui-section-gap)] py-[var(--ui-section-gap)] [.border-b]:pb-[var(--ui-section-gap)]">
             <CardTitle className="flex items-center gap-2">
               <ListChecks />
               健康检查
@@ -473,7 +473,7 @@ export function HealthPanel() {
         </Card>
 
         <Card className="gap-0 py-0 shadow-none">
-          <CardHeader className="border-b py-4">
+          <CardHeader className="border-b px-[var(--ui-section-gap)] py-[var(--ui-section-gap)] [.border-b]:pb-[var(--ui-section-gap)]">
             <CardTitle className="flex items-center gap-2">
               <ShieldCheck />
               守护策略
@@ -485,7 +485,7 @@ export function HealthPanel() {
               </Badge>
             </CardAction>
           </CardHeader>
-          <CardContent className="grid gap-3 p-4 sm:grid-cols-2">
+          <CardContent className="grid gap-[var(--ui-section-gap)] p-[var(--ui-page-padding)] sm:grid-cols-2">
             <KeyValue label="动作" value={health.watchdog.config.action === 'exit' ? '退出重启' : '仅告警'} />
             <KeyValue label="检测间隔" value={formatDuration(health.watchdog.config.intervalMs / 1000)} />
             <KeyValue label="最小运行时间" value={formatDuration(health.watchdog.config.minUptimeMs / 1000)} />
@@ -507,9 +507,9 @@ export function HealthPanel() {
         </Card>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-[var(--ui-section-gap)] xl:grid-cols-2">
         <Card className="gap-0 py-0 shadow-none">
-          <CardHeader className="border-b py-4">
+          <CardHeader className="border-b px-[var(--ui-section-gap)] py-[var(--ui-section-gap)] [.border-b]:pb-[var(--ui-section-gap)]">
             <CardTitle className="flex items-center gap-2">
               <Wifi />
               MITM 服务池
@@ -555,7 +555,7 @@ export function HealthPanel() {
         </Card>
 
         <Card className="gap-0 py-0 shadow-none">
-          <CardHeader className="border-b py-4">
+          <CardHeader className="border-b px-[var(--ui-section-gap)] py-[var(--ui-section-gap)] [.border-b]:pb-[var(--ui-section-gap)]">
             <CardTitle className="flex items-center gap-2">
               <Clock />
               日志限流

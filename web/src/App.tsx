@@ -28,7 +28,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { LogFilter } from '@/components/log-filter'
 import { LogTable } from '@/components/log-table'
@@ -910,28 +910,23 @@ function App() {
         />
 
         {/* Shell content: work (traffic B host) XOR config (full-width) — never stacked */}
-        {/* Work: flush under header (≤8px outer pad, no floating Card). Config keeps card chrome. */}
-        <main
-          className={
-            shellMode === 'work'
-              ? 'flex min-h-0 w-full flex-1 px-2 pt-2'
-              : 'flex min-h-0 w-full flex-1 px-4 pt-4 lg:px-6'
-          }
-        >
+        {/* Same gutter on every primary page. Inner content uses --ui-page-padding once. */}
+        <main className="app-shell-main">
           {shellMode === 'work' ? (
             <div
               data-testid="shell-work"
               data-shell-mode="work"
               className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden"
             >
+              <Card
+                data-testid="log-panel-card"
+                className="flex h-full min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0 shadow-none"
+              >
               <TrafficWorkLayout
                 detailOpen={store.selectedRecordId != null}
                 master={
-                  <Card
-                    data-testid="log-panel-card"
-                    className="flex h-full min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0 shadow-none"
-                  >
-                    <div className="shrink-0 border-b px-0 py-1.5">
+                  <div className="app-page-pad flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div className="shrink-0 border-b pb-[var(--ui-section-gap)]">
                       <span className="sr-only">请求日志</span>
                       <LogFilter
                         filterText={filterText}
@@ -955,7 +950,7 @@ function App() {
                         autoScroll={autoScroll}
                       />
                     </div>
-                  </Card>
+                  </div>
                 }
                 detail={
                   <Suspense fallback={<LoadingPlaceholder />}>
@@ -973,6 +968,7 @@ function App() {
                   </Suspense>
                 }
               />
+              </Card>
             </div>
           ) : (
             <div
@@ -984,7 +980,7 @@ function App() {
                 {activeTab === 'config' && (
                   <div
                     data-testid="config-page-rules"
-                    className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden p-0"
+                    className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden"
                   >
                     <Suspense fallback={<LoadingPlaceholder />}>
                       <RuleConfig
@@ -1009,7 +1005,7 @@ function App() {
                 {activeTab === 'mock' && (
                   <div
                     data-testid="config-page-mock"
-                    className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden p-[var(--ui-page-padding)]"
+                    className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden"
                   >
                     <Suspense fallback={<LoadingPlaceholder />}>
                       <MockConfig
@@ -1027,7 +1023,7 @@ function App() {
                     data-testid="config-page-plugins"
                     className="meddle-thin-scroll mt-0 min-h-0 flex-1 overflow-y-auto"
                   >
-                    <CardContent className="app-workspace-content">
+                    <div className="app-workspace-content">
                       <Suspense fallback={<LoadingPlaceholder />}>
                         <PluginConfig
                           plugins={store.plugins}
@@ -1044,7 +1040,7 @@ function App() {
                           unloadThirdPartyPlugin={store.unloadThirdPartyPlugin}
                         />
                       </Suspense>
-                    </CardContent>
+                    </div>
                   </div>
                 )}
                 {activeTab === 'health' && (

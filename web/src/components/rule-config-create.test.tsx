@@ -65,4 +65,18 @@ describe('RuleConfig file creation', () => {
     expect(screen.queryByRole('textbox', { name: '新规则文件名称' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '创建规则文件' })).toBeInTheDocument()
   })
+
+  it('accepts typed rule text in the import dialog', async () => {
+    const user = userEvent.setup()
+    renderRuleConfig()
+
+    await user.click(screen.getByRole('button', { name: '文本导入' }))
+
+    const editor = screen.getByRole('textbox', { name: '导入规则文本' })
+    expect(editor.parentElement?.parentElement).toHaveClass('flex', 'h-[220px]', 'flex-col')
+    await user.type(editor, 'example.com localhost:3000')
+
+    expect(editor).toHaveValue('example.com localhost:3000')
+    expect(screen.getByText('已解析 1 条规则')).toBeInTheDocument()
+  })
 })

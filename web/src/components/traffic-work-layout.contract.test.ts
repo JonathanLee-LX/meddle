@@ -49,9 +49,10 @@ describe('traffic B layout contract (P2 / #89)', () => {
     const workSlice = app.slice(workStart, configStart)
     expect(workSlice).toMatch(/<Card[\s\n][^>]*data-testid="log-panel-card"/)
     expect(workSlice).toContain('detailOpen={store.selectedRecordId != null}')
-    expect(workSlice).toContain('border-b px-0 py-1.5')
-    expect(workSlice).not.toContain('ui-page-padding')
-    expect(app).toMatch(/shellMode === 'work'[\s\S]*?px-2 pt-2/)
+    expect(workSlice).toContain('app-page-pad')
+    expect(workSlice).toContain('border-b pb-[var(--ui-section-gap)]')
+    expect(app).toContain('className="app-shell-main"')
+    expect(app).not.toMatch(/shellMode === 'work'[\s\S]*?px-2 pt-2/)
 
     const detail = readSource('./detail-panel.tsx')
     const overview = detail.slice(detail.indexOf('function OverviewHitPane'))

@@ -127,12 +127,23 @@ export function TrafficWorkLayout({
         aria-valuemax={75}
         aria-label="调整流量列表与详情分栏宽度"
         data-testid="traffic-split-handle"
-        className={cn(
-          'group relative z-10 w-1 shrink-0 cursor-col-resize bg-border transition-colors',
-          dragging ? 'bg-primary' : 'hover:bg-primary/60',
-        )}
+        className="group relative z-10 w-px shrink-0 cursor-col-resize"
         onMouseDown={onResizeStart}
       >
+        <div
+          aria-hidden
+          className={cn(
+            'pointer-events-none absolute inset-0 bg-border transition-colors',
+            dragging ? 'bg-primary' : 'group-hover:bg-transparent',
+          )}
+        />
+        <div
+          aria-hidden
+          className={cn(
+            'pointer-events-none absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 opacity-0 transition-opacity',
+            dragging ? 'bg-primary opacity-100' : 'bg-primary/60 group-hover:opacity-100',
+          )}
+        />
         <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
       </div>
       <div
