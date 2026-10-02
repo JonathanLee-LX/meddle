@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0-beta.15] - 2026-10-02
+
+### Added
+
+- Web UI layout epic (#87): work/config full-page shell (#88/#91); traffic layout B — resizable ~60/40 split, dense virtual table, drawers (#89/#92/#95/#98); hit-column badges (#94/#97); thin scrollbars (#93/#96); config pages full-width + in-page Mock entries (#90/#99); traffic filter source Select on same row as resource types (#100/#101).
+
+### Changed
+
+- Traffic filter UX: source ToggleGroup → Select; source + resource types share one row; filter semantics unchanged (#100/#101).
+
 ## [0.5.0-beta.14] - 2026-09-23
 
 ### Fixed
