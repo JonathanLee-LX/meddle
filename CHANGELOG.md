@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0-beta.17] - 2026-10-02
+
+### Changed
+
+- Tighter shared page spacing. Traffic log table and detail sit in one card, with a quieter split handle.
+- Route rules and Mock share one draggable list|editor split. Widths stay separate (rules 252px, mock 480px) and stack on narrow screens.
+- Rule-file rows no longer draw a side border over the separator. The text-import rule box accepts typing.
+
 ## [0.5.0-beta.16] - 2026-10-02
 
 ### Changed
