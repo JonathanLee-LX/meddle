@@ -92,11 +92,13 @@ describe('RuleConfig rule-file tab drag handle', () => {
     expect(screen.getByRole('textbox', { name: '重命名规则文件 alpha' })).toBeInTheDocument()
   })
 
-  it('locks the tab strip against vertical overflow while remaining horizontally scrollable', () => {
+  it('uses a vertical file list scroller (#102)', () => {
     renderWithFiles(['alpha', 'beta', 'gamma'])
 
+    expect(screen.getByTestId('rule-config-layout')).toHaveAttribute('data-layout', 'files-vertical')
+    expect(screen.getByTestId('rule-file-list')).toBeInTheDocument()
     const scroller = screen.getByRole('tablist').closest('[data-slot="rule-file-tabs-scroll"]')
-    expect(scroller).toHaveClass('overflow-x-auto')
-    expect(scroller).toHaveClass('overflow-y-hidden')
+    expect(scroller).toHaveClass('overflow-y-auto')
+    expect(scroller).toHaveClass('overflow-x-hidden')
   })
 })

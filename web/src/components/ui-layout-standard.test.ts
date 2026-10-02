@@ -63,12 +63,11 @@ describe('application layout standard', () => {
     expect(readSource(path)).toContain(className)
   })
 
-  it('keeps the log filters and table in one flush master pane (no Card chrome)', () => {
+  it('keeps the log filters and table in one master Card (#102)', () => {
     const app = readSource('../App.tsx')
     const paneStart = app.indexOf('data-testid="log-panel-card"')
     expect(paneStart).toBeGreaterThan(-1)
-    // Master pane is a plain div host — not a Card
-    expect(app.slice(Math.max(0, paneStart - 80), paneStart)).not.toMatch(/<Card\b/)
+    expect(app.slice(Math.max(0, paneStart - 120), paneStart)).toMatch(/<Card\b/)
     const after = app.slice(paneStart)
     const logFilter = after.indexOf('<LogFilter')
     const logTable = after.indexOf('<LogTable')
@@ -76,8 +75,11 @@ describe('application layout standard', () => {
     expect(logTable).toBeGreaterThan(logFilter)
   })
 
-  it('keeps secondary cards flat', () => {
-    expect(readSource('./rule-config.tsx')).toContain('className="min-h-0 flex-1 gap-0 overflow-hidden py-0 shadow-none')
+  it('keeps secondary cards flat; rules use vertical file list without nested Card (#102)', () => {
+    const rules = readSource('./rule-config.tsx')
+    expect(rules).toContain('data-layout="files-vertical"')
+    expect(rules).toContain('data-testid="rule-file-list"')
+    expect(rules).not.toMatch(/<Card[\s>]/)
     expect(readSource('./mobile-proxy-panel.tsx').match(/<Card className="[^"]*shadow-none[^"]*">/g)).toHaveLength(2)
   })
 })

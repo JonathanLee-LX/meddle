@@ -30,18 +30,16 @@ import {
 } from 'lucide-react'
 import type { RuleItem, RuleFile } from '@/types'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
-import { restrictToHorizontalAxis, tabDragTransformStyle } from '@/lib/rule-tab-dnd'
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, horizontalListSortingStrategy } from '@dnd-kit/sortable'
+import { restrictToVerticalAxis, listDragTransformStyle } from '@/lib/rule-tab-dnd'
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { getRuleFileTabOrder, getRuleRowOrder, reorderItemsByRowIds } from '@/lib/rule-order'
 import { CSS } from '@dnd-kit/utilities'
 import { buildRuleGraph } from '@/utils/rule-graph'
 import { RouteCanvas } from '@/components/route-canvas'
 import { supportsOpenFilePicker } from '@/types/file-system-access'
 import { FEATURE_FLAGS } from '@/lib/feature-flags'
-import { useScrollShadows } from '@/hooks/use-scroll-shadows'
 import { getEprcTextDiagnostics, normalizeImportedRuleText, parseEprcRules, rulesToEprc } from '@/utils/eprc-parser'
 import { EprcTextarea } from '@/components/eprc-textarea'
 import {
@@ -351,7 +349,7 @@ function SortableRuleFileTab({
 
   // Translate-only + y locked: avoids scale jitter and vertical strip growth while dragging.
   const style: React.CSSProperties = {
-    transform: tabDragTransformStyle(transform),
+    transform: listDragTransformStyle(transform),
     transition: isDragging ? undefined : transition,
     opacity: isDragging ? 0.85 : 1,
     position: 'relative',
@@ -363,7 +361,7 @@ function SortableRuleFileTab({
       ref={setNodeRef}
       style={style}
       value={file.name}
-      className="group relative flex-none gap-1.5"
+      className="group relative w-full flex-none justify-start gap-1.5 px-2"
       data-dragging={isDragging ? 'true' : undefined}
     >
       {!dragDisabled && (
@@ -505,7 +503,6 @@ export function RuleConfig(props: RuleConfigProps) {
   const nextRuleRowIdRef = useRef(0)
   const createRuleRowId = useCallback(() => `rule-${nextRuleRowIdRef.current++}`, [])
   const [ruleRowIds, setRuleRowIds] = useState<string[]>(() => rules.map(() => createRuleRowId()))
-  const ruleFileTabsScroll = useScrollShadows<HTMLDivElement>()
 
   // 创建规则文件
   const [isCreating, setIsCreating] = useState(false)
@@ -1002,129 +999,134 @@ export function RuleConfig(props: RuleConfigProps) {
   const createMoveToTopCallback = useCallback((index: number) => () => moveToTop(index), [moveToTop])
 
   return (
-    <div className="app-page-stack">
-      <Card
+    <div
+      className="app-page-stack flex min-h-0 flex-1 flex-row overflow-hidden"
+      data-testid="rule-config-layout"
+      data-layout="files-vertical"
+    >
+      <aside
+        data-testid="rule-file-list"
+        data-slot="rule-file-list"
+        className="flex w-52 shrink-0 flex-col border-r bg-muted/20"
+      >
+        <div className="flex shrink-0 items-center justify-between gap-1 border-b px-2 py-2">
+          <span className="text-xs font-medium text-muted-foreground">规则文件</span>
+          <div data-slot="rule-file-actions" className="flex shrink-0 items-center">
+            {isCreating ? (
+              <div
+                role="group"
+                aria-label={isImporting ? '从文件导入为新规则' : '创建新规则文件'}
+                className="flex h-8 items-center gap-1 rounded-md border border-primary/30 bg-background px-1 shadow-sm"
+                title={isImporting && importName ? `导入自: ${importName}` : undefined}
+              >
+                <Input
+                  value={newFileName}
+                  onChange={(event) => {
+                    setNewFileName(event.target.value)
+                    setCreateError(null)
+                  }}
+                  placeholder="名称"
+                  className="h-6 w-24 border-0 bg-transparent px-1.5 shadow-none focus-visible:ring-0"
+                  aria-label="新规则文件名称"
+                  autoFocus
+                  onKeyDown={(event) => {
+                    event.stopPropagation()
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      void handleCreate()
+                    } else if (event.key === 'Escape') {
+                      event.preventDefault()
+                      resetCreateDialog()
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() => void handleCreate()}
+                  aria-label="确认创建规则文件"
+                  title="创建"
+                >
+                  <Check />
+                </Button>
+                <Button type="button" variant="ghost" size="icon-xs" onClick={resetCreateDialog} aria-label="取消创建规则文件" title="取消">
+                  <X />
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={openRuleOverview}
+                  aria-label="查看所有规则"
+                  title="查看所有规则"
+                >
+                  <ListChecks />
+                </Button>
+                <Button type="button" variant="ghost" size="icon-sm" onClick={beginCreateRuleFile} aria-label="创建规则文件" title="创建规则文件">
+                  <Plus />
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+        <div
+          data-slot="rule-file-tabs-scroll"
+          className="meddle-thin-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-1 py-1"
+        >
+          <DndContext
+            sensors={tabSensors}
+            collisionDetection={closestCenter}
+            modifiers={[restrictToVerticalAxis]}
+            onDragEnd={handleTabDragEnd}
+          >
+            <Tabs
+              orientation="vertical"
+              className="w-full gap-0"
+              value={activeFileName || ''}
+              onValueChange={handleTabValueChange}
+            >
+              <SortableContext items={ruleFileNames} strategy={verticalListSortingStrategy}>
+                <TabsList
+                  variant="line"
+                  className="h-auto w-full flex-col items-stretch justify-start gap-0.5 rounded-none bg-transparent p-0"
+                >
+                  {ruleFiles.map((rf) => (
+                    <SortableRuleFileTab
+                      key={rf.name}
+                      file={rf}
+                      canDelete={ruleFiles.length > 1}
+                      renamingFileName={renamingFileName}
+                      renameDraft={renameDraft}
+                      setRenameDraft={setRenameDraft}
+                      setRenameError={setRenameError}
+                      beginRename={beginRename}
+                      cancelRename={cancelRename}
+                      commitRename={() => void commitRename()}
+                      toggleRuleFile={toggleRuleFile}
+                      onDelete={handleDelete}
+                      dragDisabled={ruleFiles.length < 2}
+                    />
+                  ))}
+                </TabsList>
+              </SortableContext>
+            </Tabs>
+          </DndContext>
+        </div>
+      </aside>
+
+      <div
         data-testid="rule-panel-card"
-        className="min-h-0 flex-1 gap-0 overflow-hidden py-0 shadow-none"
+        data-slot="rule-panel"
+        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card"
       >
         <div
           data-slot="rule-config-sticky-controls"
-          className="shrink-0 rounded-t-xl bg-card"
+          className="shrink-0 bg-card"
         >
-          <CardHeader className="block border-b bg-muted/30 p-0 [.border-b]:pb-0">
-            <CardTitle className="sr-only">规则内容</CardTitle>
-            <div className="flex min-w-0 items-center px-3 py-2">
-              <div
-                data-slot="rule-file-tabs-scroll-wrap"
-                className="meddle-tabs-scroll-wrap flex min-w-0 flex-1"
-                data-shadow-left={ruleFileTabsScroll.state.left ? 'true' : 'false'}
-                data-shadow-right={ruleFileTabsScroll.state.right ? 'true' : 'false'}
-              >
-                <div
-                  data-slot="rule-file-tabs-scroll"
-                  ref={ruleFileTabsScroll.ref}
-                  className="meddle-tabs-scroll min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
-                >
-                <DndContext
-                  sensors={tabSensors}
-                  collisionDetection={closestCenter}
-                  modifiers={[restrictToHorizontalAxis]}
-                  onDragEnd={handleTabDragEnd}
-                >
-                  <Tabs
-                    className="min-w-max"
-                    value={activeFileName || ''}
-                    onValueChange={handleTabValueChange}
-                  >
-                    <SortableContext items={ruleFileNames} strategy={horizontalListSortingStrategy}>
-                      <TabsList className="h-auto min-w-max justify-start gap-1 rounded-none bg-transparent p-0">
-                        {ruleFiles.map((rf) => (
-                          <SortableRuleFileTab
-                            key={rf.name}
-                            file={rf}
-                            canDelete={ruleFiles.length > 1}
-                            renamingFileName={renamingFileName}
-                            renameDraft={renameDraft}
-                            setRenameDraft={setRenameDraft}
-                            setRenameError={setRenameError}
-                            beginRename={beginRename}
-                            cancelRename={cancelRename}
-                            commitRename={() => void commitRename()}
-                            toggleRuleFile={toggleRuleFile}
-                            onDelete={handleDelete}
-                            dragDisabled={ruleFiles.length < 2}
-                          />
-                        ))}
-                      </TabsList>
-                    </SortableContext>
-                  </Tabs>
-                </DndContext>
-                </div>
-              </div>
-              <div data-slot="rule-file-actions" className="ml-2 flex shrink-0 items-center border-l pl-2">
-                {isCreating ? (
-                  <div
-                    role="group"
-                    aria-label={isImporting ? '从文件导入为新规则' : '创建新规则文件'}
-                    className="flex h-8 items-center gap-1 rounded-md border border-primary/30 bg-background px-1 shadow-sm"
-                    title={isImporting && importName ? `导入自: ${importName}` : undefined}
-                  >
-                    <Input
-                      value={newFileName}
-                      onChange={(event) => {
-                        setNewFileName(event.target.value)
-                        setCreateError(null)
-                      }}
-                      placeholder="规则文件名称"
-                      className="h-6 w-36 border-0 bg-transparent px-1.5 shadow-none focus-visible:ring-0"
-                      aria-label="新规则文件名称"
-                      autoFocus
-                      onKeyDown={(event) => {
-                        event.stopPropagation()
-                        if (event.key === 'Enter') {
-                          event.preventDefault()
-                          void handleCreate()
-                        } else if (event.key === 'Escape') {
-                          event.preventDefault()
-                          resetCreateDialog()
-                        }
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      onClick={() => void handleCreate()}
-                      aria-label="确认创建规则文件"
-                      title="创建"
-                    >
-                      <Check />
-                    </Button>
-                    <Button type="button" variant="ghost" size="icon-xs" onClick={resetCreateDialog} aria-label="取消创建规则文件" title="取消">
-                      <X />
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={openRuleOverview}
-                      aria-label="查看所有规则"
-                      title="查看所有规则"
-                    >
-                      <ListChecks />
-                    </Button>
-                    <Button type="button" variant="ghost" size="icon-sm" onClick={beginCreateRuleFile} aria-label="创建规则文件" title="创建规则文件">
-                      <Plus />
-                    </Button>
-                  </>
-                )}
-              </div>
-            </div>
-          </CardHeader>
-
           <div className="flex flex-row flex-wrap items-center justify-between gap-3 border-b px-3 py-2">
             <div className="flex items-center gap-2">
               <ToggleGroup
@@ -1301,7 +1303,8 @@ export function RuleConfig(props: RuleConfigProps) {
           </div>
         )}
 
-        <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+
           {viewMode === 'text' ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <EprcTextarea
@@ -1441,14 +1444,14 @@ export function RuleConfig(props: RuleConfigProps) {
               </div>
             </ScrollArea>
           )}
-        </CardContent>
+        </div>
 
         {(ruleFilter || targetFilter) && filteredRules.length > 0 && (
-          <CardFooter className="shrink-0 border-t px-4 py-2 text-sm text-muted-foreground [.border-t]:pt-2">
+          <div className="shrink-0 border-t px-4 py-2 text-sm text-muted-foreground">
             显示 {filteredRules.length} / {rules.length} 条规则
-          </CardFooter>
+          </div>
         )}
-      </Card>
+      </div>
 
       {/* 文本导入弹窗 */}
       <Dialog open={textImportOpen} onOpenChange={setTextImportOpen}>

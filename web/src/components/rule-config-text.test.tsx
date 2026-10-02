@@ -61,11 +61,13 @@ describe('RuleConfig text view', () => {
     // Prefer label over role: CI (radix roving-focus merge) exposes role="group",
     // while some local installs expose role="radiogroup" for type="single".
     const viewSwitcher = screen.getByLabelText('规则视图')
-    const contentCard = viewSwitcher.closest('[data-slot="card"]')
-    const stickyControls = contentCard?.querySelector('[data-slot="rule-config-sticky-controls"]')
-    const tableHeaderBar = contentCard?.querySelector('[data-slot="rule-table-header"]')
-    const tableHeader = contentCard?.querySelector('[data-slot="table-header"]')
-    expect(contentCard).toContainElement(screen.getByRole('tablist'))
+    const layout = screen.getByTestId('rule-config-layout')
+    const panel = screen.getByTestId('rule-panel-card')
+    const stickyControls = panel.querySelector('[data-slot="rule-config-sticky-controls"]')
+    const tableHeaderBar = panel.querySelector('[data-slot="rule-table-header"]')
+    const tableHeader = panel.querySelector('[data-slot="table-header"]')
+    expect(layout).toHaveAttribute('data-layout', 'files-vertical')
+    expect(layout).toContainElement(screen.getByRole('tablist'))
     expect(screen.getAllByRole('table').length).toBeGreaterThanOrEqual(1)
     expect(stickyControls).toHaveClass('shrink-0')
     expect(tableHeaderBar).toHaveClass('shrink-0')
@@ -75,7 +77,7 @@ describe('RuleConfig text view', () => {
     await user.click(screen.getByRole('radio', { name: '文本' }))
 
     const editor = await screen.findByLabelText('规则文本')
-    expect(contentCard).toContainElement(editor)
+    expect(panel).toContainElement(editor)
     await waitFor(() => expect(editor).toHaveValue(initialText))
 
     fireEvent.change(editor, { target: { value: updatedText } })
