@@ -6,10 +6,8 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
 } from '@/components/ui/sheet'
+import { PanelHeading } from '@/components/panel-heading'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -204,6 +202,8 @@ interface PluginTestDialogProps {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   embedded?: boolean
+  /** Render a plain heading. Required outside a Dialog, such as the plugins page. */
+  plainHeading?: boolean
   pluginId: string
   pluginName: string
   hooks: string[]
@@ -291,6 +291,7 @@ export function PluginTestDialog({
   open = false,
   onOpenChange,
   embedded = false,
+  plainHeading = false,
   pluginId,
   pluginName,
   hooks,
@@ -646,15 +647,17 @@ export function PluginTestDialog({
 
   const body = (
     <>
-        <SheetHeader className="px-6 pt-6 pb-4">
-          <SheetTitle className="flex items-center gap-2">
-            <Terminal className="h-5 w-5" />
-            测试插件: {pluginName}
-          </SheetTitle>
-          <SheetDescription>
-            发起真实 HTTP 请求，在请求/响应过程中运行插件代码
-          </SheetDescription>
-        </SheetHeader>
+        <PanelHeading
+          plain={plainHeading}
+          className="px-6 pt-6 pb-4"
+          title={
+            <>
+              <Terminal className="h-5 w-5" />
+              测试插件: {pluginName}
+            </>
+          }
+          description="发起真实 HTTP 请求，在请求/响应过程中运行插件代码"
+        />
 
         <Separator />
 

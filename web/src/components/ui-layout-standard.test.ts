@@ -62,7 +62,7 @@ describe('application layout standard', () => {
     ['./rule-ai-assistant-panel.tsx', 'app-panel-content'],
     ['./mobile-proxy-panel.tsx', 'app-panel-content'],
     ['./health-panel.tsx', 'app-workspace-content'],
-    ['./plugin-config.tsx', 'app-page-stack'],
+    ['./plugin-config.tsx', '<SplitPane'],
     ['./rule-config.tsx', '<SplitPane'],
     ['./mock-config.tsx', '<SplitPane'],
   ])('%s uses %s', (path, className) => {

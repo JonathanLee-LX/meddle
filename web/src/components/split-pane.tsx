@@ -20,7 +20,7 @@ interface SplitPaneProps {
 }
 
 /**
- * List | editor split used by the rules and mock pages.
+ * List | editor split used by the rules, mock, and plugin pages.
  * Wide: fixed pixel list with a draggable separator. Narrow: list stacks above the editor.
  */
 export function SplitPane({

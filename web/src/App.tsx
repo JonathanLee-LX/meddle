@@ -1021,26 +1021,24 @@ function App() {
                 {activeTab === 'plugins' && (
                   <div
                     data-testid="config-page-plugins"
-                    className="meddle-thin-scroll mt-0 min-h-0 flex-1 overflow-y-auto"
+                    className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden"
                   >
-                    <div className="app-workspace-content">
-                      <Suspense fallback={<LoadingPlaceholder />}>
-                        <PluginConfig
-                          plugins={store.plugins}
-                          pluginMode={store.pluginMode}
-                          switchPluginMode={store.switchPluginMode}
-                          fetchPlugins={store.fetchPlugins}
-                          startPlugin={store.startPlugin}
-                          stopPlugin={store.stopPlugin}
-                          togglePlugin={store.togglePlugin}
-                          thirdPartyPlugins={store.thirdPartyPlugins}
-                          thirdPartySecurity={store.thirdPartySecurity}
-                          fetchThirdPartyPlugins={store.fetchThirdPartyPlugins}
-                          loadThirdPartyPlugin={store.loadThirdPartyPlugin}
-                          unloadThirdPartyPlugin={store.unloadThirdPartyPlugin}
-                        />
-                      </Suspense>
-                    </div>
+                    <Suspense fallback={<LoadingPlaceholder />}>
+                      <PluginConfig
+                        plugins={store.plugins}
+                        pluginMode={store.pluginMode}
+                        switchPluginMode={store.switchPluginMode}
+                        fetchPlugins={store.fetchPlugins}
+                        startPlugin={store.startPlugin}
+                        stopPlugin={store.stopPlugin}
+                        togglePlugin={store.togglePlugin}
+                        thirdPartyPlugins={store.thirdPartyPlugins}
+                        thirdPartySecurity={store.thirdPartySecurity}
+                        fetchThirdPartyPlugins={store.fetchThirdPartyPlugins}
+                        loadThirdPartyPlugin={store.loadThirdPartyPlugin}
+                        unloadThirdPartyPlugin={store.unloadThirdPartyPlugin}
+                      />
+                    </Suspense>
                   </div>
                 )}
                 {activeTab === 'health' && (

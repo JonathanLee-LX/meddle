@@ -3,10 +3,8 @@ import { Button } from '@/components/ui/button'
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
 } from '@/components/ui/sheet'
+import { PanelHeading } from '@/components/panel-heading'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
@@ -23,6 +21,8 @@ interface PluginCodeEditorProps {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   embedded?: boolean
+  /** Render a plain heading. Required outside a Dialog, such as the plugins page. */
+  plainHeading?: boolean
   filename: string
   onSaved?: () => void
 }
@@ -31,6 +31,7 @@ export function PluginCodeEditor({
   open = false,
   onOpenChange,
   embedded = false,
+  plainHeading = false,
   filename,
   onSaved,
 }: PluginCodeEditorProps) {
@@ -251,14 +252,18 @@ export function PluginCodeEditor({
 
   const body = (
     <>
-        <SheetHeader className="px-6 pt-6 pb-3">
-          <SheetTitle className="flex items-center gap-2">
-            <Code2 className="h-5 w-5" />
-            {filename}
-            {isDirty && <Badge variant="outline" className="text-orange-600 border-orange-300">未保存</Badge>}
-          </SheetTitle>
-          <SheetDescription>查看和编辑插件源码，保存后需热加载才能生效</SheetDescription>
-        </SheetHeader>
+        <PanelHeading
+          plain={plainHeading}
+          className="px-6 pt-6 pb-3"
+          title={
+            <>
+              <Code2 className="h-5 w-5" />
+              {filename}
+              {isDirty && <Badge variant="outline" className="text-orange-600 border-orange-300">未保存</Badge>}
+            </>
+          }
+          description="查看和编辑插件源码，保存后需热加载才能生效"
+        />
 
         <Separator />
 

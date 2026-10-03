@@ -6,10 +6,8 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
 } from '@/components/ui/sheet'
+import { PanelHeading } from '@/components/panel-heading'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { 
@@ -33,6 +31,8 @@ interface PluginGeneratorProps {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   embedded?: boolean
+  /** Render a plain heading. Required outside a Dialog, such as the plugins page. */
+  plainHeading?: boolean
   onPluginSaved?: () => void
 }
 
@@ -44,7 +44,7 @@ interface GeneratedPluginManifest {
   permissions: string[]
 }
 
-export function PluginGenerator({ open = false, onOpenChange, embedded = false, onPluginSaved }: PluginGeneratorProps) {
+export function PluginGenerator({ open = false, onOpenChange, embedded = false, plainHeading = false, onPluginSaved }: PluginGeneratorProps) {
   const [pluginName, setPluginName] = useState('')
   const [pluginDescription, setPluginDescription] = useState('')
   const [hooks, setHooks] = useState('')
@@ -310,15 +310,17 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
 
   const body = (
     <>
-        <SheetHeader className="px-6 pt-6 pb-4">
-          <SheetTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5" />
-            AI 插件生成器
-          </SheetTitle>
-          <SheetDescription>
-            使用 AI 根据插件系统设计和您的需求自动生成自定义插件代码
-          </SheetDescription>
-        </SheetHeader>
+        <PanelHeading
+          plain={plainHeading}
+          className="px-6 pt-6 pb-4"
+          title={
+            <>
+              <Sparkles className="h-5 w-5" />
+              AI 插件生成器
+            </>
+          }
+          description="使用 AI 根据插件系统设计和您的需求自动生成自定义插件代码"
+        />
         
         <Separator />
         
