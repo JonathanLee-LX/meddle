@@ -6,7 +6,7 @@ function nav(platform: string, userAgent = platform, hinted?: string): Navigator
     platform,
     userAgent,
     userAgentData: hinted ? { platform: hinted } : undefined,
-  } as Navigator
+  } as unknown as Navigator
 }
 
 describe('save shortcut label', () => {
