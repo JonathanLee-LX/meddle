@@ -14,7 +14,7 @@ export interface ShellNavItem {
   title: string
 }
 
-/** Top-bar primary nav (left of utility actions). Settings / mobile open from the right. */
+/** Vertical primary nav beside the page. */
 export const SHELL_NAV: readonly ShellNavItem[] = [
   {
     tab: 'logs',
@@ -51,11 +51,21 @@ export const SHELL_NAV: readonly ShellNavItem[] = [
     mode: 'config',
     title: '查看进程健康、连接、守护策略和日志限流状态',
   },
+  {
+    tab: 'mobile',
+    path: '/mobile',
+    label: '手机代理',
+    mode: 'config',
+    title: '扫码配置手机代理并安装 HTTPS 根证书',
+  },
+  {
+    tab: 'settings',
+    path: '/settings',
+    label: '设置',
+    mode: 'config',
+    title: '管理系统偏好、配置文件和 AI 功能',
+  },
 ] as const
-
-/** Utility config routes opened from header right (full-width config host, not primary nav). */
-export const SHELL_UTILITY_TABS = ['settings', 'mobile'] as const
-export type ShellUtilityTab = (typeof SHELL_UTILITY_TABS)[number]
 
 const PATH_TO_TAB: Record<string, ShellTab> = {
   '/': 'logs',
@@ -92,13 +102,4 @@ export function getShellMode(tab: ShellTab): ShellMode {
 
 export function isWorkModeTab(tab: ShellTab): boolean {
   return getShellMode(tab) === 'work'
-}
-
-export function isUtilityConfigTab(tab: ShellTab): tab is ShellUtilityTab {
-  return (SHELL_UTILITY_TABS as readonly string[]).includes(tab)
-}
-
-/** Primary nav highlight — utility tabs leave primary nav inactive. */
-export function getPrimaryNavTab(tab: ShellTab): ShellTab | null {
-  return isUtilityConfigTab(tab) ? null : tab
 }

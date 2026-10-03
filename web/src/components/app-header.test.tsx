@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { AppHeader } from './app-header'
+import { AppHeader, SHELL_NAV_COLLAPSED_KEY, ShellNav } from './app-header'
 import { MemoryRouter } from 'react-router-dom'
 
 vi.mock('./session-switcher', () => ({
@@ -24,36 +24,70 @@ vi.mock('./theme-provider', () => ({
   }),
 }))
 
-function renderHeader(props: Partial<ComponentProps<typeof AppHeader>> = {}) {
+function renderNav(props: Partial<ComponentProps<typeof ShellNav>> = {}) {
   const onTabChange = vi.fn()
   const result = render(
     <MemoryRouter>
-      <AppHeader
-        activeTab="logs"
-        onTabChange={onTabChange}
-        onSettingsClick={vi.fn()}
-        onCommandClick={vi.fn()}
-        onMobileProxyClick={vi.fn()}
-        {...props}
-      />
+      <ShellNav activeTab="logs" onTabChange={onTabChange} {...props} />
     </MemoryRouter>,
   )
   return { ...result, onTabChange }
 }
 
-describe('AppHeader shell nav (07-shell)', () => {
-  it('renders top-bar primary nav with wireframe labels', () => {
-    renderHeader()
-    expect(screen.getByTestId('app-shell-nav')).toBeInTheDocument()
+describe('AppHeader', () => {
+  it('places an input-style command trigger on the left of the utilities', () => {
+    const onCommandClick = vi.fn()
+    render(
+      <MemoryRouter>
+        <AppHeader onCommandClick={onCommandClick} />
+      </MemoryRouter>,
+    )
+    const command = screen.getByTestId('shell-command')
+    const utilities = screen.getByTestId('app-shell-utilities')
+    expect(command.className).toContain('w-72')
+    expect(command.className).toContain('border-input')
+    expect(command).toHaveTextContent('搜索操作…')
+    expect(command.compareDocumentPosition(utilities) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(utilities).not.toContainElement(command)
+    fireEvent.click(command)
+    expect(onCommandClick).toHaveBeenCalledOnce()
+  })
+})
+
+describe('ShellNav (07-shell)', () => {
+  beforeEach(() => {
+    localStorage.removeItem(SHELL_NAV_COLLAPSED_KEY)
+  })
+
+  it('renders a vertical primary nav with roomier items', () => {
+    renderNav()
+    const nav = screen.getByTestId('app-shell-nav')
+    expect(nav.closest('[data-orientation]')).toHaveAttribute('data-orientation', 'vertical')
+    expect(nav.className).toContain('!h-full')
+    expect(nav.className).toContain('bg-transparent')
+    expect(nav.className).not.toContain('bg-muted')
+    expect(nav.className).toContain('gap-2.5')
+    expect(nav.className).toContain('p-2.5')
+    const order = Array.from(nav.querySelectorAll('[data-testid^="shell-nav-"]')).map((el) => el.getAttribute('data-testid'))
+    expect(order.at(-1)).toBe('shell-nav-settings')
+    expect(order.indexOf('shell-nav-settings') - order.indexOf('shell-nav-mobile')).toBe(1)
+    const toggle = screen.getByTestId('shell-nav-collapse')
+    expect(nav.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(toggle.className).not.toContain('absolute')
+    expect(toggle).not.toHaveTextContent('收起')
+    expect(screen.getByTestId('shell-nav-logs').className).toContain('px-3.5')
+    expect(screen.getByTestId('shell-nav-logs').className).toContain('py-3')
     expect(screen.getByTestId('shell-nav-logs')).toHaveTextContent('流量')
     expect(screen.getByTestId('shell-nav-config')).toHaveTextContent('路由规则')
     expect(screen.getByTestId('shell-nav-mock')).toHaveTextContent('Mock')
     expect(screen.getByTestId('shell-nav-plugins')).toHaveTextContent('扩展插件')
     expect(screen.getByTestId('shell-nav-health')).toHaveTextContent('健康')
+    expect(screen.getByTestId('shell-nav-mobile')).toHaveTextContent('手机代理')
+    expect(screen.getByTestId('shell-nav-settings')).toHaveTextContent('设置')
   })
 
   it('marks work vs config nav modes and active page', () => {
-    renderHeader({ activeTab: 'config' })
+    renderNav({ activeTab: 'config' })
     expect(screen.getByTestId('shell-nav-logs')).toHaveAttribute('data-shell-nav-mode', 'work')
     expect(screen.getByTestId('shell-nav-config')).toHaveAttribute('data-shell-nav-mode', 'config')
     expect(screen.getByTestId('shell-nav-config')).toHaveAttribute('data-state', 'active')
@@ -65,13 +99,10 @@ describe('AppHeader shell nav (07-shell)', () => {
     const onTabChange = vi.fn()
     const props = {
       onTabChange,
-      onSettingsClick: vi.fn(),
-      onCommandClick: vi.fn(),
-      onMobileProxyClick: vi.fn(),
     }
     const { rerender } = render(
       <MemoryRouter>
-        <AppHeader activeTab="logs" {...props} />
+        <ShellNav activeTab="logs" {...props} />
       </MemoryRouter>,
     )
     fireEvent.mouseDown(screen.getByTestId('shell-nav-config'), { button: 0, ctrlKey: false })
@@ -79,15 +110,67 @@ describe('AppHeader shell nav (07-shell)', () => {
 
     rerender(
       <MemoryRouter>
-        <AppHeader activeTab="config" {...props} />
+        <ShellNav activeTab="config" {...props} />
       </MemoryRouter>,
     )
     fireEvent.mouseDown(screen.getByTestId('shell-nav-logs'), { button: 0, ctrlKey: false })
     expect(onTabChange).toHaveBeenCalledWith('logs')
+
+    rerender(
+      <MemoryRouter>
+        <ShellNav activeTab="logs" {...props} />
+      </MemoryRouter>,
+    )
+    fireEvent.mouseDown(screen.getByTestId('shell-nav-mobile'), { button: 0, ctrlKey: false })
+    expect(onTabChange).toHaveBeenCalledWith('mobile')
+    fireEvent.mouseDown(screen.getByTestId('shell-nav-settings'), { button: 0, ctrlKey: false })
+    expect(onTabChange).toHaveBeenCalledWith('settings')
+  })
+
+  it('highlights settings and mobile when those pages are open', () => {
+    const { rerender, onTabChange } = renderNav({ activeTab: 'mobile' })
+    expect(screen.getByTestId('shell-nav-mobile')).toHaveAttribute('data-state', 'active')
+    expect(screen.getByTestId('shell-nav-mobile')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('shell-nav-logs')).toHaveAttribute('data-state', 'inactive')
+
+    rerender(
+      <MemoryRouter>
+        <ShellNav activeTab="settings" onTabChange={onTabChange} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByTestId('shell-nav-settings')).toHaveAttribute('data-state', 'active')
+    expect(screen.getByTestId('shell-nav-mobile')).toHaveAttribute('data-state', 'inactive')
   })
 
   it('shows mock enabled count badge when > 0', () => {
-    renderHeader({ mockEnabledCount: 3 })
+    renderNav({ mockEnabledCount: 3 })
     expect(screen.getByTestId('shell-nav-mock')).toHaveTextContent('3')
+  })
+
+  it('collapses to icons, persists, and expands again', () => {
+    const { unmount, onTabChange } = renderNav()
+    const toggle = screen.getByTestId('shell-nav-collapse')
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('app-shell-nav-rail')).toHaveAttribute('data-collapsed', 'false')
+
+    fireEvent.click(toggle)
+    expect(screen.getByTestId('app-shell-nav-rail')).toHaveAttribute('data-collapsed', 'true')
+    expect(screen.getByTestId('shell-nav-collapse')).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByTestId('shell-nav-collapse')).toHaveAttribute('aria-label', '展开菜单')
+    expect(screen.getByTestId('shell-nav-logs').querySelector('span')).toHaveClass('sr-only')
+    expect(localStorage.getItem(SHELL_NAV_COLLAPSED_KEY)).toBe('1')
+
+    fireEvent.mouseDown(screen.getByTestId('shell-nav-health'), { button: 0, ctrlKey: false })
+    expect(onTabChange).toHaveBeenCalledWith('health')
+
+    fireEvent.click(screen.getByTestId('shell-nav-collapse'))
+    expect(screen.getByTestId('app-shell-nav-rail')).toHaveAttribute('data-collapsed', 'false')
+    expect(screen.getByTestId('shell-nav-logs').querySelector('span')).not.toHaveClass('sr-only')
+    expect(localStorage.getItem(SHELL_NAV_COLLAPSED_KEY)).toBe('0')
+    unmount()
+
+    localStorage.setItem(SHELL_NAV_COLLAPSED_KEY, '1')
+    renderNav()
+    expect(screen.getByTestId('app-shell-nav-rail')).toHaveAttribute('data-collapsed', 'true')
   })
 })

@@ -15,17 +15,29 @@ describe('app shell layout contract (P1 / #88)', () => {
     expect(app).toMatch(/shellMode === 'work' \? \([\s\S]*data-testid="shell-work"[\s\S]*\) : \([\s\S]*data-testid="shell-config"/)
   })
 
-  it('moves primary nav into the header (07-shell)', () => {
+  it('places a vertical nav beside shell content', () => {
     const header = readSource('./app-header.tsx')
     const app = readSource('../App.tsx')
     expect(header).toContain('data-testid="app-shell-nav"')
+    expect(header).toContain('orientation="vertical"')
     expect(header).toContain('<TabsList')
     expect(header).toContain('<TabsTrigger')
     expect(header).toContain('SHELL_NAV')
     expect(readSource('../lib/shell-mode.ts')).toContain("label: '流量'")
     expect(app).toContain('activeTab={activeTab}')
     expect(app).toContain('onTabChange={handleTabChange}')
-    // Old in-card TabsList for page nav should be gone
+    const main = app.indexOf('className="app-shell-main')
+    const nav = app.indexOf('<ShellNav', main)
+    const work = app.indexOf('data-testid="shell-work"', main)
+    expect(main).toBeGreaterThan(-1)
+    expect(nav).toBeGreaterThan(main)
+    expect(work).toBeGreaterThan(nav)
+    const workTag = app.slice(work, app.indexOf('>', work))
+    const config = app.indexOf('data-testid="shell-config"', work)
+    const configTag = app.slice(config, app.indexOf('>', config))
+    expect(workTag).toContain('mt-[var(--ui-section-gap)]')
+    expect(configTag).toContain('mt-[var(--ui-section-gap)]')
+    // Page hosts must not grow their own tab lists
     expect(app).not.toContain('TabsList')
     expect(app).not.toContain('TabsTrigger')
   })

@@ -2,10 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   SHELL_NAV,
   getPathForTab,
-  getPrimaryNavTab,
   getShellMode,
   getTabFromPath,
-  isUtilityConfigTab,
   isWorkModeTab,
 } from './shell-mode'
 
@@ -49,21 +47,12 @@ describe('shell-mode', () => {
       'Mock',
       '扩展插件',
       '健康',
+      '手机代理',
+      '设置',
     ])
     expect(SHELL_NAV.find((item) => item.tab === 'logs')?.mode).toBe('work')
-    expect(SHELL_NAV.filter((item) => item.mode === 'config')).toHaveLength(4)
-    // Settings / mobile are utility config routes, not primary nav
-    expect(SHELL_NAV.some((item) => item.tab === 'settings')).toBe(false)
-    expect(SHELL_NAV.some((item) => item.tab === 'mobile')).toBe(false)
-  })
-
-  it('marks settings/mobile as utility config tabs (full-width host)', () => {
-    expect(isUtilityConfigTab('settings')).toBe(true)
-    expect(isUtilityConfigTab('mobile')).toBe(true)
-    expect(isUtilityConfigTab('config')).toBe(false)
-    expect(getPrimaryNavTab('settings')).toBeNull()
-    expect(getPrimaryNavTab('mobile')).toBeNull()
-    expect(getPrimaryNavTab('mock')).toBe('mock')
-    expect(getPrimaryNavTab('logs')).toBe('logs')
+    expect(SHELL_NAV.filter((item) => item.mode === 'config')).toHaveLength(6)
+    expect(SHELL_NAV.find((item) => item.tab === 'mobile')?.path).toBe('/mobile')
+    expect(SHELL_NAV.find((item) => item.tab === 'settings')?.path).toBe('/settings')
   })
 })

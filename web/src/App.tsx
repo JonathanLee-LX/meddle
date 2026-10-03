@@ -33,7 +33,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { LogFilter } from '@/components/log-filter'
 import { LogTable } from '@/components/log-table'
 import { TrafficWorkLayout } from '@/components/traffic-work-layout'
-import { AppHeader } from '@/components/app-header'
+import { AppHeader, ShellNav } from '@/components/app-header'
 import { useProxyStore } from '@/hooks/use-proxy-store'
 import { useFuzzyFilter } from '@/hooks/use-fuzzy-filter'
 import { createMockFromLog, type CreateMockFromLogData } from '@/utils/mock-factory'
@@ -900,23 +900,21 @@ function App() {
       renderPanel={(route, panel) => <Suspense fallback={<LoadingPlaceholder />}>{renderPanel(route, panel)}</Suspense>}
     >
       <div className="flex h-dvh flex-col overflow-hidden bg-muted/20">
-        <AppHeader
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
-          mockEnabledCount={store.mockRules.filter((r) => r.enabled).length}
-          onSettingsClick={() => navigate('/settings')}
-          onCommandClick={openCommandPanel}
-          onMobileProxyClick={() => navigate('/mobile')}
-        />
+        <AppHeader onCommandClick={openCommandPanel} />
 
-        {/* Shell content: work (traffic B host) XOR config (full-width) — never stacked */}
+        {/* Shell content: vertical nav beside work XOR config — never stacked */}
         {/* Same gutter on every primary page. Inner content uses --ui-page-padding once. */}
         <main className="app-shell-main">
+          <ShellNav
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            mockEnabledCount={store.mockRules.filter((r) => r.enabled).length}
+          />
           {shellMode === 'work' ? (
             <div
               data-testid="shell-work"
               data-shell-mode="work"
-              className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden"
+              className="mt-[var(--ui-section-gap)] flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
             >
               <Card
                 data-testid="log-panel-card"
@@ -974,7 +972,7 @@ function App() {
             <div
               data-testid="shell-config"
               data-shell-mode="config"
-              className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden"
+              className="mt-[var(--ui-section-gap)] flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
             >
               <Card className="h-full min-h-0 w-full flex-1 gap-0 overflow-hidden rounded-b-none py-0">
                 {activeTab === 'config' && (

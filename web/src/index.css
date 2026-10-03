@@ -79,7 +79,7 @@
     min-width: 0;
     min-height: 0;
     flex: 1 1 0%;
-    padding: var(--ui-page-padding) var(--ui-page-padding) 0;
+    gap: var(--ui-section-gap);
   }
 
   .app-page-pad {

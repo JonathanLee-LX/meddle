@@ -33,7 +33,9 @@ describe('application layout standard', () => {
   it('binds layout classes to the spacing tokens', () => {
     const css = readSource('../index.css')
 
-    expect(css).toMatch(/\.app-shell-main[\s\S]*?padding:\s*var\(--ui-page-padding\) var\(--ui-page-padding\) 0/)
+    const shellMain = css.match(/\.app-shell-main\s*\{[^}]*\}/)?.[0] ?? ''
+    expect(shellMain).toMatch(/gap:\s*var\(--ui-section-gap\)/)
+    expect(shellMain).not.toMatch(/padding/)
     expect(css).toMatch(/\.app-page-pad[\s\S]*?padding:\s*var\(--ui-page-padding\)/)
     expect(css).toMatch(/\.app-pane-bar[\s\S]*?padding:\s*var\(--ui-section-gap\)/)
     expect(css).toMatch(/\.app-workspace-content[\s\S]*?gap:\s*var\(--ui-content-gap\)/)

@@ -73,14 +73,19 @@ describe('config pages full-width contract (P3 / #90)', () => {
     expect(mock).not.toContain('<Sheet')
   })
 
-  it('settings / mobile open as full-width config routes from header utilities', () => {
+  it('settings / mobile are side-nav config routes', () => {
     const app = readSource('../App.tsx')
-    expect(app).toContain("navigate('/settings')")
-    expect(app).toContain("navigate('/mobile')")
+    const nav = readSource('../lib/shell-mode.ts')
     const header = readSource('./app-header.tsx')
-    expect(header).toContain('shell-utility-settings')
-    expect(header).toContain('shell-utility-mobile')
-    expect(header).toContain('getPrimaryNavTab')
+    expect(nav).toContain("tab: 'settings'")
+    expect(nav).toContain("tab: 'mobile'")
+    expect(nav).toContain("path: '/settings'")
+    expect(nav).toContain("path: '/mobile'")
+    expect(header).toContain('shell-nav-${item.tab}')
+    expect(header).not.toContain('shell-utility-settings')
+    expect(header).not.toContain('shell-utility-mobile')
+    expect(app).toContain('config-page-settings')
+    expect(app).toContain('config-page-mobile')
   })
 
   it('mobile proxy panel is full-width (no narrow max-w-3xl leftover)', () => {
