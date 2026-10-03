@@ -5,6 +5,7 @@ import {
   SheetContent,
 } from '@/components/ui/sheet'
 import { PanelHeading } from '@/components/panel-heading'
+import { EditorPaneActions, useEditorPaneDismiss, useInEditorPane } from '@/components/editor-pane-actions'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
@@ -21,7 +22,7 @@ interface PluginCodeEditorProps {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   embedded?: boolean
-  /** Render a plain heading. Required outside a Dialog, such as the plugins page. */
+  /** Skip the in-panel title. The plugins page pane bar already names the file. */
   plainHeading?: boolean
   filename: string
   onSaved?: () => void
@@ -164,6 +165,9 @@ export function PluginCodeEditor({
     onOpenChange?.(false)
   }
 
+  const inPaneBar = useInEditorPane()
+  useEditorPaneDismiss(handleClose)
+
   const handleAIRevise = async () => {
     if (!extraInstruction.trim() || !isAIReady) return
 
@@ -252,20 +256,22 @@ export function PluginCodeEditor({
 
   const body = (
     <>
-        <PanelHeading
-          plain={plainHeading}
-          className="px-6 pt-6 pb-3"
-          title={
-            <>
-              <Code2 className="h-5 w-5" />
-              {filename}
-              {isDirty && <Badge variant="outline" className="text-orange-600 border-orange-300">未保存</Badge>}
-            </>
-          }
-          description="查看和编辑插件源码，保存后需热加载才能生效"
-        />
-
-        <Separator />
+        {plainHeading ? null : (
+          <>
+            <PanelHeading
+              className="px-6 pt-6 pb-3"
+              title={
+                <>
+                  <Code2 className="h-5 w-5" />
+                  {filename}
+                  {isDirty && <Badge variant="outline" className="text-orange-600 border-orange-300">未保存</Badge>}
+                </>
+              }
+              description="查看和编辑插件源码，保存后需热加载才能生效"
+            />
+            <Separator />
+          </>
+        )}
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-3">
           {loading ? (
@@ -361,10 +367,13 @@ export function PluginCodeEditor({
           </div>
         )}
 
-        <Separator />
+        {inPaneBar ? null : <Separator />}
 
-        <div className="px-6 py-3 flex justify-between items-center gap-2">
-          <div className="flex gap-2">
+        <EditorPaneActions className="px-6 py-3 flex justify-between items-center gap-2">
+          <div className={inPaneBar ? 'contents' : 'flex items-center gap-2'}>
+            {plainHeading && isDirty ? (
+              <Badge variant="outline" className="text-orange-600 border-orange-300">未保存</Badge>
+            ) : null}
             <Button
               variant="ghost"
               size="sm"
@@ -386,15 +395,17 @@ export function PluginCodeEditor({
               AI 更新代码
             </Button>
           </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleClose}
-              disabled={saving || revising}
-            >
-              关闭
-            </Button>
+          <div className={inPaneBar ? 'contents' : 'flex gap-2'}>
+            {inPaneBar ? null : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleClose}
+                disabled={saving || revising}
+              >
+                关闭
+              </Button>
+            )}
             <SaveButton
               variant="outline"
               size="sm"
@@ -413,7 +424,7 @@ export function PluginCodeEditor({
               保存并热加载
             </Button>
           </div>
-        </div>
+        </EditorPaneActions>
     </>
   )
 

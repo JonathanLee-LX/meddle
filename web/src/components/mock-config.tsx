@@ -13,6 +13,7 @@ import { MockEditorPanel } from '@/components/mock-editor-panel'
 import { toast } from '@/components/ui/toast'
 import { MOCK_OPEN_CREATE_EVENT, type MockOpenCreateDetail } from '@/lib/mock-config-events'
 import { SplitPane } from '@/components/split-pane'
+import { EditorPaneActionsProvider } from '@/components/editor-pane-actions'
 import { mockPaneSplit } from '@/lib/mock-pane-split'
 
 export { MOCK_OPEN_CREATE_EVENT }
@@ -44,6 +45,7 @@ export function MockConfig({
   onInitialEditConsumed,
 }: MockConfigProps) {
   const [editor, setEditor] = useState<EditorMode>({ kind: 'idle' })
+  const [actionsHost, setActionsHost] = useState<HTMLDivElement | null>(null)
 
   useEffect(() => {
     void fetchMocks()
@@ -234,20 +236,24 @@ export function MockConfig({
       </>
       }
     >
-        <div className="app-pane-bar flex shrink-0 items-center justify-between gap-2 border-b">
-            <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        <div className="app-pane-bar flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b">
+            <div className="min-w-0 truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
               {editor.kind === 'create'
                 ? '编辑 Mock · 新建'
                 : editor.kind === 'edit'
                   ? `编辑 Mock · ${editingRule?.name || editingRule?.urlPattern || editor.ruleId}`
                   : '编辑 Mock'}
             </div>
-            {editor.kind !== 'idle' ? (
-              <Button variant="ghost" size="xs" onClick={closeEditor}>
-                取消
-              </Button>
-            ) : null}
+            <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
+              {editor.kind !== 'idle' ? (
+                <Button variant="ghost" size="sm" onClick={closeEditor}>
+                  取消
+                </Button>
+              ) : null}
+              <div ref={setActionsHost} data-testid="editor-pane-actions" className="contents" />
+            </div>
           </div>
+          <EditorPaneActionsProvider host={actionsHost}>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {editor.kind === 'idle' ? (
               <div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
@@ -272,6 +278,7 @@ export function MockConfig({
               />
             ) : null}
           </div>
+          </EditorPaneActionsProvider>
     </SplitPane>
   )
 }

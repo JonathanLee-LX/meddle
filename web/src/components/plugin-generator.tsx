@@ -8,6 +8,7 @@ import {
   SheetContent,
 } from '@/components/ui/sheet'
 import { PanelHeading } from '@/components/panel-heading'
+import { EditorPaneActions, useInEditorPane } from '@/components/editor-pane-actions'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { 
@@ -31,7 +32,7 @@ interface PluginGeneratorProps {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   embedded?: boolean
-  /** Render a plain heading. Required outside a Dialog, such as the plugins page. */
+  /** Skip the in-panel title. The plugins page pane bar already names this editor. */
   plainHeading?: boolean
   onPluginSaved?: () => void
 }
@@ -308,22 +309,26 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
     setReloading(false)
   }
 
+  const inPaneBar = useInEditorPane()
+
   const body = (
     <>
-        <PanelHeading
-          plain={plainHeading}
-          className="px-6 pt-6 pb-4"
-          title={
-            <>
-              <Sparkles className="h-5 w-5" />
-              AI 插件生成器
-            </>
-          }
-          description="使用 AI 根据插件系统设计和您的需求自动生成自定义插件代码"
-        />
-        
-        <Separator />
-        
+        {plainHeading ? null : (
+          <>
+            <PanelHeading
+              className="px-6 pt-6 pb-4"
+              title={
+                <>
+                  <Sparkles className="h-5 w-5" />
+                  AI 插件生成器
+                </>
+              }
+              description="使用 AI 根据插件系统设计和您的需求自动生成自定义插件代码"
+            />
+            <Separator />
+          </>
+        )}
+
         <div className="app-panel-content">
           {!isAIReady && (
             <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900 rounded-md p-3">
@@ -518,21 +523,23 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
           )}
         </div>
 
-        <Separator />
-        
-        <div className="px-6 py-4 flex justify-between gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              onOpenChange?.(false)
-              resetForm()
-            }}
-            disabled={generating || saving || reloading}
-          >
-            {saved ? '完成' : '取消'}
-          </Button>
-          <div className="flex gap-2">
+        {inPaneBar ? null : <Separator />}
+
+        <EditorPaneActions className="px-6 py-4 flex justify-between gap-2">
+          {inPaneBar ? null : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                onOpenChange?.(false)
+                resetForm()
+              }}
+              disabled={generating || saving || reloading}
+            >
+              {saved ? '完成' : '取消'}
+            </Button>
+          )}
+          <div className={inPaneBar ? 'contents' : 'flex gap-2'}>
             {!generatedCode ? (
               <Button
                 size="sm"
@@ -606,7 +613,7 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
               </Button>
             )}
           </div>
-        </div>
+        </EditorPaneActions>
     </>
   )
 

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getCachedSettings, loadSettings, updateSettings } from '@/lib/settings-store'
@@ -25,8 +25,12 @@ const settings = {
 }
 
 function ThemeHarness() {
-  const { accentColor, setAccentColor } = useTheme()
-  return <button onClick={() => setAccentColor('rose')}>{accentColor}</button>
+  const { accentColor, resolvedTheme, setAccentColor } = useTheme()
+  return (
+    <button onClick={() => setAccentColor('rose')}>
+      {accentColor}:{resolvedTheme}
+    </button>
+  )
 }
 
 beforeEach(() => {
@@ -58,7 +62,7 @@ describe('ThemeProvider accent color', () => {
 
     await waitFor(() => expect(document.documentElement.dataset.accent).toBe('auto'))
 
-    await user.click(screen.getByRole('button', { name: 'auto' }))
+    await user.click(screen.getByRole('button', { name: 'auto:light' }))
 
     await waitFor(() => {
       expect(document.documentElement.dataset.accent).toBe('rose')
@@ -67,5 +71,32 @@ describe('ThemeProvider accent color', () => {
         accentColor: 'rose',
       })
     })
+  })
+
+  it('updates the resolved theme when the system scheme changes', async () => {
+    let matches = false
+    let listener: (() => void) | undefined
+    window.matchMedia = vi.fn().mockImplementation(() => ({
+      get matches() {
+        return matches
+      },
+      addEventListener: (_event: string, handler: () => void) => {
+        listener = handler
+      },
+      removeEventListener: vi.fn(),
+    }))
+
+    render(
+      <ThemeProvider>
+        <ThemeHarness />
+      </ThemeProvider>,
+    )
+
+    expect(screen.getByRole('button')).toHaveTextContent('auto:light')
+    matches = true
+    act(() => {
+      listener?.()
+    })
+    expect(screen.getByRole('button')).toHaveTextContent('auto:dark')
   })
 })

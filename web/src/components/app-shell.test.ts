@@ -19,6 +19,8 @@ describe('app shell layout contract (P1 / #88)', () => {
     const header = readSource('./app-header.tsx')
     const app = readSource('../App.tsx')
     expect(header).toContain('data-testid="app-shell-nav"')
+    expect(header).toContain('<TabsList')
+    expect(header).toContain('<TabsTrigger')
     expect(header).toContain('SHELL_NAV')
     expect(readSource('../lib/shell-mode.ts')).toContain("label: '流量'")
     expect(app).toContain('activeTab={activeTab}')

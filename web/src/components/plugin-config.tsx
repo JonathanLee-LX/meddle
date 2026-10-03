@@ -3,7 +3,7 @@
  * The list browses built-in, custom, and third-party plugins. Editing
  * (code, test, AI generate, third-party load) stays in the right pane.
  */
-import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch'
 import { Play, Square, Loader2, Shield, ShieldAlert, Sparkles, RefreshCw, Zap, TestTube2, Trash2 } from 'lucide-react'
 import type { Plugin } from '@/types'
 import { SplitPane } from '@/components/split-pane'
+import { EditorPaneActionsProvider } from '@/components/editor-pane-actions'
 import { pluginPaneSplit } from '@/lib/plugin-pane-split'
 
 const PluginGenerator = lazy(() =>
@@ -86,6 +87,18 @@ export function PluginConfig({
   const [customPlugins, setCustomPlugins] = useState<CustomPluginFile[]>([])
   const [hotReloading, setHotReloading] = useState(false)
   const [editor, setEditor] = useState<EditorMode>({ kind: 'idle' })
+  const [actionsHost, setActionsHost] = useState<HTMLDivElement | null>(null)
+  const dismissRef = useRef<(() => void) | null>(null)
+  const registerDismiss = useCallback((dismiss: (() => void) | null) => {
+    dismissRef.current = dismiss
+  }, [])
+  const closeEditor = useCallback(() => {
+    if (dismissRef.current) {
+      dismissRef.current()
+      return
+    }
+    setEditor({ kind: 'idle' })
+  }, [])
 
   useEffect(() => {
     fetchPlugins()
@@ -392,14 +405,18 @@ export function PluginConfig({
         </>
       }
     >
-      <div className="app-pane-bar flex shrink-0 items-center justify-between gap-2 border-b">
-        <div className="truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{editorTitle}</div>
-        {editor.kind !== 'idle' ? (
-          <Button variant="ghost" size="xs" onClick={() => setEditor({ kind: 'idle' })}>
-            取消
-          </Button>
-        ) : null}
+      <div className="app-pane-bar flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b">
+        <div className="min-w-0 truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{editorTitle}</div>
+        <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
+          {editor.kind !== 'idle' ? (
+            <Button variant="ghost" size="sm" onClick={closeEditor}>
+              取消
+            </Button>
+          ) : null}
+          <div ref={setActionsHost} data-testid="editor-pane-actions" className="contents" />
+        </div>
       </div>
+      <EditorPaneActionsProvider host={actionsHost} registerDismiss={registerDismiss}>
       <div className={editorFillsPane ? 'min-h-0 flex-1 overflow-hidden' : 'min-h-0 flex-1 overflow-y-auto'}>
         {editor.kind === 'idle' ? (
           <div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
@@ -411,6 +428,9 @@ export function PluginConfig({
             <PluginGenerator
               embedded
               plainHeading
+              onOpenChange={(open) => {
+                if (!open) setEditor({ kind: 'idle' })
+              }}
               onPluginSaved={() => {
                 void fetchPlugins()
                 void fetchCustomPlugins()
@@ -424,6 +444,9 @@ export function PluginConfig({
               embedded
               plainHeading
               filename={editor.filename}
+              onOpenChange={(open) => {
+                if (!open) setEditor({ kind: 'idle' })
+              }}
               onSaved={() => {
                 void fetchPlugins()
               }}
@@ -438,6 +461,9 @@ export function PluginConfig({
               pluginId={editor.pluginId}
               pluginName={editor.pluginName}
               hooks={editor.hooks}
+              onOpenChange={(open) => {
+                if (!open) setEditor({ kind: 'idle' })
+              }}
               onPluginFixed={() => {
                 void fetchPlugins()
               }}
@@ -474,6 +500,7 @@ export function PluginConfig({
           </div>
         ) : null}
       </div>
+      </EditorPaneActionsProvider>
     </SplitPane>
   )
 }

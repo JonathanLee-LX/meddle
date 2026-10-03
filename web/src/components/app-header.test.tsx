@@ -62,10 +62,27 @@ describe('AppHeader shell nav (07-shell)', () => {
   })
 
   it('switches tab with one click (work ↔ config)', () => {
-    const { onTabChange } = renderHeader({ activeTab: 'logs' })
-    fireEvent.click(screen.getByTestId('shell-nav-config'))
+    const onTabChange = vi.fn()
+    const props = {
+      onTabChange,
+      onSettingsClick: vi.fn(),
+      onCommandClick: vi.fn(),
+      onMobileProxyClick: vi.fn(),
+    }
+    const { rerender } = render(
+      <MemoryRouter>
+        <AppHeader activeTab="logs" {...props} />
+      </MemoryRouter>,
+    )
+    fireEvent.mouseDown(screen.getByTestId('shell-nav-config'), { button: 0, ctrlKey: false })
     expect(onTabChange).toHaveBeenCalledWith('config')
-    fireEvent.click(screen.getByTestId('shell-nav-logs'))
+
+    rerender(
+      <MemoryRouter>
+        <AppHeader activeTab="config" {...props} />
+      </MemoryRouter>,
+    )
+    fireEvent.mouseDown(screen.getByTestId('shell-nav-logs'), { button: 0, ctrlKey: false })
     expect(onTabChange).toHaveBeenCalledWith('logs')
   })
 

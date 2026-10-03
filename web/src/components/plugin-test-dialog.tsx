@@ -8,6 +8,7 @@ import {
   SheetContent,
 } from '@/components/ui/sheet'
 import { PanelHeading } from '@/components/panel-heading'
+import { EditorPaneActions, useInEditorPane } from '@/components/editor-pane-actions'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -331,8 +332,10 @@ export function PluginTestDialog({
   const isAIReady = isAIConfigValid(aiConfig)
   const customFilename = pluginId.startsWith('local.') ? `${pluginId.slice('local.'.length)}.js` : ''
 
+  const visible = embedded || open
+
   const fetchPluginCode = useCallback(async () => {
-    if (!customFilename || !open) {
+    if (!customFilename || !visible) {
       setPluginCode('')
       setFixBaseCode('')
       setCodeError(null)
@@ -359,7 +362,7 @@ export function PluginTestDialog({
     } finally {
       setLoadingCode(false)
     }
-  }, [customFilename, fixing, fixStreamCode, open])
+  }, [customFilename, fixing, fixStreamCode, visible])
 
   useEffect(() => {
     fetchPluginCode()
@@ -645,21 +648,25 @@ export function PluginTestDialog({
     }
   }
 
+  const inPaneBar = useInEditorPane()
+
   const body = (
     <>
-        <PanelHeading
-          plain={plainHeading}
-          className="px-6 pt-6 pb-4"
-          title={
-            <>
-              <Terminal className="h-5 w-5" />
-              测试插件: {pluginName}
-            </>
-          }
-          description="发起真实 HTTP 请求，在请求/响应过程中运行插件代码"
-        />
-
-        <Separator />
+        {plainHeading ? null : (
+          <>
+            <PanelHeading
+              className="px-6 pt-6 pb-4"
+              title={
+                <>
+                  <Terminal className="h-5 w-5" />
+                  测试插件: {pluginName}
+                </>
+              }
+              description="发起真实 HTTP 请求，在请求/响应过程中运行插件代码"
+            />
+            <Separator />
+          </>
+        )}
 
         <div className="app-panel-content">
           {/* 测试配置 */}
@@ -1196,12 +1203,14 @@ export function PluginTestDialog({
           )}
         </div>
 
-        <Separator />
+        {inPaneBar ? null : <Separator />}
 
-        <div className="px-6 py-4 flex justify-between gap-2">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange?.(false)} disabled={testing}>
-            关闭
-          </Button>
+        <EditorPaneActions className="px-6 py-4 flex justify-between gap-2">
+          {inPaneBar ? null : (
+            <Button variant="outline" size="sm" onClick={() => onOpenChange?.(false)} disabled={testing}>
+              关闭
+            </Button>
+          )}
           <Button size="sm" onClick={handleTest} disabled={testing}>
             {testing ? (
               <>
@@ -1215,7 +1224,7 @@ export function PluginTestDialog({
               </>
             )}
           </Button>
-        </div>
+        </EditorPaneActions>
     </>
   )
 

@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { getSaveShortcutLabel } from './save-shortcut-label'
+import { getSaveShortcutAria, getSaveShortcutLabel } from './save-shortcut-label'
 
 function SaveShortcutHint({ className }: { className?: string }) {
   return (
@@ -20,7 +20,7 @@ function SaveShortcutHint({ className }: { className?: string }) {
 
 export function SaveButton({ children, ...props }: ComponentProps<typeof Button>) {
   return (
-    <Button aria-keyshortcuts="Meta+S Control+S" {...props}>
+    <Button aria-keyshortcuts={getSaveShortcutAria()} {...props}>
       {children}
       <SaveShortcutHint />
     </Button>

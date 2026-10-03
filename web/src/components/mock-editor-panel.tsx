@@ -12,6 +12,7 @@ import { getAIConfig, isAIConfigValid } from '@/lib/ai-config-store'
 import { validateContent } from '@/lib/syntax-highlight'
 import type { MockRule } from '@/types'
 import { MonacoEditor } from './monaco-editor'
+import { EditorPaneActions, useInEditorPane } from '@/components/editor-pane-actions'
 import { SaveButton } from '@/components/save-shortcut/save-button'
 import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
 import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
@@ -199,6 +200,8 @@ export function MockEditorPanel({
     onSave: handleSave,
   })
 
+  const inPaneBar = useInEditorPane()
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="app-panel-content">
@@ -346,14 +349,14 @@ export function MockEditorPanel({
         </div>
       </div>
 
-      <Separator />
+      {inPaneBar ? null : <Separator />}
 
-      <div className="flex justify-end gap-2 px-5 py-3">
-        <SaveButton onClick={handleSave} disabled={saving || !form.urlPattern.trim()}>
+      <EditorPaneActions className="flex justify-end gap-2 px-5 py-3">
+        <SaveButton size="sm" onClick={handleSave} disabled={saving || !form.urlPattern.trim()}>
           {saving ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <Save data-icon="inline-start" />}
           {saving ? '保存中...' : '保存'}
         </SaveButton>
-      </div>
+      </EditorPaneActions>
     </div>
   )
 }

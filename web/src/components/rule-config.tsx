@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 import { Spinner } from '@/components/ui/spinner'
 import { SaveButton } from '@/components/save-shortcut/save-button'
+import { getSaveShortcutLabel } from '@/components/save-shortcut/save-shortcut-label'
 import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
 import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
 import { Input } from '@/components/ui/input'
@@ -1213,7 +1214,7 @@ export function RuleConfig(props: RuleConfigProps) {
                   title={
                     textHasErrors
                       ? `${textDiagnostics.length} 行内容无法识别，请先修正`
-                      : '保存 (⌘+S / Ctrl+S)'
+                      : `保存 (${getSaveShortcutLabel()})`
                   }
                 >
                   {saving ? (

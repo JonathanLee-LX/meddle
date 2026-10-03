@@ -81,8 +81,18 @@ export function ThemeProvider({
     })
   }, [defaultTheme, setZoom])
 
-  // 计算实际应该使用的主题
-  const resolvedTheme = theme === "system" ? getSystemTheme() : theme
+  const [systemTheme, setSystemTheme] = React.useState<"light" | "dark">(getSystemTheme)
+
+  React.useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
+    const handler = () => setSystemTheme(getSystemTheme())
+    handler()
+    mediaQuery.addEventListener("change", handler)
+    return () => mediaQuery.removeEventListener("change", handler)
+  }, [])
+
+  // 跟随系统时用 state，这样编辑器等订阅者会和页面 class 一起更新。
+  const resolvedTheme = theme === "system" ? systemTheme : theme
 
   React.useEffect(() => {
     if (!loaded) return
@@ -95,22 +105,6 @@ export function ThemeProvider({
     // 保存到文件系统
     updateSettings({ theme, accentColor }).catch(console.error)
   }, [theme, resolvedTheme, accentColor, loaded])
-
-  // 监听系统主题变化
-  React.useEffect(() => {
-    if (theme !== "system") return
-
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
-    const handler = () => {
-      // 强制重新渲染以更新 resolvedTheme
-      const root = window.document.documentElement
-      root.classList.remove("light", "dark")
-      root.classList.add(getSystemTheme())
-    }
-
-    mediaQuery.addEventListener("change", handler)
-    return () => mediaQuery.removeEventListener("change", handler)
-  }, [theme])
 
   const setTheme = React.useCallback((newTheme: Theme) => {
     setThemeState(newTheme)

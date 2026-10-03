@@ -1,10 +1,10 @@
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AIConfigBadge } from '@/components/ai-settings'
 import { useTheme } from '@/components/theme-provider'
 import { SessionSwitcher } from '@/components/session-switcher'
 import { SHELL_NAV, getPrimaryNavTab, type ShellTab } from '@/lib/shell-mode'
-import { cn } from '@/lib/utils'
 import { Activity, ClipboardList, Command, FileText, Globe, Moon, Sun, Settings, Monitor, Plug, QrCode } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -56,47 +56,40 @@ export function AppHeader({
           <span className="hidden text-xs text-muted-foreground xl:inline">开发代理工具</span>
         </div>
 
-        <nav
-          data-testid="app-shell-nav"
-          aria-label="主导航"
-          className="meddle-thin-scroll flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+        <Tabs
+          value={primaryActive ?? ''}
+          onValueChange={(value) => onTabChange(value as ShellTab)}
+          className="min-w-0 flex-1 gap-0 overflow-hidden"
         >
-          {SHELL_NAV.map((item) => {
-            const Icon = TAB_ICONS[item.tab as keyof typeof TAB_ICONS]
-            const active = primaryActive === item.tab
-            const isWork = item.mode === 'work'
-            return (
-              <button
-                key={item.tab}
-                type="button"
-                data-testid={`shell-nav-${item.tab}`}
-                data-shell-nav-mode={item.mode}
-                data-state={active ? 'active' : 'inactive'}
-                title={item.title}
-                aria-current={active ? 'page' : undefined}
-                onClick={() => onTabChange(item.tab)}
-                className={cn(
-                  'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-sm transition-colors',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  active
-                    ? cn(
-                        'border-border bg-background font-semibold text-foreground shadow-sm',
-                        isWork ? 'border-b-2 border-b-foreground' : 'border-b-2 border-b-muted-foreground',
-                      )
-                    : 'border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground',
-                )}
-              >
-                <Icon className="size-3.5 opacity-80" aria-hidden />
-                <span>{item.label}</span>
-                {item.tab === 'mock' && mockEnabledCount > 0 ? (
-                  <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
-                    {mockEnabledCount}
-                  </Badge>
-                ) : null}
-              </button>
-            )
-          })}
-        </nav>
+          <TabsList
+            data-testid="app-shell-nav"
+            aria-label="主导航"
+            className="meddle-thin-scroll h-9 max-w-full justify-start overflow-x-auto"
+          >
+            {SHELL_NAV.map((item) => {
+              const Icon = TAB_ICONS[item.tab as keyof typeof TAB_ICONS]
+              const active = primaryActive === item.tab
+              return (
+                <TabsTrigger
+                  key={item.tab}
+                  value={item.tab}
+                  data-testid={`shell-nav-${item.tab}`}
+                  data-shell-nav-mode={item.mode}
+                  title={item.title}
+                  aria-current={active ? 'page' : undefined}
+                >
+                  <Icon aria-hidden />
+                  <span>{item.label}</span>
+                  {item.tab === 'mock' && mockEnabledCount > 0 ? (
+                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                      {mockEnabledCount}
+                    </Badge>
+                  ) : null}
+                </TabsTrigger>
+              )
+            })}
+          </TabsList>
+        </Tabs>
 
         <div className="flex shrink-0 items-center gap-2">
           <AIConfigBadge />

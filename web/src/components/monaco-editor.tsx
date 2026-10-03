@@ -1,7 +1,33 @@
-import { useRef, useEffect, useMemo } from 'react'
+import { useRef, useEffect, useMemo, useCallback } from 'react'
 import Editor, { DiffEditor, type OnMount, type Monaco } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import { useTheme } from './theme-provider'
+import { applyMonacoTheme, monacoThemeId } from '@/lib/monaco-theme'
+
+function useMonacoAppTheme() {
+  const { resolvedTheme, accentColor } = useTheme()
+  const monacoRef = useRef<Monaco | null>(null)
+  const themeId = monacoThemeId(resolvedTheme)
+
+  const beforeMount = useCallback((monaco: Monaco) => {
+    monacoRef.current = monaco
+    applyMonacoTheme(monaco, resolvedTheme)
+  }, [accentColor, resolvedTheme])
+
+  useEffect(() => {
+    let cancelled = false
+    // The theme class and accent are written in a parent effect. Apply after that.
+    queueMicrotask(() => {
+      if (cancelled || !monacoRef.current) return
+      applyMonacoTheme(monacoRef.current, resolvedTheme)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [accentColor, resolvedTheme])
+
+  return { monacoRef, themeId, beforeMount }
+}
 
 interface MonacoEditorProps {
   value: string
@@ -39,8 +65,7 @@ export function MonacoEditor({
   readOnly = false,
 }: MonacoEditorProps) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
-  const monacoRef = useRef<Monaco | null>(null)
-  const { resolvedTheme } = useTheme()
+  const { monacoRef, themeId, beforeMount } = useMonacoAppTheme()
 
   const detectedLanguage = useMemo(() => {
     if (!value.trim()) return language
@@ -106,13 +131,7 @@ export function MonacoEditor({
       },
     })
 
-    monaco.editor.setTheme(resolvedTheme === 'dark' ? 'vs-dark' : 'vs')
   }
-
-  useEffect(() => {
-    if (!monacoRef.current) return
-    monacoRef.current.editor.setTheme(resolvedTheme === 'dark' ? 'vs-dark' : 'vs')
-  }, [resolvedTheme])
 
   const handleEditorChange = (value: string | undefined) => {
     onChange(value || '')
@@ -130,7 +149,9 @@ export function MonacoEditor({
         height={height === 'flex' ? '100%' : finalHeight}
         language={detectedLanguage}
         value={value}
+        theme={themeId}
         onChange={handleEditorChange}
+        beforeMount={beforeMount}
         onMount={handleEditorDidMount}
         options={{
           readOnly,
@@ -160,19 +181,11 @@ export function MonacoDiffEditor({
   language = 'javascript',
   readOnly = true,
 }: MonacoDiffEditorProps) {
-  const monacoRef = useRef<Monaco | null>(null)
-  const { resolvedTheme } = useTheme()
+  const { monacoRef, themeId, beforeMount } = useMonacoAppTheme()
 
   const handleEditorDidMount = (_editor: editor.IStandaloneDiffEditor, monaco: Monaco) => {
     monacoRef.current = monaco
-
-    monaco.editor.setTheme(resolvedTheme === 'dark' ? 'vs-dark' : 'vs')
   }
-
-  useEffect(() => {
-    if (!monacoRef.current) return
-    monacoRef.current.editor.setTheme(resolvedTheme === 'dark' ? 'vs-dark' : 'vs')
-  }, [resolvedTheme])
 
   const finalHeight = height || minHeight
 
@@ -186,6 +199,8 @@ export function MonacoDiffEditor({
         language={language}
         original={original}
         modified={modified}
+        theme={themeId}
+        beforeMount={beforeMount}
         onMount={handleEditorDidMount}
         options={{
           readOnly,
