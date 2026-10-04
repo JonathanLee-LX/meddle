@@ -5,13 +5,13 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
-import { Textarea } from '@/components/ui/textarea'
 import { fixCode } from '@/lib/code-fixer'
 import { formatContent } from '@/lib/formatter'
 import { getAIConfig, isAIConfigValid } from '@/lib/ai-config-store'
 import { validateContent } from '@/lib/syntax-highlight'
 import type { MockRule } from '@/types'
 import { MonacoEditor } from './monaco-editor'
+import { MockHeadersEditor } from './mock-headers-editor'
 import { EditorPaneActions, useInEditorPane } from '@/components/editor-pane-actions'
 import { SaveButton } from '@/components/save-shortcut/save-button'
 import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
@@ -276,15 +276,7 @@ export function MockEditorPanel({
           </div>
         </div>
 
-        <div className="app-field-group">
-          <Label>响应头 JSON</Label>
-          <Textarea
-            value={headersText}
-            onChange={(event) => setHeadersText(event.target.value)}
-            className="min-h-[96px] font-mono text-xs"
-            placeholder='{"Content-Type":"application/json"}'
-          />
-        </div>
+        <MockHeadersEditor value={headersText} onChange={setHeadersText} />
 
         <div className="app-field-group">
           <div className="flex flex-wrap items-center justify-between gap-2">
