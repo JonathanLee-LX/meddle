@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0-beta.18] - 2026-10-08
+
+### Added
+
+- Mock response headers have a key-value list and a resizable Monaco JSON editor. Both edit the same header object.
+- Vertical shell nav can collapse. Mobile proxy and settings sit in that menu.
+
+### Changed
+
+- Mock and plugin editor actions sit in the pane title bar. Duplicate in-page headings are gone.
+- Monaco follows the app theme. The save shortcut shows only the current platform.
+- Shell padding is removed. Each page is inset from the header. The command trigger is a search field on the left of the header.
+- Plugins use the shared list|editor split.
+
+### Fixed
+
+- Save-shortcut label test casts the Navigator mock through `unknown` so main CI typechecks.
+
 ## [0.5.0-beta.17] - 2026-10-02
 
 ### Changed
