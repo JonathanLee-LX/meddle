@@ -67,6 +67,15 @@ describe('probeBackendReachability', () => {
     vi.useRealTimers()
   })
 
+  it('returns true on 204 from /api/ping', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 204 })
+    await expect(probeBackendReachability({ fetchImpl })).resolves.toBe(true)
+    expect(fetchImpl).toHaveBeenCalledWith(
+      BACKEND_HEARTBEAT_PATH,
+      expect.objectContaining({ method: 'GET', cache: 'no-store' }),
+    )
+  })
+
   it('returns true on 2xx', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 200 })
     await expect(probeBackendReachability({ fetchImpl })).resolves.toBe(true)
@@ -98,5 +107,13 @@ describe('probeBackendReachability', () => {
     const pending = probeBackendReachability({ fetchImpl, timeoutMs: 1000 })
     await vi.advanceTimersByTimeAsync(1000)
     await expect(pending).resolves.toBe(false)
+  })
+})
+
+describe('heartbeat probe path (#105 review)', () => {
+  it('must probe /api/ping — not /api/health (sampling side effects)', () => {
+    expect(BACKEND_HEARTBEAT_PATH).toBe('/api/ping')
+    expect(BACKEND_HEARTBEAT_PATH).not.toBe('/api/health')
+    expect(BACKEND_HEARTBEAT_PATH).not.toBe('/api/healthz')
   })
 })

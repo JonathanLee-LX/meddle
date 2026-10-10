@@ -5,13 +5,16 @@
  * this only asks "can we talk to the process?" and drives a global top banner.
  *
  * Defaults (documented for PR / operators):
- * - probe path: GET `/api/health` (always 2xx while the process is up; light enough)
+ * - probe path: GET `/api/ping` (204, no health/watchdog sampling side effects)
  * - interval: 2500ms
  * - consecutive failures before banner: 3 (~5–7.5s of outage before show)
  * - per-probe AbortController timeout: 3000ms (hung TCP must not stall forever)
+ *
+ * Do NOT probe `/api/health` or `/api/healthz`: those call snapshot() and reset
+ * CPU / event-loop sampling windows shared with the watchdog.
  */
 
-export const BACKEND_HEARTBEAT_PATH = '/api/health'
+export const BACKEND_HEARTBEAT_PATH = '/api/ping'
 export const BACKEND_HEARTBEAT_INTERVAL_MS = 2500
 export const BACKEND_HEARTBEAT_FAILURE_THRESHOLD = 3
 export const BACKEND_HEARTBEAT_TIMEOUT_MS = 3000
@@ -54,7 +57,7 @@ export type ProbeBackendOptions = {
 
 /**
  * Reachability probe. Network error / timeout / non-2xx → unreachable (false).
- * Any 2xx from `/api/health` means the backend answered.
+ * 2xx from `/api/ping` (204) means the backend answered without touching health stats.
  */
 export async function probeBackendReachability(
   options: ProbeBackendOptions = {},
