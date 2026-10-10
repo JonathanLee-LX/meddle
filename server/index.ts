@@ -116,6 +116,8 @@ export interface ServerContext {
     loadMockRules: () => void
     saveMockRules: () => void
     reloadCustomPlugins: () => Promise<unknown[]>
+    /** Unload a loaded custom plugin from memory by id (does not touch disk). Resolves false if not a loaded custom plugin. */
+    unloadCustomPlugin?: (pluginId: string) => Promise<boolean>
     logRuleMap: () => void
     reloadAllRuleFiles: () => void
     broadcastToAllClients: (data: unknown) => void

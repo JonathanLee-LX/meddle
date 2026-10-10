@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Play, Square, Loader2, Shield, ShieldAlert, Sparkles, RefreshCw, Zap, TestTube2, Trash2 } from 'lucide-react'
+import { Play, Square, Loader2, Shield, ShieldAlert, Sparkles, RefreshCw, Zap, TestTube2, Trash2, Unplug } from 'lucide-react'
 import type { Plugin } from '@/types'
 import { SplitPane } from '@/components/split-pane'
 import { EditorPaneActionsProvider } from '@/components/editor-pane-actions'
@@ -146,6 +146,35 @@ export function PluginConfig({
     } catch (error) {
       console.error('删除插件失败:', error)
       alert('删除失败')
+    }
+  }
+
+  /** Unload a still-loaded custom plugin whose file was deleted (memory only; no file is touched). */
+  const handleUnloadCustomPlugin = async (pluginId: string, label: string) => {
+    if (!confirm(`插件文件已删除，确定要从内存卸载 ${label} 吗？`)) {
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/plugins/custom/loaded/${encodeURIComponent(pluginId)}/unload`, {
+        method: 'POST',
+      })
+
+      if (res.ok) {
+        setEditor((current) =>
+          (current.kind === 'test' || current.kind === 'builtin') && current.pluginId === pluginId
+            ? { kind: 'idle' }
+            : current,
+        )
+        await fetchPlugins()
+        await fetchCustomPlugins()
+      } else {
+        const error = await res.json().catch(() => ({}))
+        alert(error.error || '卸载失败')
+      }
+    } catch (error) {
+      console.error('卸载插件失败:', error)
+      alert('卸载失败')
     }
   }
 
@@ -307,34 +336,44 @@ export function PluginConfig({
               {customRows.length === 0 ? (
                 <EmptyRow>暂无自定义插件，点击「AI 生成」</EmptyRow>
               ) : (
-                customRows.map(({ file: plugin, pluginId, loadedPlugin }) => {
+                customRows.map(({ filename, pluginId, loadedPlugin, fileDeleted }) => {
                   const isEnabled = loadedPlugin ? loadedPlugin.state !== 'disabled' : false
-                  const selected =
-                    (editor.kind === 'code' && editor.filename === plugin.filename) ||
-                    (editor.kind === 'test' && editor.pluginId === pluginId)
+                  const selected = fileDeleted
+                    ? (editor.kind === 'builtin' || editor.kind === 'test') && editor.pluginId === pluginId
+                    : (editor.kind === 'code' && editor.filename === filename) ||
+                      (editor.kind === 'test' && (editor.filename === filename || editor.pluginId === pluginId))
+                  const stateLabel = loadedPlugin ? (isEnabled ? '已启用' : '已禁用') : '未加载'
                   return (
                     <PluginRow
-                      key={plugin.filename}
-                      testId={`plugin-config-row-custom-${plugin.filename}`}
+                      key={fileDeleted ? `loaded:${pluginId}` : filename}
+                      testId={fileDeleted ? `plugin-config-row-custom-deleted-${pluginId}` : `plugin-config-row-custom-${filename}`}
                       selected={selected}
-                      title={plugin.filename}
-                      meta={loadedPlugin ? (isEnabled ? '已启用' : '已禁用') : '未加载'}
-                      muted={Boolean(loadedPlugin) && !isEnabled}
-                      onSelect={() => setEditor({ kind: 'code', filename: plugin.filename })}
+                      title={filename}
+                      meta={fileDeleted ? `文件已删除 · ${stateLabel}` : stateLabel}
+                      muted={fileDeleted || (Boolean(loadedPlugin) && !isEnabled)}
+                      onSelect={() =>
+                        // The file is gone, so there is no code to edit: show the loaded plugin's details.
+                        fileDeleted
+                          ? setEditor({ kind: 'builtin', pluginId })
+                          : setEditor({ kind: 'code', filename })
+                      }
                       badge={
-                        loadedPlugin ? (
-                          <Switch
-                            checked={isEnabled}
-                            onCheckedChange={(checked) => togglePlugin(loadedPlugin.id, checked)}
-                            aria-label={`启用插件 ${plugin.filename}`}
-                          />
-                        ) : (
-                          <Badge variant="outline">未加载</Badge>
-                        )
+                        <>
+                          {fileDeleted ? <Badge variant="destructive">文件已删除</Badge> : null}
+                          {loadedPlugin ? (
+                            <Switch
+                              checked={isEnabled}
+                              onCheckedChange={(checked) => togglePlugin(loadedPlugin.id, checked)}
+                              aria-label={`启用插件 ${filename}`}
+                            />
+                          ) : (
+                            <Badge variant="outline">未加载</Badge>
+                          )}
+                        </>
                       }
                       action={
                         <div className="flex items-center">
-                          {loadedPlugin && isEnabled && (
+                          {loadedPlugin && isEnabled && !fileDeleted && (
                             <Button
                               variant="ghost"
                               size="icon-sm"
@@ -344,7 +383,7 @@ export function PluginConfig({
                                   pluginId: loadedPlugin.id,
                                   pluginName: loadedPlugin.name,
                                   hooks: loadedPlugin.hooks,
-                                  filename: plugin.filename,
+                                  filename,
                                 })
                               }
                               aria-label={`测试插件 ${loadedPlugin.name}`}
@@ -352,15 +391,28 @@ export function PluginConfig({
                               <TestTube2 />
                             </Button>
                           )}
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => void handleDeleteCustomPlugin(plugin.filename, loadedPlugin?.id)}
-                            className="text-destructive"
-                            aria-label={`删除插件 ${plugin.filename}`}
-                          >
-                            <Trash2 />
-                          </Button>
+                          {fileDeleted ? (
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => void handleUnloadCustomPlugin(pluginId, filename)}
+                              className="text-destructive"
+                              aria-label={`卸载插件 ${filename}`}
+                              title="卸载（文件已删除，仅从内存移除）"
+                            >
+                              <Unplug />
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => void handleDeleteCustomPlugin(filename, loadedPlugin?.id)}
+                              className="text-destructive"
+                              aria-label={`删除插件 ${filename}`}
+                            >
+                              <Trash2 />
+                            </Button>
+                          )}
                         </div>
                       }
                     />

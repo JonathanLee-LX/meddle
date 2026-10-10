@@ -227,6 +227,7 @@ const serverContext = {
     },
     saveMockRules: () => mockHandler.saveMockRules(),
     reloadCustomPlugins: () => pluginBoot.reloadCustomPlugins(),
+    unloadCustomPlugin: (pluginId) => pluginBoot.unloadCustomPlugin(pluginId),
     logRuleMap: () => routeLoader.logRuleMap(),
     reloadAllRuleFiles: () => routeLoader.reloadAllRuleFiles(),
     broadcastToAllClients: (data) => {

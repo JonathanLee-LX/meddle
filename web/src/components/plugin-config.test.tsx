@@ -52,17 +52,20 @@ const traceHeaderPlugin: Plugin = {
   filename: 'add-trace-header.js',
 }
 
-function renderPlugins(plugins: Plugin[] = [builtin, loadedCustom]) {
+function renderPlugins(
+  plugins: Plugin[] = [builtin, loadedCustom],
+  handlers: { fetchPlugins?: () => Promise<void>; togglePlugin?: (id: string, enabled: boolean) => Promise<void> } = {},
+) {
   return render(
     <div style={{ height: 600 }}>
       <PluginConfig
         plugins={plugins}
         pluginMode="on"
         switchPluginMode={vi.fn(async () => undefined)}
-        fetchPlugins={vi.fn(async () => undefined)}
+        fetchPlugins={handlers.fetchPlugins ?? vi.fn(async () => undefined)}
         startPlugin={vi.fn(async () => undefined)}
         stopPlugin={vi.fn(async () => undefined)}
-        togglePlugin={vi.fn(async () => undefined)}
+        togglePlugin={handlers.togglePlugin ?? vi.fn(async () => undefined)}
         thirdPartyPlugins={[]}
         thirdPartySecurity={{ allowAll: false, trusted: [] }}
         fetchThirdPartyPlugins={vi.fn(async () => undefined)}
@@ -267,6 +270,74 @@ describe('PluginConfig list|edit', () => {
       await waitFor(() => expect(screen.queryByTestId('plugin-test-stub')).not.toBeInTheDocument())
       expect(screen.getByText(/选择左侧插件/)).toBeInTheDocument()
       expect(fetch).toHaveBeenCalledWith('/api/plugins/custom/add-trace-header.js', expect.objectContaining({ method: 'DELETE' }))
+      // Still loaded in memory: it stays in the custom group, flagged as file deleted.
+      const deletedRow = await screen.findByTestId('plugin-config-row-custom-deleted-add-trace-header')
+      expect(within(deletedRow).getAllByText(/文件已删除/).length).toBeGreaterThan(0)
+      expect(screen.queryByTestId('plugin-config-row-builtin-add-trace-header')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('loaded plugin whose file was deleted', () => {
+    let fetchMock: ReturnType<typeof vi.fn>
+
+    beforeEach(() => {
+      fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'POST' && url.endsWith('/unload')) {
+          return { ok: true, json: async () => ({ status: 'success' }) }
+        }
+        if (init?.method === 'DELETE') {
+          return { ok: false, json: async () => ({ error: '插件文件不存在' }) }
+        }
+        return { ok: true, json: async () => ({ plugins: [] }) }
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      vi.stubGlobal('confirm', vi.fn(() => true))
+      vi.stubGlobal('alert', vi.fn())
+    })
+
+    it('stays in the custom group labeled 文件已删除, never in the built-in group', async () => {
+      renderPlugins([{ ...builtin, source: 'builtin' }, traceHeaderPlugin])
+      const row = await screen.findByTestId('plugin-config-row-custom-deleted-add-trace-header')
+      expect(within(row).getByText('文件已删除')).toBeInTheDocument()
+      expect(within(row).getByText('add-trace-header.js')).toBeInTheDocument()
+      expect(screen.queryByTestId('plugin-config-row-builtin-add-trace-header')).not.toBeInTheDocument()
+      expect(screen.queryByText(/暂无自定义插件/)).not.toBeInTheDocument()
+    })
+
+    it('keeps the enable toggle working', async () => {
+      const togglePlugin = vi.fn(async () => undefined)
+      renderPlugins([traceHeaderPlugin], { togglePlugin })
+      fireEvent.click(await screen.findByRole('switch', { name: '启用插件 add-trace-header.js' }))
+      expect(togglePlugin).toHaveBeenCalledWith('add-trace-header', false)
+    })
+
+    it('unloads from memory instead of calling the delete-file endpoint', async () => {
+      const fetchPlugins = vi.fn(async () => undefined)
+      renderPlugins([traceHeaderPlugin], { fetchPlugins })
+      const row = await screen.findByTestId('plugin-config-row-custom-deleted-add-trace-header')
+      expect(within(row).queryByRole('button', { name: /删除插件/ })).not.toBeInTheDocument()
+      const unload = within(row).getByRole('button', { name: '卸载插件 add-trace-header.js' })
+      expect(unload).toHaveAttribute('title', expect.stringContaining('卸载'))
+      fetchPlugins.mockClear()
+
+      fireEvent.click(unload)
+
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith('/api/plugins/custom/loaded/add-trace-header/unload', expect.objectContaining({ method: 'POST' })),
+      )
+      expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/api/plugins/custom/'), expect.objectContaining({ method: 'DELETE' }))
+      await waitFor(() => expect(fetchPlugins).toHaveBeenCalled())
+      expect(alert).not.toHaveBeenCalled()
+    })
+
+    it('closes the details pane of the unloaded plugin', async () => {
+      renderPlugins([traceHeaderPlugin])
+      fireEvent.click(await screen.findByTestId('plugin-config-row-custom-deleted-add-trace-header'))
+      expect(screen.getByTestId('plugin-config-edit')).toHaveTextContent('add-trace-header · 1.0.0')
+
+      fireEvent.click(screen.getByRole('button', { name: '卸载插件 add-trace-header.js' }))
+
+      await waitFor(() => expect(screen.getByText(/选择左侧插件/)).toBeInTheDocument())
     })
   })
 

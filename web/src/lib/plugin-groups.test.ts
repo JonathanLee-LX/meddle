@@ -49,7 +49,7 @@ describe('groupPlugins (#112)', () => {
     const customIds = customRows.flatMap((row) => (row.loadedPlugin ? [row.loadedPlugin.id] : []))
     expect(customIds.filter((id) => builtinIds.has(id))).toEqual([])
     expect([...builtinIds]).toEqual(['builtin.mock'])
-    expect(customRows.find((row) => row.file.filename === 'ghost.js')?.loadedPlugin).toBeUndefined()
+    expect(customRows.find((row) => row.filename === 'ghost.js')?.loadedPlugin).toBeUndefined()
   })
 
   it('a built-in never gets claimed by a custom file through the local.<name> convention', () => {
@@ -69,6 +69,39 @@ describe('groupPlugins (#112)', () => {
   it('excludes third-party plugin ids from the built-in group', () => {
     const { builtinPlugins } = groupPlugins([plugin({ id: 'tp.one' })], [], new Set(['tp.one']))
     expect(builtinPlugins).toEqual([])
+  })
+})
+
+describe('groupPlugins: file deleted while plugin stays loaded', () => {
+  it('keeps the loaded plugin in the custom group, flagged fileDeleted', () => {
+    const plugins = [
+      plugin({ id: 'builtin.router', source: 'builtin' }),
+      plugin({ id: 'add-trace-header', source: 'custom', filename: 'add-trace-header.js' }),
+      plugin({ id: 'local.kept', source: 'custom', filename: 'kept.js' }),
+    ]
+    const { builtinPlugins, customRows } = groupPlugins(plugins, [file('kept.js')])
+    expect(builtinPlugins.map((p) => p.id)).toEqual(['builtin.router'])
+    expect(customRows.map((row) => [row.filename, row.pluginId, row.fileDeleted])).toEqual([
+      ['kept.js', 'local.kept', false],
+      ['add-trace-header.js', 'add-trace-header', true],
+    ])
+    expect(customRows[1].file).toBeUndefined()
+    expect(customRows[1].loadedPlugin?.id).toBe('add-trace-header')
+  })
+
+  it('uses the local.<name> convention for older backends without source/filename', () => {
+    const { builtinPlugins, customRows } = groupPlugins([plugin({ id: 'local.demo' }), plugin({ id: 'builtin.logger' })], [])
+    expect(builtinPlugins.map((p) => p.id)).toEqual(['builtin.logger'])
+    expect(customRows).toEqual([expect.objectContaining({ filename: 'demo.js', pluginId: 'local.demo', fileDeleted: true })])
+  })
+
+  it('does not turn third-party or built-in plugins into deleted custom rows', () => {
+    const { customRows } = groupPlugins(
+      [plugin({ id: 'tp.one' }), plugin({ id: 'local.x', source: 'builtin' })],
+      [],
+      new Set(['tp.one']),
+    )
+    expect(customRows).toEqual([])
   })
 })
 

@@ -112,5 +112,27 @@ export function createPluginBootstrapRunner(ctx: ProxyContext, mockHandler: Mock
         return newCustomPlugins
     }
 
-    return { bootstrapBuiltinPlugins, reloadCustomPlugins }
+    /**
+     * Unload one loaded custom plugin from memory (stop, dispose, unregister)
+     * without touching disk. Used when its file was deleted while it stayed
+     * loaded. Built-in plugins are never unloaded here.
+     */
+    async function unloadCustomPlugin(pluginId: string): Promise<boolean> {
+        const target = loadedCustomPlugins.find((plugin) => plugin.manifest.id === pluginId)
+        if (!target) return false
+        try {
+            if (typeof target.stop === 'function') await target.stop!()
+        } catch (error: any) { console.error('停止插件失败:', pluginId, error.message) }
+        try {
+            if (typeof target.dispose === 'function') await target.dispose!()
+        } catch (error: any) { console.error('卸载插件失败:', pluginId, error.message) }
+        if (typeof ctx.pluginManager.unregister === 'function') {
+            ctx.pluginManager.unregister(pluginId)
+        }
+        loadedCustomPlugins = loadedCustomPlugins.filter((plugin) => plugin !== target)
+        console.log(chalk.yellow(`已卸载插件: ${pluginId}`))
+        return true
+    }
+
+    return { bootstrapBuiltinPlugins, reloadCustomPlugins, unloadCustomPlugin }
 }

@@ -8,10 +8,15 @@ export interface CustomPluginFile {
 }
 
 export interface CustomPluginRow {
-  file: CustomPluginFile
+  /** File name shown for the row (for a deleted file: the name it was loaded from) */
+  filename: string
+  /** The file on disk; absent when the file was deleted but the plugin is still loaded */
+  file?: CustomPluginFile
   /** Effective plugin id (loaded id, or the `local.<name>` convention as a fallback) */
   pluginId: string
   loadedPlugin?: Plugin
+  /** Loaded in memory, but its file is no longer in ~/.meddle/plugins */
+  fileDeleted: boolean
 }
 
 export function conventionalCustomPluginId(filename: string) {
@@ -25,7 +30,9 @@ export function conventionalCustomPluginId(filename: string) {
  *    loaded pluginId, or the `local.<name>` convention) is custom;
  *  - otherwise backend `source` decides; older backends without `source`
  *    fall back to the `local.` id prefix heuristic;
- *  - third-party plugin ids are excluded from the built-in group.
+ *  - third-party plugin ids are excluded from the built-in group;
+ *  - a loaded custom plugin with no matching file (file deleted while it
+ *    stays loaded) is kept in the custom group with `fileDeleted: true`.
  */
 export function groupPlugins(
   plugins: Plugin[],
@@ -34,7 +41,7 @@ export function groupPlugins(
 ): { builtinPlugins: Plugin[]; customRows: CustomPluginRow[] } {
   const claimed = new Set<string>()
 
-  const customRows = customFiles.map((file) => {
+  const customRows: CustomPluginRow[] = customFiles.map((file) => {
     const loadedPlugin =
       plugins.find((plugin) => plugin.filename === file.filename) ??
       (file.pluginId ? plugins.find((plugin) => plugin.id === file.pluginId) : undefined) ??
@@ -46,11 +53,24 @@ export function groupPlugins(
       )
     if (loadedPlugin) claimed.add(loadedPlugin.id)
     return {
+      filename: file.filename,
       file,
       pluginId: loadedPlugin?.id ?? file.pluginId ?? conventionalCustomPluginId(file.filename),
       loadedPlugin,
+      fileDeleted: false,
     }
   })
+
+  for (const plugin of plugins) {
+    if (claimed.has(plugin.id) || thirdPartyIds.has(plugin.id) || !isCustomPlugin(plugin)) continue
+    claimed.add(plugin.id)
+    customRows.push({
+      filename: customPluginFilename(plugin) || plugin.id,
+      pluginId: plugin.id,
+      loadedPlugin: plugin,
+      fileDeleted: true,
+    })
+  }
 
   const builtinPlugins = plugins.filter((plugin) => {
     if (claimed.has(plugin.id) || thirdPartyIds.has(plugin.id)) return false

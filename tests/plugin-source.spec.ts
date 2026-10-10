@@ -146,4 +146,60 @@ describe('plugin source tracking (#112)', () => {
 
         warn.mockRestore(); log.mockRestore(); info.mockRestore()
     })
+
+    it('POST /api/plugins/custom/loaded/:id/unload unloads a custom plugin from memory without touching disk', async () => {
+        fs.writeFileSync(path.join(pluginsDir, 'add-trace-header.js'), pluginSource('add-trace-header'))
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+        const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+        const pluginManager = new PluginManager({ logger: silentLogger })
+        const loggerPlugin = builtin('builtin.logger')
+        const bootCtx: any = {
+            meddleDir: dir,
+            settingsPath: path.join(dir, 'settings.json'),
+            ENABLE_BUILTIN_MOCK_PLUGIN: false,
+            ENABLE_BUILTIN_ROUTER_PLUGIN: false,
+            ENABLE_BUILTIN_LOGGER_PLUGIN: true,
+            builtinLoggerPlugin: loggerPlugin,
+            pluginManager,
+            ruleMap: {},
+        }
+        const runner = createPluginBootstrapRunner(bootCtx, { matchMockRule: () => null } as any)
+        await runner.bootstrapBuiltinPlugins()
+
+        // The file is deleted while the plugin stays loaded
+        fs.unlinkSync(path.join(pluginsDir, 'add-trace-header.js'))
+        const ctx: any = {
+            ...bootCtx,
+            hookDispatcher: {},
+            requestPipeline: { mode: 'on', setMode() {} },
+            unloadCustomPlugin: (id: string) => runner.unloadCustomPlugin(id),
+        }
+        const handlers = captureRoutes(ctx)
+        const unload = handlers['/api/plugins/custom/loaded/:id/unload']
+        expect(unload).toBeTypeOf('function')
+
+        const call = async (id: string) => {
+            const res: any = { statusCode: 200, body: undefined, status(code: number) { this.statusCode = code; return this }, json(data: unknown) { this.body = data } }
+            await unload({ params: { id } }, res)
+            return res
+        }
+
+        // Built-ins cannot be unloaded through this endpoint
+        const builtinRes = await call('builtin.logger')
+        expect(builtinRes.statusCode).toBe(400)
+        expect(pluginManager.getAll().map((p) => p.manifest.id)).toContain('builtin.logger')
+
+        const res = await call('add-trace-header')
+        expect(res.statusCode).toBe(200)
+        expect(res.body).toMatchObject({ status: 'success', pluginId: 'add-trace-header' })
+        expect(pluginManager.getAll().map((p) => p.manifest.id)).toEqual(['builtin.logger'])
+        expect(fs.readdirSync(pluginsDir)).toEqual([])
+
+        expect((await call('add-trace-header')).statusCode).toBe(404)
+
+        // A later hot reload must not try to re-unregister it
+        await runner.reloadCustomPlugins()
+        expect(pluginManager.getAll().map((p) => p.manifest.id)).toEqual(['builtin.logger'])
+        log.mockRestore(); info.mockRestore()
+    })
 })

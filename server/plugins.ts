@@ -351,6 +351,35 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
         res.end()
     })
 
+    // API: 从内存卸载自定义插件（不删除文件；用于文件已删除但插件仍加载的情况）
+    app.post('/api/plugins/custom/loaded/:id/unload', async (req: Request, res: Response) => {
+        try {
+            const pluginId = String(req.params.id || '')
+            const target = ctx.pluginManager.getAll().find((plugin) => plugin.manifest.id === pluginId)
+            if (!target) {
+                res.status(404).json({ error: '插件未加载' })
+                return
+            }
+            const source = getPluginSource(target)
+            if (!source || source.kind !== 'custom') {
+                res.status(400).json({ error: '只能卸载自定义插件' })
+                return
+            }
+            if (typeof ctx.unloadCustomPlugin !== 'function') {
+                res.status(501).json({ error: '当前运行时不支持卸载插件' })
+                return
+            }
+            const unloaded = await ctx.unloadCustomPlugin(pluginId)
+            if (!unloaded) {
+                res.status(404).json({ error: '插件未加载' })
+                return
+            }
+            res.json({ status: 'success', pluginId, message: '插件已卸载' })
+        } catch (error) {
+            res.status(500).json({ error: (error as Error).message })
+        }
+    })
+
     // API: 热加载自定义插件
     app.post('/api/plugins/reload', async (_req: Request, res: Response) => {
         res.setHeader('Content-Type', 'application/json')
