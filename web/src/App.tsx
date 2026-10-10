@@ -45,6 +45,7 @@ import type { CommandAction, GlobalPanelApi, GlobalPanelRoute } from '@/componen
 import type { MockRule, ProxyRecord, ResourceType } from '@/types'
 import { getPathForTab, getShellMode, getTabFromPath, type ShellTab } from '@/lib/shell-mode'
 import { TRAFFIC_NARROW_MAX_WIDTH_PX } from '@/lib/traffic-split'
+import { customPluginFilename, isCustomPlugin } from '@/lib/plugin-groups'
 import { useMediaQuery } from '@/hooks/use-media-query'
 
 const RuleConfig = lazy(() =>
@@ -637,9 +638,9 @@ function App() {
           },
         })),
         ...store.plugins
-          .filter((plugin) => plugin.id.startsWith('local.'))
+          .filter((plugin) => isCustomPlugin(plugin) && Boolean(customPluginFilename(plugin)))
           .map((plugin) => {
-            const filename = `${plugin.id.replace(/^local\./, '')}.js`
+            const filename = customPluginFilename(plugin)
             return {
               id: `plugins.edit.${plugin.id}`,
               title: `编辑插件代码：${plugin.name}`,
@@ -658,7 +659,7 @@ function App() {
             }
           }),
         ...store.plugins
-          .filter((plugin) => plugin.id.startsWith('local.'))
+          .filter((plugin) => isCustomPlugin(plugin) && Boolean(customPluginFilename(plugin)))
           .map((plugin) => ({
             id: `plugins.test.${plugin.id}`,
             title: `测试插件：${plugin.name}`,
@@ -676,6 +677,7 @@ function App() {
                   pluginId: plugin.id,
                   pluginName: plugin.name,
                   hooks: plugin.hooks,
+                  filename: customPluginFilename(plugin),
                 },
               }),
           })),
@@ -814,6 +816,7 @@ function App() {
               pluginId={String(route.params?.pluginId || '')}
               pluginName={String(route.params?.pluginName || '')}
               hooks={Array.isArray(route.params?.hooks) ? (route.params.hooks as string[]) : []}
+              filename={typeof route.params?.filename === 'string' ? route.params.filename : undefined}
               onOpenChange={(open) => {
                 if (!open) panel.close()
               }}

@@ -6,6 +6,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { Plugin, Logger } from './types';
+import { markPluginSource } from './plugin-source';
 
 export interface CustomPluginLoaderOptions {
     pluginsDir: string;
@@ -85,6 +86,7 @@ export async function loadCustomPlugins(options: CustomPluginLoaderOptions): Pro
             const plugin = await loadPluginFile(filePath, logger);
             
             if (plugin) {
+                markPluginSource(plugin, { kind: 'custom', filename: file });
                 plugins.push(plugin);
                 if (logger) {
                     logger.info(`已加载插件: ${plugin.manifest.id} (${file})`);

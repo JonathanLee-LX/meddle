@@ -218,6 +218,7 @@ const serverContext = {
     hookDispatcher: ctx.hookDispatcher,
     settingsPath: ctx.settingsPath,
     meddleDir: ctx.meddleDir,
+    appInfo: { name: require('./package.json').name, version: require('./package.json').version },
     settings: null,
     loadMockRules: () => {
         mockHandler.loadMockRules()
@@ -226,6 +227,7 @@ const serverContext = {
     },
     saveMockRules: () => mockHandler.saveMockRules(),
     reloadCustomPlugins: () => pluginBoot.reloadCustomPlugins(),
+    unloadCustomPlugin: (pluginId) => pluginBoot.unloadCustomPlugin(pluginId),
     logRuleMap: () => routeLoader.logRuleMap(),
     reloadAllRuleFiles: () => routeLoader.reloadAllRuleFiles(),
     broadcastToAllClients: (data) => {

@@ -2,6 +2,7 @@ import { Application, Request, Response } from 'express'
 import * as fs from 'fs'
 import * as path from 'path'
 import { ServerContext } from './index'
+import { getPluginSource } from '../core/plugin-source'
 
 type TestPlugin = {
     manifest: {
@@ -218,7 +219,16 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
             }
 
             const files = fs.readdirSync(pluginsDir)
-            const pluginInfo: Array<{ filename: string; path: string; modified: Date }> = []
+            const pluginInfo: Array<{ filename: string; path: string; modified: Date; pluginId?: string }> = []
+
+            // 文件名 -> 实际加载的插件 id（插件 id 由 manifest 决定，不一定是 local.<文件名>）
+            const loadedIdByFilename = new Map<string, string>()
+            for (const plugin of ctx.pluginManager.getAll()) {
+                const source = getPluginSource(plugin)
+                if (source && source.kind === 'custom' && source.filename) {
+                    loadedIdByFilename.set(source.filename, plugin.manifest.id)
+                }
+            }
 
             // 只列出.js文件
             const jsFiles = files.filter(f => f.endsWith('.js'))
@@ -227,10 +237,12 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
                 const jsPath = path.resolve(pluginsDir, jsFile)
                 const jsStat = fs.statSync(jsPath)
 
+                const pluginId = loadedIdByFilename.get(jsFile)
                 pluginInfo.push({
                     filename: jsFile,
                     path: jsPath,
-                    modified: jsStat.mtime
+                    modified: jsStat.mtime,
+                    ...(pluginId ? { pluginId } : {}),
                 })
             })
 
@@ -337,6 +349,35 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
             res.write(JSON.stringify({ error: (error as Error).message }))
         }
         res.end()
+    })
+
+    // API: 从内存卸载自定义插件（不删除文件；用于文件已删除但插件仍加载的情况）
+    app.post('/api/plugins/custom/loaded/:id/unload', async (req: Request, res: Response) => {
+        try {
+            const pluginId = String(req.params.id || '')
+            const target = ctx.pluginManager.getAll().find((plugin) => plugin.manifest.id === pluginId)
+            if (!target) {
+                res.status(404).json({ error: '插件未加载' })
+                return
+            }
+            const source = getPluginSource(target)
+            if (!source || source.kind !== 'custom') {
+                res.status(400).json({ error: '只能卸载自定义插件' })
+                return
+            }
+            if (typeof ctx.unloadCustomPlugin !== 'function') {
+                res.status(501).json({ error: '当前运行时不支持卸载插件' })
+                return
+            }
+            const unloaded = await ctx.unloadCustomPlugin(pluginId)
+            if (!unloaded) {
+                res.status(404).json({ error: '插件未加载' })
+                return
+            }
+            res.json({ status: 'success', pluginId, message: '插件已卸载' })
+        } catch (error) {
+            res.status(500).json({ error: (error as Error).message })
+        }
     })
 
     // API: 热加载自定义插件
@@ -791,16 +832,21 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
     app.get('/api/plugins', (_req: Request, res: Response) => {
         res.setHeader('Content-Type', 'application/json')
         const pluginStats = ctx.hookDispatcher.getPluginStats ? ctx.hookDispatcher.getPluginStats() : {}
-        const plugins = ctx.pluginManager.getAll().map((plugin) => ({
-            id: plugin.manifest.id,
-            name: plugin.manifest.name,
-            version: plugin.manifest.version,
-            hooks: plugin.manifest.hooks,
-            permissions: plugin.manifest.permissions,
-            priority: plugin.manifest.priority,
-            state: ctx.pluginManager.getState(plugin.manifest.id),
-            stats: pluginStats[plugin.manifest.id] || null,
-        }))
+        const plugins = ctx.pluginManager.getAll().map((plugin) => {
+            const source = getPluginSource(plugin)
+            return {
+                id: plugin.manifest.id,
+                name: plugin.manifest.name,
+                version: plugin.manifest.version,
+                hooks: plugin.manifest.hooks,
+                permissions: plugin.manifest.permissions,
+                priority: plugin.manifest.priority,
+                state: ctx.pluginManager.getState(plugin.manifest.id),
+                stats: pluginStats[plugin.manifest.id] || null,
+                ...(source ? { source: source.kind } : {}),
+                ...(source && source.filename ? { filename: source.filename } : {}),
+            }
+        })
         res.write(JSON.stringify({
             mode: ctx.requestPipeline.mode,
             total: plugins.length,

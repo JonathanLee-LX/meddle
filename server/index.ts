@@ -11,6 +11,7 @@ import { registerRuleFilesRoutes } from './rule-files'
 import { registerAgentRoutes } from './agent/routes'
 import { registerHealthRoutes } from './health'
 import { registerSessionsRoutes } from './sessions'
+import { registerAppInfoRoutes } from './app-info'
 
 // RuleMap and ExcludeMap types from helpers
 export type RuleMap = Record<string, string>;
@@ -109,10 +110,14 @@ export interface ServerContext {
     }
     settingsPath: string
     meddleDir: string
+    /** Meddle package name/version (root package.json — same source as `meddle --version`) */
+    appInfo?: { name: string; version: string }
     settings: unknown
     loadMockRules: () => void
     saveMockRules: () => void
     reloadCustomPlugins: () => Promise<unknown[]>
+    /** Unload a loaded custom plugin from memory by id (does not touch disk). Resolves false if not a loaded custom plugin. */
+    unloadCustomPlugin?: (pluginId: string) => Promise<boolean>
     logRuleMap: () => void
     reloadAllRuleFiles: () => void
     broadcastToAllClients: (data: unknown) => void
@@ -209,6 +214,7 @@ export function createApp(serverContext: ServerContext): Application {
     registerMocksRoutes(app, serverContext)
     registerPipelineRoutes(app, serverContext)
     registerHealthRoutes(app, serverContext)
+    registerAppInfoRoutes(app, serverContext)
     registerRefactorRoutes(app, serverContext)
     registerRuleFilesRoutes(app, serverContext)
     registerAgentRoutes(app, serverContext)

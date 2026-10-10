@@ -63,3 +63,29 @@ describe('SettingsPanel navigation', () => {
     expect(screen.getByRole('tabpanel', { name: 'AI 配置' })).toHaveClass('app-panel-content')
   })
 })
+
+describe('SettingsPanel about section (#112)', () => {
+  it('shows the Meddle version reported by /api/version instead of a hardcoded 1.0.0', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      const body = url === '/api/version' ? { name: '@jonathanleelx/meddle', version: '0.5.0-beta.18' } : []
+      return new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<SettingsPanel embedded />)
+
+    expect(await screen.findByText('版本: 0.5.0-beta.18')).toBeInTheDocument()
+    expect(screen.queryByText('版本: 1.0.0')).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith('/api/version')
+  })
+
+  it('shows a placeholder rather than a fake version when /api/version is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('not found', { status: 404 })))
+
+    render(<SettingsPanel embedded />)
+
+    expect(await screen.findByTestId('settings-app-version')).toHaveTextContent('版本: —')
+    expect(screen.queryByText('版本: 1.0.0')).not.toBeInTheDocument()
+  })
+})

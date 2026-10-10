@@ -48,6 +48,7 @@ import { getCachedSettings, loadSettings, updateSettings, type AccentColor } fro
 import { SaveButton } from '@/components/save-shortcut/save-button'
 import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
 import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
+import { fetchAppVersion } from '@/lib/app-version'
 import { toast } from '@/components/ui/toast'
 
 interface SettingsPanelProps {
@@ -141,6 +142,19 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
   // 配置诊断状态
   const [diagnostics, setDiagnostics] = useState<ConfigDiagnostics | null>(null)
   const [diagnosing, setDiagnosing] = useState(false)
+
+  // 应用版本（来自后端 /api/version，即根 package.json，与 `meddle --version` 一致）
+  const [appVersion, setAppVersion] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchAppVersion().then((version) => {
+      if (!cancelled) setAppVersion(version)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // 缩放比例偏好
   const [zoomScale, setZoomScale] = useState<string>(() => normalizeZoomScale(getCachedSettings().fontSize))
@@ -552,7 +566,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
           <div className={settingsGroupClassName}>
             <h3 className="text-sm font-medium">关于</h3>
             <p className="text-xs text-muted-foreground">Meddle - HTTP 调试代理工具</p>
-            <p className="text-xs text-muted-foreground">版本: 1.0.0</p>
+            <p className="text-xs text-muted-foreground" data-testid="settings-app-version">版本: {appVersion ?? '—'}</p>
           </div>
         </TabsContent>
 
