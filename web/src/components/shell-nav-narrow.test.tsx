@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { SHELL_NAV_COLLAPSED_KEY, ShellNav } from './app-header'
@@ -89,7 +89,7 @@ describe('ShellNav narrow viewport (#109)', () => {
     expect(toggle()).toHaveAttribute('aria-expanded', 'true')
     // Overlay, not push: the rail keeps its 56px slot and the panel floats above content.
     expect(rail()).toHaveClass('w-14')
-    expect(screen.getByTestId('app-shell-nav-panel')).toHaveClass('absolute', 'z-30', 'bg-background')
+    expect(screen.getByTestId('app-shell-nav-panel')).toHaveClass('absolute', 'z-30', 'bg-background', 'shadow-overlay-edge')
     expect(screen.getByTestId('shell-nav-config')).toHaveTextContent('路由规则')
 
     fireEvent.keyDown(document, { key: 'Escape' })
@@ -168,11 +168,65 @@ describe('ShellNav narrow viewport (#109)', () => {
     expect(badge).toHaveClass('h-5')
   })
 
+  it('moves focus into the overlay on open and back to the toggle on every close path', async () => {
+    installViewport(900)
+    const { onTabChange } = renderNav()
+    // Open → focus lands on the current page item inside the overlay.
+    act(() => toggle().focus())
+    fireEvent.click(toggle())
+    expect(screen.getByTestId('shell-nav-logs')).toHaveFocus()
+    expect(screen.getByTestId('app-shell-nav-panel')).toContainElement(document.activeElement as HTMLElement)
+
+    // Outside click (non-focusable page area) → closes, focus back on the toggle.
+    fireEvent.pointerDown(screen.getByTestId('page-content'))
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+    expect(rail()).toHaveAttribute('data-overlay', 'false')
+    expect(toggle()).toHaveFocus()
+
+    // Picking a page → closes, focus back on the toggle.
+    fireEvent.click(toggle())
+    fireEvent.mouseDown(screen.getByTestId('shell-nav-health'), { button: 0, ctrlKey: false })
+    expect(onTabChange).toHaveBeenCalledWith('health')
+    expect(rail()).toHaveAttribute('data-overlay', 'false')
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+    expect(toggle()).toHaveFocus()
+  })
+
+  it('arrow keys move focus inside the overlay without navigating or closing it', async () => {
+    installViewport(900)
+    const { onTabChange } = renderNav()
+    fireEvent.click(toggle())
+    const logs = screen.getByTestId('shell-nav-logs')
+    expect(logs).toHaveFocus()
+    fireEvent.keyDown(logs, { key: 'ArrowDown' })
+    await waitFor(() => expect(screen.getByTestId('shell-nav-config')).toHaveFocus())
+    expect(onTabChange).not.toHaveBeenCalled()
+    expect(rail()).toHaveAttribute('data-overlay', 'true')
+  })
+
+  it('does not steal focus from a focusable element clicked outside the overlay', async () => {
+    installViewport(900)
+    render(
+      <MemoryRouter>
+        <input aria-label="page input" />
+        <ShellNav activeTab="logs" onTabChange={vi.fn()} />
+      </MemoryRouter>,
+    )
+    fireEvent.click(toggle())
+    const input = screen.getByLabelText('page input')
+    fireEvent.pointerDown(input)
+    act(() => input.focus())
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+    expect(rail()).toHaveAttribute('data-overlay', 'false')
+    expect(input).toHaveFocus()
+  })
+
   it('narrow overlay is a shadowed layer with no scrim', () => {
     installViewport(900)
     renderNav()
     fireEvent.click(toggle())
-    expect(screen.getByTestId('app-shell-nav-panel')).toHaveClass('absolute', 'z-30', 'shadow-lg')
+    // Right-cast edge shadow (shadow-lg only cast downward and was invisible on the right edge).
+    expect(screen.getByTestId('app-shell-nav-panel')).toHaveClass('absolute', 'z-30', 'shadow-overlay-edge')
     expect(screen.queryByTestId('app-shell-nav-scrim')).not.toBeInTheDocument()
   })
 

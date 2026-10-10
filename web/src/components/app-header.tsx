@@ -84,12 +84,27 @@ export function ShellNav({ activeTab, onTabChange, mockEnabledCount = 0 }: Shell
     setOverlayOpen(false)
   }
 
+  // Opening the overlay moves focus onto the current page's nav item so keyboard
+  // users land inside it (Radix Tabs: arrows move between items, Tab reaches the toggle).
+  useEffect(() => {
+    if (!overlay) return
+    const list = railRef.current?.querySelector<HTMLElement>('#app-shell-nav')
+    const target = list?.querySelector<HTMLElement>('[aria-current="page"]') ?? list?.querySelector<HTMLElement>('[role="tab"]')
+    target?.focus()
+  }, [overlay])
+
   useEffect(() => {
     if (!overlay) return
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null
       if (target && railRef.current?.contains(target)) return
       setOverlayOpen(false)
+      // Hand focus back to the toggle unless the click itself focused something
+      // outside (e.g. an input in the page).
+      window.setTimeout(() => {
+        const active = document.activeElement
+        if (!active || active === document.body || railRef.current?.contains(active)) toggleRef.current?.focus()
+      }, 0)
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
@@ -119,7 +134,11 @@ export function ShellNav({ activeTab, onTabChange, mockEnabledCount = 0 }: Shell
 
   const handleTabChange = (value: string) => {
     onTabChange(value as ShellTab)
-    if (overlay) setOverlayOpen(false)
+    if (overlay) {
+      setOverlayOpen(false)
+      // Deferred: a mouse pick focuses the item after mousedown handlers run.
+      window.setTimeout(() => toggleRef.current?.focus(), 0)
+    }
   }
 
   const renderItem = (item: ShellNavItem) => {
@@ -189,13 +208,16 @@ export function ShellNav({ activeTab, onTabChange, mockEnabledCount = 0 }: Shell
         data-testid="app-shell-nav-panel"
         className={cn(
           'flex h-full min-h-0 flex-col',
-          overlay && 'absolute inset-y-0 left-0 z-30 w-max border-r bg-background shadow-lg',
+          overlay && 'absolute inset-y-0 left-0 z-30 w-max border-r bg-background shadow-overlay-edge',
         )}
       >
         <Tabs
           orientation="vertical"
           value={activeTab}
           onValueChange={handleTabChange}
+          // In the overlay, arrows only move focus (Enter / Space picks); automatic
+          // activation would navigate and close the overlay on the first arrow key.
+          activationMode={overlay ? 'manual' : 'automatic'}
           className="h-full min-h-0 flex-1 flex-col"
         >
           <TabsList

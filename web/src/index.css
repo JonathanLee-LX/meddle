@@ -4,6 +4,12 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* shadow-lg casts downward (0 x-offset, negative spread), so on a full-height
+   left panel it barely shows on the right edge. This casts to the right. */
+@utility shadow-overlay-edge {
+  box-shadow: var(--shadow-overlay-edge);
+}
+
 :root {
   --font-size-base: 14px;
   --app-scale: 1;
@@ -403,6 +409,9 @@
 
 :root {
   --radius: 0.625rem;
+  /* Edge-cast shadow for panels that overlay content from the left (narrow shell nav, #109). */
+  --shadow-overlay-edge: 10px 0 28px -6px color-mix(in oklab, var(--foreground) 22%, transparent),
+    2px 0 6px -1px color-mix(in oklab, var(--foreground) 10%, transparent);
   --system-success: oklch(0.527 0.154 150.069);
   --system-warning: oklch(0.646 0.184 70.08);
   --background: oklch(1 0 0);
@@ -439,6 +448,8 @@
 }
 
 .dark {
+  --shadow-overlay-edge: 10px 0 28px -6px color-mix(in oklab, black 60%, transparent),
+    2px 0 6px -1px color-mix(in oklab, black 40%, transparent);
   --system-success: oklch(0.723 0.219 149.579);
   --system-warning: oklch(0.769 0.188 70.08);
   --background: oklch(0.145 0 0);
