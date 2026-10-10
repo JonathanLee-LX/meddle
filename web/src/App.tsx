@@ -34,6 +34,7 @@ import { LogFilter } from '@/components/log-filter'
 import { LogTable } from '@/components/log-table'
 import { TrafficWorkLayout } from '@/components/traffic-work-layout'
 import { AppHeader, ShellNav } from '@/components/app-header'
+import { BackendHeartbeatBanner } from '@/components/backend-heartbeat-banner'
 import { useProxyStore } from '@/hooks/use-proxy-store'
 import { useFuzzyFilter } from '@/hooks/use-fuzzy-filter'
 import { createMockFromLog, type CreateMockFromLogData } from '@/utils/mock-factory'
@@ -904,6 +905,8 @@ function App() {
     >
       <div className="flex h-dvh flex-col overflow-hidden bg-muted/20">
         <AppHeader onCommandClick={openCommandPanel} />
+
+        <BackendHeartbeatBanner />
 
         {/* Shell content: vertical nav beside work XOR config — never stacked */}
         {/* Same gutter on every primary page. Inner content uses --ui-page-padding once. */}
