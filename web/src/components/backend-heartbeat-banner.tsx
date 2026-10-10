@@ -1,6 +1,10 @@
 import { TriangleAlert } from 'lucide-react'
 import { useBackendHeartbeat } from '@/hooks/use-backend-heartbeat'
 
+/** Exact product copy (Figma). Single line; keep in sync with banner test. */
+export const BACKEND_HEARTBEAT_BANNER_TEXT =
+  '连不上 Meddle 服务，正在重试。请确认 meddle 仍在运行'
+
 /**
  * Global top-bar reachability banner. Mount once near the app shell so every
  * page keeps its existing chrome when the backend is down (no white-screen).
@@ -20,10 +24,7 @@ export function BackendHeartbeatBanner() {
     >
       <div className="mx-auto flex max-w-[1600px] items-center justify-center gap-2">
         <TriangleAlert className="size-4 shrink-0" aria-hidden />
-        <p className="font-medium">后端连不上</p>
-        <p className="text-destructive/80">
-          无法连接 Meddle 服务；页面壳仍可用，恢复后提示会自动消失
-        </p>
+        <p>{BACKEND_HEARTBEAT_BANNER_TEXT}</p>
       </div>
     </div>
   )
