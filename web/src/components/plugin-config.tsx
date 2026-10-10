@@ -561,6 +561,14 @@ function handlePluginRowKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
   triggers[next]?.focus()
 }
 
+/**
+ * Same tokens as the traffic table rows: hover `bg-muted/50`, selected `bg-accent`.
+ * A keyboard-focused row takes the selected fill plus the shared focus-visible ring
+ * (inset, so it is not clipped by the scroll container).
+ */
+const PLUGIN_ROW_FOCUS_CLASS =
+  'has-[[data-plugin-row-trigger]:focus-visible]:bg-accent has-[[data-plugin-row-trigger]:focus-visible]:ring-[3px] has-[[data-plugin-row-trigger]:focus-visible]:ring-inset has-[[data-plugin-row-trigger]:focus-visible]:ring-ring/50'
+
 function PluginRow({
   testId,
   selected,
@@ -586,7 +594,7 @@ function PluginRow({
     <div
       data-testid={testId}
       data-state={selected ? 'selected' : undefined}
-      className={`flex w-full cursor-pointer items-center gap-2 border-b border-border/40 px-[var(--ui-section-gap)] py-2 text-left hover:bg-accent/60 data-[state=selected]:bg-accent ${muted ? 'opacity-60' : ''}`}
+      className={`flex w-full cursor-pointer items-center gap-2 border-b border-border/40 px-[var(--ui-section-gap)] py-2 text-left transition-colors outline-none hover:bg-muted/50 data-[state=selected]:bg-accent ${PLUGIN_ROW_FOCUS_CLASS} ${muted ? 'opacity-60' : ''}`}
       onClick={onSelect}
     >
       <button
@@ -594,7 +602,7 @@ function PluginRow({
         data-plugin-row-trigger=""
         data-testid={`${testId}-trigger`}
         aria-current={selected ? 'true' : undefined}
-        className="min-w-0 flex-1 cursor-pointer rounded-sm text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        className="min-w-0 flex-1 cursor-pointer text-left outline-none"
         onKeyDown={handlePluginRowKeyDown}
       >
         <span className="block truncate text-sm font-medium">{title}</span>

@@ -262,6 +262,16 @@ describe('PluginConfig list|edit', () => {
       expect(await screen.findByTestId('plugin-code-stub')).toHaveTextContent('demo.js')
     })
 
+    it('uses the traffic row tokens for hover / selected and shows keyboard focus on the whole row', async () => {
+      renderPlugins()
+      const row = screen.getByTestId('plugin-config-row-builtin-builtin.logger')
+      expect(row.className).toContain('hover:bg-muted/50')
+      expect(row.className).toContain('data-[state=selected]:bg-accent')
+      expect(row.className).toContain('has-[[data-plugin-row-trigger]:focus-visible]:bg-accent')
+      expect(row.className).toContain('has-[[data-plugin-row-trigger]:focus-visible]:ring-ring/50')
+      expect(await screen.findByTestId('plugin-config-row-custom-demo.js')).toBeInTheDocument()
+    })
+
     it('does not select the row from keys inside the action cluster', async () => {
       const user = userEvent.setup()
       renderPlugins()
