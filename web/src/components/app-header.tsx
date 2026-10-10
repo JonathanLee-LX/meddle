@@ -130,19 +130,18 @@ export function ShellNav({ activeTab, onTabChange, mockEnabledCount = 0 }: Shell
     // data-state="active" wins over the tooltip's open/closed data-state.
     const content = (
       <>
-        <span className="relative inline-flex shrink-0" data-slot="shell-nav-icon">
-          <Icon aria-hidden />
-          {showBadge && collapsed ? (
-            <Badge
-              variant="secondary"
-              data-testid="shell-nav-mock-badge"
-              // Clear of the glyph: ~4px right of the icon's top-right corner.
-              className="absolute -top-2 left-[calc(100%+2px)] h-4 min-w-4 px-0.5 text-[10px]"
-            >
-              {mockEnabledCount}
-            </Badge>
-          ) : null}
-        </span>
+        <Icon aria-hidden />
+        {showBadge && collapsed ? (
+          <Badge
+            variant="secondary"
+            data-testid="shell-nav-mock-badge"
+            // Pinned to the 32px icon button's top-right corner (−4px each way), so it
+            // never sits on the glyph and stays inside the gap to the next button.
+            className="pointer-events-none absolute -top-1 -right-1 h-[16px] min-w-[16px] px-1 text-[10px] leading-none"
+          >
+            {mockEnabledCount}
+          </Badge>
+        ) : null}
         <span data-slot="shell-nav-label" className={collapsed ? 'sr-only' : undefined}>
           {item.label}
         </span>
@@ -164,7 +163,7 @@ export function ShellNav({ activeTab, onTabChange, mockEnabledCount = 0 }: Shell
           title={collapsed ? undefined : item.title}
           aria-current={active ? 'page' : undefined}
           className={cn(
-            'h-auto min-h-10 w-full flex-none gap-2.5 px-3.5 py-3',
+            'relative h-auto min-h-10 w-full flex-none gap-2.5 px-3.5 py-3',
             collapsed && 'justify-center px-2.5',
           )}
         >
@@ -216,7 +215,12 @@ export function ShellNav({ activeTab, onTabChange, mockEnabledCount = 0 }: Shell
           type="button"
           variant="ghost"
           size={collapsed ? 'icon' : 'sm'}
-          className={cn('mt-2 shrink-0', collapsed ? 'size-10 self-center' : 'h-10 w-full justify-start px-3.5')}
+          // Same inset as the nav items (list p-2.5), so the hover / focus fill is a rounded
+          // pill like theirs instead of an edge-to-edge row.
+          className={cn(
+            'mt-2 mb-2.5 shrink-0',
+            collapsed ? 'size-10 self-center' : 'mx-2.5 h-10 w-auto justify-start px-3.5',
+          )}
           data-testid="shell-nav-collapse"
           aria-expanded={!collapsed}
           aria-controls="app-shell-nav"

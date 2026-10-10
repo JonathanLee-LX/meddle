@@ -145,16 +145,42 @@ describe('ShellNav narrow viewport (#109)', () => {
     expect(trigger).toHaveAttribute('title')
   })
 
-  it('offsets the collapsed mock badge to the icon top-right without touching it', () => {
+  it('pins the collapsed mock badge to the icon button top-right corner', () => {
     installViewport(900)
     renderNav({ mockEnabledCount: 12 })
     const badge = screen.getByTestId('shell-nav-mock-badge')
-    const icon = badge.parentElement as HTMLElement
-    expect(icon).toHaveAttribute('data-slot', 'shell-nav-icon')
-    expect(icon).toHaveClass('relative')
-    expect(icon.querySelector('svg')).not.toBeNull()
-    expect(badge).toHaveClass('absolute', '-top-2', 'left-[calc(100%+2px)]')
-    expect(badge).not.toContainElement(icon.querySelector('svg'))
+    const button = screen.getByTestId('shell-nav-mock')
+    // Direct child of the (relative) icon button, not of the glyph.
+    expect(badge.parentElement).toBe(button)
+    expect(button).toHaveClass('relative')
+    expect(badge).toHaveClass('absolute', '-top-1', '-right-1', 'h-[16px]', 'min-w-[16px]', 'text-[10px]')
+    expect(badge).not.toContainElement(button.querySelector('svg'))
     expect(badge).toHaveTextContent('12')
+    // Stays inside the rail; the rail clips horizontally so it cannot spill onto content.
+    expect(screen.getByTestId('app-shell-nav')).toHaveClass('w-14', 'overflow-x-hidden', 'gap-2.5')
+  })
+
+  it('uses the expanded inline badge when the rail is open', () => {
+    installViewport(1280)
+    renderNav({ mockEnabledCount: 3 })
+    const badge = screen.getByTestId('shell-nav-mock-badge')
+    expect(badge).not.toHaveClass('absolute')
+    expect(badge).toHaveClass('h-5')
+  })
+
+  it('narrow overlay is a shadowed layer with no scrim', () => {
+    installViewport(900)
+    renderNav()
+    fireEvent.click(toggle())
+    expect(screen.getByTestId('app-shell-nav-panel')).toHaveClass('absolute', 'z-30', 'shadow-lg')
+    expect(screen.queryByTestId('app-shell-nav-scrim')).not.toBeInTheDocument()
+  })
+
+  it('insets the expanded collapse toggle like the nav items instead of filling the row', () => {
+    installViewport(900)
+    renderNav()
+    fireEvent.click(toggle())
+    expect(toggle()).toHaveClass('mx-2.5', 'w-auto', 'rounded-md')
+    expect(toggle()).not.toHaveClass('w-full')
   })
 })
