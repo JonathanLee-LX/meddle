@@ -563,11 +563,12 @@ function handlePluginRowKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
 
 /**
  * Same tokens as the traffic table rows: hover `bg-muted/50`, selected `bg-accent`.
- * A keyboard-focused row takes the selected fill plus the shared focus-visible ring
- * (inset, so it is not clipped by the scroll container).
+ * Keyboard focus adds only the shared focus-visible ring (inset, so the scroll
+ * container does not clip it) and never a fill, so focus stays distinct from
+ * selection; mouse clicks do not show the ring.
  */
 const PLUGIN_ROW_FOCUS_CLASS =
-  'has-[[data-plugin-row-trigger]:focus-visible]:bg-accent has-[[data-plugin-row-trigger]:focus-visible]:ring-[3px] has-[[data-plugin-row-trigger]:focus-visible]:ring-inset has-[[data-plugin-row-trigger]:focus-visible]:ring-ring/50'
+  'has-[[data-plugin-row-trigger]:focus-visible]:ring-[3px] has-[[data-plugin-row-trigger]:focus-visible]:ring-inset has-[[data-plugin-row-trigger]:focus-visible]:ring-ring/50'
 
 function PluginRow({
   testId,

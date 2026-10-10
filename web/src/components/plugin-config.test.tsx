@@ -262,13 +262,20 @@ describe('PluginConfig list|edit', () => {
       expect(await screen.findByTestId('plugin-code-stub')).toHaveTextContent('demo.js')
     })
 
-    it('uses the traffic row tokens for hover / selected and shows keyboard focus on the whole row', async () => {
+    it('uses the traffic row tokens for hover / selected and a ring-only keyboard focus', async () => {
       renderPlugins()
       const row = screen.getByTestId('plugin-config-row-builtin-builtin.logger')
-      expect(row.className).toContain('hover:bg-muted/50')
-      expect(row.className).toContain('data-[state=selected]:bg-accent')
-      expect(row.className).toContain('has-[[data-plugin-row-trigger]:focus-visible]:bg-accent')
-      expect(row.className).toContain('has-[[data-plugin-row-trigger]:focus-visible]:ring-ring/50')
+      const classes = row.className.split(/\s+/)
+      expect(classes).toContain('hover:bg-muted/50')
+      expect(classes).toContain('data-[state=selected]:bg-accent')
+      // Focus is ring-only (focus-visible), never a fill, so it stays distinct from selection.
+      expect(classes).toContain('has-[[data-plugin-row-trigger]:focus-visible]:ring-[3px]')
+      expect(classes).toContain('has-[[data-plugin-row-trigger]:focus-visible]:ring-inset')
+      expect(classes).toContain('has-[[data-plugin-row-trigger]:focus-visible]:ring-ring/50')
+      expect(classes.filter((name) => /focus/.test(name) && /:bg-/.test(name))).toEqual([])
+      expect(classes.filter((name) => name.startsWith('focus:') || name.startsWith('focus-within:'))).toEqual([])
+      const trigger = screen.getByTestId('plugin-config-row-builtin-builtin.logger-trigger')
+      expect(trigger.className).not.toMatch(/(^|\s)(focus|focus-visible):/)
       expect(await screen.findByTestId('plugin-config-row-custom-demo.js')).toBeInTheDocument()
     })
 
