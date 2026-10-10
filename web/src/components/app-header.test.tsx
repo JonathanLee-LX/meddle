@@ -157,7 +157,7 @@ describe('ShellNav (07-shell)', () => {
     expect(screen.getByTestId('app-shell-nav-rail')).toHaveAttribute('data-collapsed', 'true')
     expect(screen.getByTestId('shell-nav-collapse')).toHaveAttribute('aria-expanded', 'false')
     expect(screen.getByTestId('shell-nav-collapse')).toHaveAttribute('aria-label', '展开菜单')
-    expect(screen.getByTestId('shell-nav-logs').querySelector('span')).toHaveClass('sr-only')
+    expect(screen.getByTestId('shell-nav-logs').querySelector('[data-slot="shell-nav-label"]')).toHaveClass('sr-only')
     expect(localStorage.getItem(SHELL_NAV_COLLAPSED_KEY)).toBe('1')
 
     fireEvent.mouseDown(screen.getByTestId('shell-nav-health'), { button: 0, ctrlKey: false })
@@ -165,7 +165,7 @@ describe('ShellNav (07-shell)', () => {
 
     fireEvent.click(screen.getByTestId('shell-nav-collapse'))
     expect(screen.getByTestId('app-shell-nav-rail')).toHaveAttribute('data-collapsed', 'false')
-    expect(screen.getByTestId('shell-nav-logs').querySelector('span')).not.toHaveClass('sr-only')
+    expect(screen.getByTestId('shell-nav-logs').querySelector('[data-slot="shell-nav-label"]')).not.toHaveClass('sr-only')
     expect(localStorage.getItem(SHELL_NAV_COLLAPSED_KEY)).toBe('0')
     unmount()
 

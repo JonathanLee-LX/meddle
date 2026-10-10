@@ -8,13 +8,15 @@ interface ResizablePaneOptions {
   widthFromPointer: (clientX: number, containerLeft: number, containerWidth: number) => number
 }
 
-/** Wide-only pixel split. Below the `lg` breakpoint the pane stacks and ignores the width. */
+/** Pixel split from the `md` (768px) breakpoint up. Below it the pane stacks and ignores the width. */
+export const SPLIT_PANE_SIDE_BY_SIDE_QUERY = '(min-width: 768px)'
+
 export function useResizablePane({ load, save, clamp, widthFromPointer }: ResizablePaneOptions) {
   const layoutRef = useRef<HTMLDivElement>(null)
   const resizingRef = useRef(false)
   const [paneWidth, setPaneWidth] = useState(load)
   const [resizing, setResizing] = useState(false)
-  const isWide = useMediaQuery('(min-width: 1024px)')
+  const isWide = useMediaQuery(SPLIT_PANE_SIDE_BY_SIDE_QUERY)
   resizingRef.current = resizing
 
   useEffect(() => {
