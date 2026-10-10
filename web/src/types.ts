@@ -79,6 +79,10 @@ export interface Plugin {
   priority: number
   state: 'running' | 'stopped' | 'error' | 'disabled' | 'ready' | 'registered'
   stats: Record<string, unknown> | null
+  /** Where the backend loaded the plugin from (absent on older backends) */
+  source?: 'builtin' | 'custom'
+  /** Custom plugin file name inside ~/.meddle/plugins (custom plugins only) */
+  filename?: string
 }
 
 export interface RuleFile {

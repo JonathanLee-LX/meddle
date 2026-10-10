@@ -38,11 +38,11 @@ const loadedCustom: Plugin = {
   stats: null,
 }
 
-function renderPlugins() {
+function renderPlugins(plugins: Plugin[] = [builtin, loadedCustom]) {
   return render(
     <div style={{ height: 600 }}>
       <PluginConfig
-        plugins={[builtin, loadedCustom]}
+        plugins={plugins}
         pluginMode="on"
         switchPluginMode={vi.fn(async () => undefined)}
         fetchPlugins={vi.fn(async () => undefined)}
@@ -145,5 +145,36 @@ describe('PluginConfig list|edit', () => {
     expect(localStorage.getItem(PLUGIN_LIST_STORAGE_KEY)).toBe('420')
     expect(layout).toHaveAttribute('data-plugin-list-width', '420')
     expect(await screen.findByTestId('plugin-config-row-custom-demo.js')).toBeInTheDocument()
+  })
+
+  it('shows a custom plugin whose id is not local.<file> only in the custom group (#112)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          plugins: [{ filename: 'add-trace-header.js', modified: Date.now(), pluginId: 'add-trace-header' }],
+        }),
+      })),
+    )
+    const traceHeader: Plugin = {
+      id: 'add-trace-header',
+      name: 'Add Trace Header',
+      version: '1.0.0',
+      hooks: ['onBeforeProxy'],
+      permissions: [],
+      priority: 100,
+      state: 'running',
+      stats: null,
+      source: 'custom',
+      filename: 'add-trace-header.js',
+    }
+    renderPlugins([{ ...builtin, source: 'builtin' }, traceHeader])
+
+    const customRow = await screen.findByTestId('plugin-config-row-custom-add-trace-header.js')
+    expect(within(customRow).getByText('已启用')).toBeInTheDocument()
+    expect(within(customRow).queryByText('未加载')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('plugin-config-row-builtin-add-trace-header')).not.toBeInTheDocument()
+    expect(screen.getByTestId('plugin-config-row-builtin-builtin.logger')).toBeInTheDocument()
   })
 })

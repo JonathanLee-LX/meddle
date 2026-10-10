@@ -218,6 +218,7 @@ const serverContext = {
     hookDispatcher: ctx.hookDispatcher,
     settingsPath: ctx.settingsPath,
     meddleDir: ctx.meddleDir,
+    appInfo: { name: require('./package.json').name, version: require('./package.json').version },
     settings: null,
     loadMockRules: () => {
         mockHandler.loadMockRules()

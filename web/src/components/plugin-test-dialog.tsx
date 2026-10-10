@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { BodyDiffView, type DiffViewMode } from './body-diff-view'
 import { getAIConfig, getActiveModel, isAIConfigValid } from '@/lib/ai-config-store'
+import { customPluginFilename } from '@/lib/plugin-groups'
 import { MonacoDiffEditor, MonacoEditor } from './monaco-editor'
 
 type HeaderDiffStatus = 'unchanged' | 'changed' | 'added' | 'removed'
@@ -208,6 +209,8 @@ interface PluginTestDialogProps {
   pluginId: string
   pluginName: string
   hooks: string[]
+  /** Custom plugin file name; defaults to the `local.<name>.js` convention */
+  filename?: string
   onPluginFixed?: () => void
 }
 
@@ -296,6 +299,7 @@ export function PluginTestDialog({
   pluginId,
   pluginName,
   hooks,
+  filename,
   onPluginFixed,
 }: PluginTestDialogProps) {
   const [testing, setTesting] = useState(false)
@@ -330,7 +334,7 @@ export function PluginTestDialog({
     model: aiConfig.model,
   }
   const isAIReady = isAIConfigValid(aiConfig)
-  const customFilename = pluginId.startsWith('local.') ? `${pluginId.slice('local.'.length)}.js` : ''
+  const customFilename = filename || customPluginFilename({ id: pluginId })
 
   const visible = embedded || open
 

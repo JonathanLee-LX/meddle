@@ -14,6 +14,7 @@ import type { Plugin } from '@/types'
 import { SplitPane } from '@/components/split-pane'
 import { EditorPaneActionsProvider } from '@/components/editor-pane-actions'
 import { pluginPaneSplit } from '@/lib/plugin-pane-split'
+import { groupPlugins, type CustomPluginFile } from '@/lib/plugin-groups'
 
 const PluginGenerator = lazy(() =>
   import('@/components/plugin-generator').then((module) => ({ default: module.PluginGenerator })),
@@ -40,23 +41,14 @@ interface PluginConfigProps {
   unloadThirdPartyPlugin: (id: string) => Promise<void>
 }
 
-interface CustomPluginFile {
-  filename: string
-  modified: string | number | Date
-}
-
 type EditorMode =
   | { kind: 'idle' }
   | { kind: 'generate' }
   | { kind: 'code'; filename: string }
-  | { kind: 'test'; pluginId: string; pluginName: string; hooks: string[] }
+  | { kind: 'test'; pluginId: string; pluginName: string; hooks: string[]; filename?: string }
   | { kind: 'builtin'; pluginId: string }
   | { kind: 'third-party'; pluginId: string }
   | { kind: 'load-third-party' }
-
-function customPluginId(filename: string) {
-  return `local.${filename.replace(/\.js$/, '')}`
-}
 
 function EditorFallback() {
   return (
@@ -220,7 +212,7 @@ export function PluginConfig({
   }
 
   const thirdPartyIds = new Set(thirdPartyPlugins.map((plugin) => plugin.id))
-  const builtinPlugins = plugins.filter((plugin) => !plugin.id.startsWith('local.') && !thirdPartyIds.has(plugin.id))
+  const { builtinPlugins, customRows } = groupPlugins(plugins, customPlugins, thirdPartyIds)
   const editingBuiltin = editor.kind === 'builtin' ? plugins.find((plugin) => plugin.id === editor.pluginId) : undefined
   const editingThirdParty = editor.kind === 'third-party' ? thirdPartyPlugins.find((plugin) => plugin.id === editor.pluginId) : undefined
 
@@ -305,12 +297,10 @@ export function PluginConfig({
             </PluginGroup>
 
             <PluginGroup title="自定义插件">
-              {customPlugins.length === 0 ? (
+              {customRows.length === 0 ? (
                 <EmptyRow>暂无自定义插件，点击「AI 生成」</EmptyRow>
               ) : (
-                customPlugins.map((plugin) => {
-                  const pluginId = customPluginId(plugin.filename)
-                  const loadedPlugin = plugins.find((item) => item.id === pluginId)
+                customRows.map(({ file: plugin, pluginId, loadedPlugin }) => {
                   const isEnabled = loadedPlugin ? loadedPlugin.state !== 'disabled' : false
                   const selected =
                     (editor.kind === 'code' && editor.filename === plugin.filename) ||
@@ -347,6 +337,7 @@ export function PluginConfig({
                                   pluginId: loadedPlugin.id,
                                   pluginName: loadedPlugin.name,
                                   hooks: loadedPlugin.hooks,
+                                  filename: plugin.filename,
                                 })
                               }
                               aria-label={`测试插件 ${loadedPlugin.name}`}
@@ -461,6 +452,7 @@ export function PluginConfig({
               pluginId={editor.pluginId}
               pluginName={editor.pluginName}
               hooks={editor.hooks}
+              filename={editor.filename}
               onOpenChange={(open) => {
                 if (!open) setEditor({ kind: 'idle' })
               }}

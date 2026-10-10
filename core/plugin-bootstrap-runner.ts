@@ -7,16 +7,23 @@ import { createBuiltinPlugins } from '../plugins/builtin'
 import { createBuiltinRouterPlugin } from '../plugins/builtin/router-plugin'
 import { createBuiltinMockPlugin } from '../plugins/builtin/mock-plugin'
 import { createPluginContextFactory } from './plugin-context-factory'
+import { filterCustomPluginConflicts, markPluginSource } from './plugin-source'
 import type { ProxyContext, MockHandler, Plugin } from './types'
 
 export function createPluginBootstrapRunner(ctx: ProxyContext, mockHandler: MockHandler) {
     let loadedCustomPlugins: Plugin[] = []
+    let builtinPluginIds = new Set<string>()
     const contextFactory = createPluginContextFactory()
 
     async function loadCustomPluginsInternal(customPluginsDir: string): Promise<Plugin[]> {
         let customPlugins: Plugin[] = []
         try {
             customPlugins = await loadCustomPlugins({ pluginsDir: customPluginsDir, logger: console })
+            customPlugins = filterCustomPluginConflicts(
+                customPlugins,
+                builtinPluginIds,
+                (message) => console.warn(chalk.yellow(message)),
+            )
             console.log(chalk.green(`已加载 ${customPlugins.length} 个自定义插件`))
         } catch (error: any) {
             console.warn(chalk.yellow('加载自定义插件失败:'), error.message)
@@ -53,6 +60,9 @@ export function createPluginBootstrapRunner(ctx: ProxyContext, mockHandler: Mock
             getRouteRules: () => ctx.routeRules,
             loggerPlugin: ctx.builtinLoggerPlugin,
         })
+
+        for (const plugin of plugins) markPluginSource(plugin, { kind: 'builtin' })
+        builtinPluginIds = new Set(plugins.map((plugin) => plugin.manifest.id))
 
         const customPluginsDir = path.resolve(ctx.meddleDir, 'plugins')
         loadedCustomPlugins = await loadCustomPluginsInternal(customPluginsDir)
