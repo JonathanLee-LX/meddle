@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, act, within } from '@testing-library/react'
+import { render, screen, fireEvent, act, within, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { PluginConfig } from './plugin-config'
 import type { Plugin } from '@/types'
 import { PLUGIN_LIST_DEFAULT_PX, PLUGIN_LIST_STORAGE_KEY } from '@/lib/plugin-pane-split'
@@ -145,5 +146,129 @@ describe('PluginConfig list|edit', () => {
     expect(localStorage.getItem(PLUGIN_LIST_STORAGE_KEY)).toBe('420')
     expect(layout).toHaveAttribute('data-plugin-list-width', '420')
     expect(await screen.findByTestId('plugin-config-row-custom-demo.js')).toBeInTheDocument()
+  })
+
+  describe('deleting a custom plugin (#107)', () => {
+    let customFiles: { filename: string; modified: number }[]
+
+    beforeEach(() => {
+      customFiles = [{ filename: 'demo.js', modified: Date.now() }]
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string, init?: RequestInit) => {
+          if (init?.method === 'DELETE') {
+            const filename = decodeURIComponent(url.split('/').pop() || '')
+            customFiles = customFiles.filter((file) => file.filename !== filename)
+            return { ok: true, json: async () => ({}) }
+          }
+          return { ok: true, json: async () => ({ plugins: customFiles }) }
+        }),
+      )
+      vi.stubGlobal('confirm', vi.fn(() => true))
+    })
+
+    it('closes the test pane when its plugin is deleted', async () => {
+      renderPlugins()
+      fireEvent.click(await screen.findByRole('button', { name: '测试插件 Demo' }))
+      expect(await screen.findByTestId('plugin-test-stub')).toHaveTextContent('Demo')
+
+      fireEvent.click(screen.getByRole('button', { name: '删除插件 demo.js' }))
+
+      await waitFor(() => expect(screen.queryByTestId('plugin-test-stub')).not.toBeInTheDocument())
+      expect(screen.getByText(/选择左侧插件/)).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: '取消' })).not.toBeInTheDocument()
+      await waitFor(() => expect(screen.queryByTestId('plugin-config-row-custom-demo.js')).not.toBeInTheDocument())
+    })
+
+    it('closes the code pane when its plugin is deleted', async () => {
+      renderPlugins()
+      fireEvent.click(await screen.findByTestId('plugin-config-row-custom-demo.js'))
+      expect(await screen.findByTestId('plugin-code-stub')).toHaveTextContent('demo.js')
+
+      fireEvent.click(screen.getByRole('button', { name: '删除插件 demo.js' }))
+
+      await waitFor(() => expect(screen.queryByTestId('plugin-code-stub')).not.toBeInTheDocument())
+      expect(screen.getByText(/选择左侧插件/)).toBeInTheDocument()
+    })
+
+    it('keeps an unrelated editor open', async () => {
+      renderPlugins()
+      fireEvent.click(screen.getByTestId('plugin-config-row-builtin-builtin.logger'))
+      fireEvent.click(await screen.findByRole('button', { name: '删除插件 demo.js' }))
+
+      await waitFor(() => expect(screen.queryByTestId('plugin-config-row-custom-demo.js')).not.toBeInTheDocument())
+      expect(screen.getByTestId('plugin-config-edit')).toHaveTextContent('builtin.logger · 1.0.0')
+    })
+
+    it('keeps the editor when the delete is cancelled', async () => {
+      vi.stubGlobal('confirm', vi.fn(() => false))
+      renderPlugins()
+      fireEvent.click(await screen.findByRole('button', { name: '测试插件 Demo' }))
+      expect(await screen.findByTestId('plugin-test-stub')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: '删除插件 demo.js' }))
+
+      expect(screen.getByTestId('plugin-test-stub')).toBeInTheDocument()
+      expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining('/api/plugins/custom/'), expect.objectContaining({ method: 'DELETE' }))
+    })
+  })
+
+  describe('keyboard selection (#108)', () => {
+    it('exposes each row as a focusable button that selects with Enter and Space', async () => {
+      const user = userEvent.setup()
+      renderPlugins()
+      const builtinTrigger = screen.getByRole('button', { name: /^Logger/ })
+      expect(builtinTrigger).toHaveAttribute('type', 'button')
+
+      builtinTrigger.focus()
+      expect(builtinTrigger).toHaveFocus()
+      await user.keyboard('{Enter}')
+      expect(screen.getByTestId('plugin-config-row-builtin-builtin.logger')).toHaveAttribute('data-state', 'selected')
+      expect(builtinTrigger).toHaveAttribute('aria-current', 'true')
+      expect(screen.getByTestId('plugin-config-edit')).toHaveTextContent('builtin.logger · 1.0.0')
+
+      const customTrigger = await screen.findByTestId('plugin-config-row-custom-demo.js-trigger')
+      customTrigger.focus()
+      await user.keyboard(' ')
+      expect(await screen.findByTestId('plugin-code-stub')).toHaveTextContent('demo.js')
+      expect(customTrigger).toHaveAttribute('aria-current', 'true')
+      expect(builtinTrigger).not.toHaveAttribute('aria-current')
+    })
+
+    it('reaches rows with Tab and moves focus with ArrowUp / ArrowDown / Home / End', async () => {
+      const user = userEvent.setup()
+      renderPlugins()
+      const builtinTrigger = screen.getByTestId('plugin-config-row-builtin-builtin.logger-trigger')
+      const customTrigger = await screen.findByTestId('plugin-config-row-custom-demo.js-trigger')
+
+      screen.getByRole('combobox', { name: '插件模式' }).focus()
+      await user.tab()
+      expect(builtinTrigger).toHaveFocus()
+
+      await user.keyboard('{ArrowDown}')
+      expect(customTrigger).toHaveFocus()
+      await user.keyboard('{ArrowDown}')
+      expect(customTrigger).toHaveFocus()
+      await user.keyboard('{ArrowUp}')
+      expect(builtinTrigger).toHaveFocus()
+      await user.keyboard('{End}')
+      expect(customTrigger).toHaveFocus()
+      await user.keyboard('{Home}')
+      expect(builtinTrigger).toHaveFocus()
+
+      // Arrow keys only move focus; Enter commits the selection.
+      expect(screen.getByText(/选择左侧插件/)).toBeInTheDocument()
+      await user.keyboard('{ArrowDown}{Enter}')
+      expect(await screen.findByTestId('plugin-code-stub')).toHaveTextContent('demo.js')
+    })
+
+    it('does not select the row from keys inside the action cluster', async () => {
+      const user = userEvent.setup()
+      renderPlugins()
+      const toggle = await screen.findByRole('switch', { name: '启用插件 demo.js' })
+      toggle.focus()
+      await user.keyboard('{ArrowDown}')
+      expect(screen.getByText(/选择左侧插件/)).toBeInTheDocument()
+    })
   })
 })
