@@ -347,6 +347,26 @@ describe('PluginConfig list|edit', () => {
       expect(screen.queryByTestId('plugin-detail-note')).not.toBeInTheDocument()
     })
 
+    it('uses the shared row focus/selection styling and keyboard navigation (#108)', async () => {
+      const user = userEvent.setup()
+      renderPlugins([{ ...builtin, source: 'builtin' }, traceHeaderPlugin])
+      const row = await screen.findByTestId('plugin-config-row-custom-deleted-add-trace-header')
+      const classes = row.className.split(/\s+/)
+      expect(classes).toContain('data-[state=selected]:bg-accent')
+      expect(classes).toContain('has-[[data-plugin-row-trigger]:focus-visible]:ring-[3px]')
+      expect(classes).toContain('has-[[data-plugin-row-trigger]:focus-visible]:ring-inset')
+      expect(classes).toContain('has-[[data-plugin-row-trigger]:focus-visible]:ring-ring/50')
+
+      const builtinTrigger = screen.getByTestId('plugin-config-row-builtin-builtin.logger-trigger')
+      const deletedTrigger = screen.getByTestId('plugin-config-row-custom-deleted-add-trace-header-trigger')
+      builtinTrigger.focus()
+      await user.keyboard('{End}')
+      expect(deletedTrigger).toHaveFocus()
+      await user.keyboard('{Enter}')
+      expect(row).toHaveAttribute('data-state', 'selected')
+      expect(screen.getByTestId('plugin-detail-note')).toBeInTheDocument()
+    })
+
     it('keeps the enable toggle working', async () => {
       const togglePlugin = vi.fn(async () => undefined)
       renderPlugins([traceHeaderPlugin], { togglePlugin })
