@@ -12,6 +12,8 @@ import {
     matchQueryCondition,
     resolveHeaderPlaceholders,
     mergeResponseHeaders,
+    ensureUniqueMockRuleIds,
+    nextMockRuleId,
 } from './mock-utils'
 
 const proxyDebug = _debug('proxy')
@@ -59,11 +61,20 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
             if (fs.existsSync(mockFile)) {
                 const data = JSON.parse(fs.readFileSync(mockFile, 'utf8'))
                 const loaded = Array.isArray(data.rules) ? data.rules : []
-                ctx.mockRules = dedupeMockRulesById(loaded)
-                if (loaded.length !== ctx.mockRules.length) {
-                    proxyDebug(`Mock 规则去重: ${loaded.length} -> ${ctx.mockRules.length}`)
+                // Issue #115: never drop rules that share an id — give the
+                // later duplicates fresh ids instead (no silent data loss).
+                const { rules, reassigned } = ensureUniqueMockRuleIds(loaded as MockRuleEntry[])
+                ctx.mockRules = rules
+                if (reassigned > 0) {
+                    console.warn(`Mock 规则 id 重复或缺失，已为 ${reassigned} 条规则重新分配 id (${mockFile})`)
                 }
-                ctx.mockIdSeq = (data.nextId || Math.max(0, ...ctx.mockRules.map(r => r.id || 0))) + 1
+                // nextId is the next id to hand out; a stale/missing value must
+                // never collide with ids already on disk (issue #115).
+                ctx.mockIdSeq = nextMockRuleId(ctx.mockRules, Math.max(
+                    Number(data.nextId) || 0,
+                    (Number(data.lastId) || 0) + 1,
+                    ctx.mockIdSeq || 0,
+                ))
                 proxyDebug(`已加载 ${ctx.mockRules.length} 条 Mock 规则 (${mockFile})`)
             } else {
                 // File removed / never created — clear in-memory rules (watcher unlink).
@@ -78,7 +89,10 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
 
     function saveMockRules(): void {
         try {
-            ctx.mockRules = dedupeMockRulesById(ctx.mockRules)
+            // Issue #115: keep every rule (re-id duplicates instead of dropping
+            // them) and persist a sequence that is above every stored id.
+            ctx.mockRules = ensureUniqueMockRuleIds(ctx.mockRules).rules
+            ctx.mockIdSeq = nextMockRuleId(ctx.mockRules, ctx.mockIdSeq)
             const mockFile = getMockFilePath()
             fs.writeFileSync(mockFile, JSON.stringify({ nextId: ctx.mockIdSeq, rules: ctx.mockRules }, null, 2), 'utf8')
             proxyDebug(`Mock 规则已保存到 ${mockFile}`)

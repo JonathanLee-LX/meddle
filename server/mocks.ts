@@ -1,5 +1,6 @@
 import { Application, Request, Response } from 'express'
 import { ServerContext } from './index'
+import { nextMockRuleId } from '../core/mock-utils'
 
 function setMockJsonHeaders(res: Response): void {
     res.setHeader('Content-Type', 'application/json')
@@ -15,8 +16,13 @@ function persistMockRules(ctx: ServerContext): void {
 }
 
 export function createMockRule(ctx: ServerContext, data: MockRuleInput): MockRule {
+    // Issue #115: derive the id from both the sequence and the rules actually
+    // present, so a stale sequence can never reuse an existing id. Any
+    // client-supplied `id` in `data` is ignored — create never overwrites.
+    const id = nextMockRuleId(ctx.mockRules, ctx.mockIdSeq)
+    ctx.mockIdSeq = id + 1
     const rule = {
-        id: ctx.mockIdSeq++,
+        id,
         name: data.name || '',
         urlPattern: data.urlPattern || '',
         query: data.query || '',

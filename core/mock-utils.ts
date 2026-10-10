@@ -107,3 +107,53 @@ export function mergeResponseHeaders(
     }
     return out
 }
+
+type IdentifiedMockRule = { id: number }
+
+function isValidMockId(id: unknown): id is number {
+    return typeof id === 'number' && Number.isInteger(id) && id > 0
+}
+
+/** Highest valid (positive integer) mock rule id, or 0 when there is none. */
+export function maxMockRuleId(rules: ReadonlyArray<{ id?: unknown }>): number {
+    let max = 0
+    for (const rule of rules) {
+        if (rule && isValidMockId(rule.id) && rule.id > max) max = rule.id
+    }
+    return max
+}
+
+/**
+ * Next free mock rule id: never below the persisted/in-memory sequence (so
+ * ids of deleted rules are not reused) and always above every existing id
+ * (so a stale or missing sequence can never collide with stored rules).
+ * Issue #115.
+ */
+export function nextMockRuleId(rules: ReadonlyArray<{ id?: unknown }>, seq?: unknown): number {
+    const fromSeq = typeof seq === 'number' && Number.isFinite(seq) ? Math.floor(seq) : 0
+    return Math.max(1, fromSeq, maxMockRuleId(rules) + 1)
+}
+
+/**
+ * Make mock rule ids unique without dropping any rule (issue #115).
+ * For a duplicated id the LAST entry keeps it (same winner the old lossy
+ * dedupe picked, so existing references/UI keep pointing at the same rule);
+ * earlier duplicates and rules with a missing/invalid id get fresh ids above
+ * the current max instead of being discarded. Result is sorted by id.
+ */
+export function ensureUniqueMockRuleIds<T extends IdentifiedMockRule>(rules: ReadonlyArray<T>): { rules: T[]; reassigned: number } {
+    const valid = rules.filter((rule): rule is T => !!rule && typeof rule === 'object')
+    const lastIndexById = new Map<number, number>()
+    valid.forEach((rule, index) => {
+        if (isValidMockId(rule.id)) lastIndexById.set(rule.id, index)
+    })
+    let next = maxMockRuleId(valid) + 1
+    let reassigned = 0
+    const out = valid.map((rule, index) => {
+        if (isValidMockId(rule.id) && lastIndexById.get(rule.id) === index) return rule
+        reassigned++
+        return { ...rule, id: next++ }
+    })
+    out.sort((a, b) => a.id - b.id)
+    return { rules: out, reassigned }
+}

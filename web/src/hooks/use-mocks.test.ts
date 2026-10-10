@@ -40,4 +40,13 @@ describe('use-mocks helpers', () => {
       { ...baseRule(2, 'second-updated'), delay: 300 },
     ])
   })
+
+  it('upsertMockRule keeps earlier rules when the server returns fresh ids for new rules (issue #115)', () => {
+    let rules: MockRule[] = []
+    rules = upsertMockRule(rules, baseRule(1, 'first'))
+    rules = upsertMockRule(rules, baseRule(2, 'second'))
+    rules = upsertMockRule(rules, baseRule(3, 'third'))
+
+    expect(rules.map((rule) => rule.name)).toEqual(['first', 'second', 'third'])
+  })
 })
