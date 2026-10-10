@@ -319,11 +319,16 @@ describe('PluginConfig list|edit', () => {
       expect(icon).toHaveClass('lucide-triangle-alert')
       // Icon comes before the text
       expect(label.firstElementChild).toBe(icon)
+      // ~8px from the toggle: the cluster's gap-1 (4px) plus mr-1 (4px)
+      expect(label).toHaveClass('mr-1')
+      expect(label.parentElement).toHaveClass('gap-1')
+      expect(label.nextElementSibling).toHaveAttribute('role', 'switch')
 
       // The row is not dimmed, so the toggle and 卸载 do not look disabled
       expect(row.className.split(/\s+/)).not.toContain('opacity-60')
       const unload = within(row).getByRole('button', { name: '卸载插件 add-trace-header.js' })
-      expect(unload).toHaveAttribute('title', '卸载（文件已删除，仅从内存移除）')
+      expect(unload).toHaveAttribute('title', '卸载')
+      expect(unload).toHaveAttribute('aria-description', '文件已删除，仅从内存移除')
       expect(unload.className.split(/\s+/)).not.toContain('text-destructive')
       expect(unload).toHaveAttribute('data-variant', 'ghost')
       expect(unload).toBeEnabled()
@@ -355,7 +360,7 @@ describe('PluginConfig list|edit', () => {
       const row = await screen.findByTestId('plugin-config-row-custom-deleted-add-trace-header')
       expect(within(row).queryByRole('button', { name: /删除插件/ })).not.toBeInTheDocument()
       const unload = within(row).getByRole('button', { name: '卸载插件 add-trace-header.js' })
-      expect(unload).toHaveAttribute('title', expect.stringContaining('卸载'))
+      expect(unload).toHaveAttribute('title', '卸载')
       fetchPlugins.mockClear()
 
       fireEvent.click(unload)
@@ -366,6 +371,34 @@ describe('PluginConfig list|edit', () => {
       expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/api/plugins/custom/'), expect.objectContaining({ method: 'DELETE' }))
       await waitFor(() => expect(fetchPlugins).toHaveBeenCalled())
       expect(alert).not.toHaveBeenCalled()
+    })
+
+    it('shows 卸载 instead of 停止 in the details pane and unloads with the same endpoint', async () => {
+      const fetchPlugins = vi.fn(async () => undefined)
+      renderPlugins([{ ...builtin, source: 'builtin', state: 'running' }, traceHeaderPlugin], { fetchPlugins })
+      fireEvent.click(await screen.findByTestId('plugin-config-row-custom-deleted-add-trace-header'))
+      const pane = screen.getByTestId('plugin-config-edit')
+      expect(within(pane).queryByRole('button', { name: /停止插件|启动插件/ })).not.toBeInTheDocument()
+      const unload = within(pane).getByRole('button', { name: '卸载插件 Add Trace Header' })
+      expect(unload).toHaveTextContent('卸载')
+      fetchPlugins.mockClear()
+
+      fireEvent.click(unload)
+
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith('/api/plugins/custom/loaded/add-trace-header/unload', expect.objectContaining({ method: 'POST' })),
+      )
+      expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/api/plugins/custom/'), expect.objectContaining({ method: 'DELETE' }))
+      await waitFor(() => expect(screen.getByText(/选择左侧插件/)).toBeInTheDocument())
+      expect(fetchPlugins).toHaveBeenCalled()
+    })
+
+    it('keeps 停止 (no 卸载) in the details pane of regular plugins', async () => {
+      renderPlugins([{ ...builtin, source: 'builtin', state: 'running' }, traceHeaderPlugin])
+      fireEvent.click(await screen.findByTestId('plugin-config-row-builtin-builtin.logger'))
+      const pane = screen.getByTestId('plugin-config-edit')
+      expect(within(pane).getByRole('button', { name: '停止插件 Logger' })).toBeInTheDocument()
+      expect(within(pane).queryByRole('button', { name: /卸载插件/ })).not.toBeInTheDocument()
     })
 
     it('closes the details pane of the unloaded plugin', async () => {

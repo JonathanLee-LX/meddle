@@ -250,6 +250,9 @@ export function PluginConfig({
   const thirdPartyIds = new Set(thirdPartyPlugins.map((plugin) => plugin.id))
   const { builtinPlugins, customRows } = groupPlugins(plugins, customPlugins, thirdPartyIds)
   const editingBuiltin = editor.kind === 'builtin' ? plugins.find((plugin) => plugin.id === editor.pluginId) : undefined
+  const editingDeletedRow = editingBuiltin
+    ? customRows.find((row) => row.fileDeleted && row.pluginId === editingBuiltin.id)
+    : undefined
   const editingThirdParty = editor.kind === 'third-party' ? thirdPartyPlugins.find((plugin) => plugin.id === editor.pluginId) : undefined
 
   const editorTitle =
@@ -362,7 +365,7 @@ export function PluginConfig({
                           {fileDeleted ? (
                             <span
                               data-testid="plugin-file-deleted-label"
-                              className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+                              className="mr-1 inline-flex items-center gap-1 text-xs text-muted-foreground"
                             >
                               <TriangleAlert aria-hidden="true" className="size-3.5 shrink-0" />
                               文件已删除
@@ -405,7 +408,8 @@ export function PluginConfig({
                               size="icon-sm"
                               onClick={() => void handleUnloadCustomPlugin(pluginId, filename)}
                               aria-label={`卸载插件 ${filename}`}
-                              title="卸载（文件已删除，仅从内存移除）"
+                              aria-description="文件已删除，仅从内存移除"
+                              title="卸载"
                             >
                               <Unplug />
                             </Button>
@@ -530,11 +534,13 @@ export function PluginConfig({
         ) : editor.kind === 'builtin' && editingBuiltin ? (
           <BuiltinDetail
             plugin={editingBuiltin}
-            note={
-              customRows.some((row) => row.fileDeleted && row.pluginId === editingBuiltin.id)
-                ? FILE_DELETED_DETAIL_NOTE
-                : undefined
-            }
+            {...(editingDeletedRow
+              ? {
+                  note: FILE_DELETED_DETAIL_NOTE,
+                  // Same handler as the row's 卸载 button; it closes this pane after unloading.
+                  onUnload: () => void handleUnloadCustomPlugin(editingDeletedRow.pluginId, editingDeletedRow.filename),
+                }
+              : {})}
             loading={loading}
             onStart={() => void handleStartPlugin(editingBuiltin.id)}
             onStop={() => void handleStopPlugin(editingBuiltin.id)}
@@ -683,9 +689,12 @@ function BuiltinDetail({
   loading,
   onStart,
   onStop,
+  onUnload,
 }: {
   plugin: Plugin
   note?: string
+  /** When set (deleted-file custom plugin), show 卸载 instead of 启动/停止 */
+  onUnload?: () => void
   loading: boolean
   onStart: () => void
   onStop: () => void
@@ -711,7 +720,12 @@ function BuiltinDetail({
         )}
       </div>
       <div>
-        {plugin.state === 'running' ? (
+        {onUnload ? (
+          <Button variant="outline" size="sm" onClick={onUnload} disabled={loading} aria-label={`卸载插件 ${plugin.name}`}>
+            <Unplug data-icon="inline-start" />
+            卸载
+          </Button>
+        ) : plugin.state === 'running' ? (
           <Button variant="outline" size="sm" onClick={onStop} disabled={loading} aria-label={`停止插件 ${plugin.name}`}>
             <Square data-icon="inline-start" />
             停止
