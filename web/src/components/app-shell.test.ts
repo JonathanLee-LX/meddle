@@ -69,3 +69,17 @@ describe('app shell traffic B host (P2 / #89)', () => {
     expect(app.slice(configStart)).not.toContain('TrafficWorkLayout')
   })
 })
+
+
+describe('app shell backend heartbeat (#105)', () => {
+  it('mounts BackendHeartbeatBanner under AppHeader (global, not HealthPanel)', () => {
+    const app = readSource('../App.tsx')
+    expect(app).toContain("import { BackendHeartbeatBanner } from '@/components/backend-heartbeat-banner'")
+    const header = app.indexOf('<AppHeader')
+    const banner = app.indexOf('<BackendHeartbeatBanner')
+    expect(header).toBeGreaterThan(-1)
+    expect(banner).toBeGreaterThan(header)
+    // Must not live inside HealthPanel-only branch
+    expect(app).not.toMatch(/activeTab === 'health'[\s\S]{0,200}<BackendHeartbeatBanner/)
+  })
+})
