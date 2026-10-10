@@ -272,7 +272,7 @@ describe('PluginConfig list|edit', () => {
       expect(fetch).toHaveBeenCalledWith('/api/plugins/custom/add-trace-header.js', expect.objectContaining({ method: 'DELETE' }))
       // Still loaded in memory: it stays in the custom group, flagged as file deleted.
       const deletedRow = await screen.findByTestId('plugin-config-row-custom-deleted-add-trace-header')
-      expect(within(deletedRow).getAllByText(/文件已删除/).length).toBeGreaterThan(0)
+      expect(within(deletedRow).getAllByText('文件已删除')).toHaveLength(1)
       expect(screen.queryByTestId('plugin-config-row-builtin-add-trace-header')).not.toBeInTheDocument()
     })
   })
@@ -299,9 +299,47 @@ describe('PluginConfig list|edit', () => {
       renderPlugins([{ ...builtin, source: 'builtin' }, traceHeaderPlugin])
       const row = await screen.findByTestId('plugin-config-row-custom-deleted-add-trace-header')
       expect(within(row).getByText('文件已删除')).toBeInTheDocument()
+      // Shown exactly once; the subtitle keeps the normal state text
+      expect(within(row).getAllByText(/文件已删除/)).toHaveLength(1)
+      expect(within(row).getByText('已启用')).toBeInTheDocument()
       expect(within(row).getByText('add-trace-header.js')).toBeInTheDocument()
       expect(screen.queryByTestId('plugin-config-row-builtin-add-trace-header')).not.toBeInTheDocument()
       expect(screen.queryByText(/暂无自定义插件/)).not.toBeInTheDocument()
+    })
+
+    it('renders the label like 未加载 (muted small text) with a warning icon, and keeps controls active-looking', async () => {
+      renderPlugins([traceHeaderPlugin])
+      const row = await screen.findByTestId('plugin-config-row-custom-deleted-add-trace-header')
+      const label = within(row).getByTestId('plugin-file-deleted-label')
+      expect(label).toHaveTextContent('文件已删除')
+      expect(label).toHaveClass('text-xs', 'text-muted-foreground')
+      expect(label.className).not.toMatch(/destructive|bg-|text-white|text-red/)
+      const icon = label.querySelector('svg')
+      expect(icon).not.toBeNull()
+      expect(icon).toHaveClass('lucide-triangle-alert')
+      // Icon comes before the text
+      expect(label.firstElementChild).toBe(icon)
+
+      // The row is not dimmed, so the toggle and 卸载 do not look disabled
+      expect(row.className.split(/\s+/)).not.toContain('opacity-60')
+      const unload = within(row).getByRole('button', { name: '卸载插件 add-trace-header.js' })
+      expect(unload).toHaveAttribute('title', '卸载（文件已删除，仅从内存移除）')
+      expect(unload.className.split(/\s+/)).not.toContain('text-destructive')
+      expect(unload).toHaveAttribute('data-variant', 'ghost')
+      expect(unload).toBeEnabled()
+      expect(within(row).getByRole('switch', { name: '启用插件 add-trace-header.js' })).toBeEnabled()
+    })
+
+    it('shows a muted note in the details pane explaining the file is gone', async () => {
+      renderPlugins([{ ...builtin, source: 'builtin' }, traceHeaderPlugin])
+      fireEvent.click(await screen.findByTestId('plugin-config-row-custom-deleted-add-trace-header'))
+      const note = screen.getByTestId('plugin-detail-note')
+      expect(note).toHaveTextContent('插件文件已删除，无法编辑或测试。可以卸载它，或者恢复文件后重新加载')
+      expect(note).toHaveClass('text-xs', 'text-muted-foreground')
+
+      // Regular built-ins don't get the note
+      fireEvent.click(screen.getByTestId('plugin-config-row-builtin-builtin.logger'))
+      expect(screen.queryByTestId('plugin-detail-note')).not.toBeInTheDocument()
     })
 
     it('keeps the enable toggle working', async () => {

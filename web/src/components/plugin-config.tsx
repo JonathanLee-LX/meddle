@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Play, Square, Loader2, Shield, ShieldAlert, Sparkles, RefreshCw, Zap, TestTube2, Trash2, Unplug } from 'lucide-react'
+import { Play, Square, Loader2, Shield, ShieldAlert, Sparkles, RefreshCw, Zap, TestTube2, Trash2, TriangleAlert, Unplug } from 'lucide-react'
 import type { Plugin } from '@/types'
 import { SplitPane } from '@/components/split-pane'
 import { EditorPaneActionsProvider } from '@/components/editor-pane-actions'
@@ -349,8 +349,8 @@ export function PluginConfig({
                       testId={fileDeleted ? `plugin-config-row-custom-deleted-${pluginId}` : `plugin-config-row-custom-${filename}`}
                       selected={selected}
                       title={filename}
-                      meta={fileDeleted ? `文件已删除 · ${stateLabel}` : stateLabel}
-                      muted={fileDeleted || (Boolean(loadedPlugin) && !isEnabled)}
+                      meta={stateLabel}
+                      muted={Boolean(loadedPlugin) && !isEnabled}
                       onSelect={() =>
                         // The file is gone, so there is no code to edit: show the loaded plugin's details.
                         fileDeleted
@@ -359,7 +359,15 @@ export function PluginConfig({
                       }
                       badge={
                         <>
-                          {fileDeleted ? <Badge variant="destructive">文件已删除</Badge> : null}
+                          {fileDeleted ? (
+                            <span
+                              data-testid="plugin-file-deleted-label"
+                              className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+                            >
+                              <TriangleAlert aria-hidden="true" className="size-3.5 shrink-0" />
+                              文件已删除
+                            </span>
+                          ) : null}
                           {loadedPlugin ? (
                             <Switch
                               checked={isEnabled}
@@ -396,7 +404,6 @@ export function PluginConfig({
                               variant="ghost"
                               size="icon-sm"
                               onClick={() => void handleUnloadCustomPlugin(pluginId, filename)}
-                              className="text-destructive"
                               aria-label={`卸载插件 ${filename}`}
                               title="卸载（文件已删除，仅从内存移除）"
                             >
@@ -523,6 +530,11 @@ export function PluginConfig({
         ) : editor.kind === 'builtin' && editingBuiltin ? (
           <BuiltinDetail
             plugin={editingBuiltin}
+            note={
+              customRows.some((row) => row.fileDeleted && row.pluginId === editingBuiltin.id)
+                ? FILE_DELETED_DETAIL_NOTE
+                : undefined
+            }
             loading={loading}
             onStart={() => void handleStartPlugin(editingBuiltin.id)}
             onStop={() => void handleStopPlugin(editingBuiltin.id)}
@@ -662,13 +674,18 @@ function PluginRow({
   )
 }
 
+/** Shown in the details pane of a loaded custom plugin whose file was deleted. */
+const FILE_DELETED_DETAIL_NOTE = '插件文件已删除，无法编辑或测试。可以卸载它，或者恢复文件后重新加载'
+
 function BuiltinDetail({
   plugin,
+  note,
   loading,
   onStart,
   onStop,
 }: {
   plugin: Plugin
+  note?: string
   loading: boolean
   onStart: () => void
   onStop: () => void
@@ -679,6 +696,11 @@ function BuiltinDetail({
         <div className="text-sm font-medium">{plugin.name}</div>
         <div className="text-xs text-muted-foreground">{plugin.id} · {plugin.version}</div>
       </div>
+      {note ? (
+        <p data-testid="plugin-detail-note" className="text-xs text-muted-foreground">
+          {note}
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-1">
         {plugin.hooks.length === 0 ? (
           <span className="text-xs text-muted-foreground">无 hooks</span>
