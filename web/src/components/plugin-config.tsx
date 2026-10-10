@@ -3,7 +3,7 @@
  * The list browses built-in, custom, and third-party plugins. Editing
  * (code, test, AI generate, third-party load) stays in the right pane.
  */
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -136,9 +136,15 @@ export function PluginConfig({
       })
 
       if (res.ok) {
-        if (editor.kind === 'code' && editor.filename === filename) {
-          setEditor({ kind: 'idle' })
-        }
+        // Close the right pane when it is showing the deleted plugin (code or test),
+        // so no editor stays mounted against a file that no longer exists.
+        const pluginId = customPluginId(filename)
+        setEditor((current) =>
+          (current.kind === 'code' && current.filename === filename) ||
+          (current.kind === 'test' && current.pluginId === pluginId)
+            ? { kind: 'idle' }
+            : current,
+        )
         await fetchCustomPlugins()
       } else {
         const error = await res.json()
@@ -285,7 +291,7 @@ export function PluginConfig({
               {pluginMode === 'off' ? <Badge variant="destructive" className="shrink-0 text-xs">未生效</Badge> : null}
             </div>
           </div>
-          <div className="meddle-thin-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+          <div data-plugin-row-list="" className="meddle-thin-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
             <PluginGroup title="内置插件">
               {builtinPlugins.length === 0 ? (
                 <EmptyRow>暂无内置插件</EmptyRow>
@@ -534,6 +540,36 @@ function EmptyRow({ children }: { children: ReactNode }) {
   return <div className="px-[var(--ui-section-gap)] py-6 text-center text-sm text-muted-foreground">{children}</div>
 }
 
+/** Arrow / Home / End move focus between plugin rows in the same list; Enter / Space select natively. */
+function handlePluginRowKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+  const { key } = event
+  if (key !== 'ArrowDown' && key !== 'ArrowUp' && key !== 'Home' && key !== 'End') return
+  const list = event.currentTarget.closest('[data-plugin-row-list]')
+  if (!list) return
+  const triggers = Array.from(list.querySelectorAll<HTMLButtonElement>('[data-plugin-row-trigger]'))
+  const index = triggers.indexOf(event.currentTarget)
+  if (index === -1 || triggers.length === 0) return
+  const next =
+    key === 'Home'
+      ? 0
+      : key === 'End'
+        ? triggers.length - 1
+        : key === 'ArrowDown'
+          ? Math.min(index + 1, triggers.length - 1)
+          : Math.max(index - 1, 0)
+  event.preventDefault()
+  triggers[next]?.focus()
+}
+
+/**
+ * Same tokens as the traffic table rows: hover `bg-muted/50`, selected `bg-accent`.
+ * Keyboard focus adds only the shared focus-visible ring (inset, so the scroll
+ * container does not clip it) and never a fill, so focus stays distinct from
+ * selection; mouse clicks do not show the ring.
+ */
+const PLUGIN_ROW_FOCUS_CLASS =
+  'has-[[data-plugin-row-trigger]:focus-visible]:ring-[3px] has-[[data-plugin-row-trigger]:focus-visible]:ring-inset has-[[data-plugin-row-trigger]:focus-visible]:ring-ring/50'
+
 function PluginRow({
   testId,
   selected,
@@ -553,17 +589,26 @@ function PluginRow({
   action?: ReactNode
   onSelect: () => void
 }) {
+  // The row stays clickable everywhere for the mouse; the title is a real button so
+  // keyboard users can Tab to it and select with Enter / Space (its click bubbles here).
   return (
     <div
       data-testid={testId}
       data-state={selected ? 'selected' : undefined}
-      className={`flex w-full cursor-pointer items-center gap-2 border-b border-border/40 px-[var(--ui-section-gap)] py-2 text-left hover:bg-accent/60 data-[state=selected]:bg-accent ${muted ? 'opacity-60' : ''}`}
+      className={`flex w-full cursor-pointer items-center gap-2 border-b border-border/40 px-[var(--ui-section-gap)] py-2 text-left transition-colors outline-none hover:bg-muted/50 data-[state=selected]:bg-accent ${PLUGIN_ROW_FOCUS_CLASS} ${muted ? 'opacity-60' : ''}`}
       onClick={onSelect}
     >
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium">{title}</div>
-        {meta ? <div className="truncate text-xs text-muted-foreground">{meta}</div> : null}
-      </div>
+      <button
+        type="button"
+        data-plugin-row-trigger=""
+        data-testid={`${testId}-trigger`}
+        aria-current={selected ? 'true' : undefined}
+        className="min-w-0 flex-1 cursor-pointer text-left outline-none"
+        onKeyDown={handlePluginRowKeyDown}
+      >
+        <span className="block truncate text-sm font-medium">{title}</span>
+        {meta ? <span className="block truncate text-xs text-muted-foreground">{meta}</span> : null}
+      </button>
       <div className="flex shrink-0 items-center gap-1" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
         {badge}
         {action}
