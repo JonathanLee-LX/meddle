@@ -15,6 +15,8 @@ import { MOCK_OPEN_CREATE_EVENT, type MockOpenCreateDetail } from '@/lib/mock-co
 import { SplitPane } from '@/components/split-pane'
 import { EditorPaneActionsProvider } from '@/components/editor-pane-actions'
 import { mockPaneSplit } from '@/lib/mock-pane-split'
+import { MocksFileMissingEmptyState } from '@/components/mocks-file-missing-note'
+import { shouldShowMocksFileMissing, useMocksFileStatus } from '@/hooks/use-mocks-file-status'
 
 export { MOCK_OPEN_CREATE_EVENT }
 export type { MockOpenCreateDetail }
@@ -46,6 +48,8 @@ export function MockConfig({
 }: MockConfigProps) {
   const [editor, setEditor] = useState<EditorMode>({ kind: 'idle' })
   const [actionsHost, setActionsHost] = useState<HTMLDivElement | null>(null)
+  // Re-check when the rule count changes (e.g. the first save creates the file).
+  const { status: mocksFile } = useMocksFileStatus(mockRules.length)
 
   useEffect(() => {
     void fetchMocks()
@@ -161,8 +165,14 @@ export function MockConfig({
               <TableBody>
                 {mockRules.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                      暂无 Mock 规则，点击「新增规则」或从流量详情一键创建
+                    <TableCell colSpan={6} className="py-8 text-center text-muted-foreground whitespace-normal">
+                      {shouldShowMocksFileMissing(mocksFile) ? (
+                        <MocksFileMissingEmptyState path={mocksFile.path}>
+                          暂无 Mock 规则，点击「新增规则」或从流量详情一键创建
+                        </MocksFileMissingEmptyState>
+                      ) : (
+                        '暂无 Mock 规则，点击「新增规则」或从流量详情一键创建'
+                      )}
                     </TableCell>
                   </TableRow>
                 ) : (

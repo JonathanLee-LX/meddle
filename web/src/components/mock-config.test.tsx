@@ -119,3 +119,94 @@ describe('MockConfig list|edit (P3 / #90)', () => {
     localStorage.removeItem(MOCK_LIST_STORAGE_KEY)
   })
 })
+
+describe('MockConfig missing mocks file notice (#118)', () => {
+  const missingPath = '/tmp/some/very/long/nested/directory/structure/for/meddle/fresh-mocks.json'
+
+  function stubMocksFile(statuses: Array<{ path: string; exists: boolean; custom: boolean }>) {
+    let call = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/mocks-file') {
+        const status = statuses[Math.min(call, statuses.length - 1)]
+        call++
+        return new Response(JSON.stringify(status), { headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response('[]', { headers: { 'Content-Type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('shows the full path in the empty state when the file does not exist', async () => {
+    stubMocksFile([{ path: missingPath, exists: false, custom: true }])
+    renderMock({ mockRules: [] })
+    const note = await screen.findByTestId('mock-config-file-missing')
+    expect(note).toHaveTextContent('文件不存在')
+    expect(note).toHaveTextContent('保存第一条规则时会创建')
+    // path on its own line; textContent is the exact full path (screen readers / copy)
+    const pathEl = screen.getByTestId('mock-config-file-missing-path')
+    expect(pathEl.textContent).toBe(missingPath)
+    expect(pathEl).toHaveClass('font-mono')
+    // a <wbr> after every "/" so long paths break at segment boundaries
+    expect(pathEl.querySelectorAll('wbr')).toHaveLength(missingPath.split('/').length - 1)
+    // notice + regular empty text form one centered, max-360px muted block
+    const block = note.parentElement!
+    expect(block).toHaveClass('max-w-[360px]', 'mx-auto', 'text-center', 'text-muted-foreground')
+    expect(block).toHaveTextContent(/暂无 Mock 规则/)
+  })
+
+  it('shows no notice when the file exists', async () => {
+    const fetchMock = stubMocksFile([{ path: '/tmp/mocks.json', exists: true, custom: true }])
+    renderMock({ mockRules: [] })
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/mocks-file', { cache: 'no-store' }))
+    expect(screen.queryByTestId('mock-config-file-missing')).not.toBeInTheDocument()
+    expect(screen.getByText(/暂无 Mock 规则/)).toBeInTheDocument()
+  })
+
+  it('shows no notice when the default mocks file has not been created yet', async () => {
+    const fetchMock = stubMocksFile([{ path: '/home/me/.meddle/mocks.json', exists: false, custom: false }])
+    renderMock({ mockRules: [] })
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/mocks-file', { cache: 'no-store' }))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(screen.queryByTestId('mock-config-file-missing')).not.toBeInTheDocument()
+    expect(screen.getByText(/暂无 Mock 规则/)).toBeInTheDocument()
+  })
+
+  it('hides the notice after a server mocksUpdated broadcast reports the file now exists', async () => {
+    stubMocksFile([{ path: missingPath, exists: false, custom: true }, { path: missingPath, exists: true, custom: true }])
+    renderMock({ mockRules: [] })
+    expect(await screen.findByTestId('mock-config-file-missing')).toBeInTheDocument()
+    act(() => {
+      window.dispatchEvent(new CustomEvent('mocksUpdated', { detail: [] }))
+    })
+    await vi.waitFor(() => expect(screen.queryByTestId('mock-config-file-missing')).not.toBeInTheDocument())
+  })
+
+  it('re-checks when the rule count changes (first save created the file)', async () => {
+    const fetchMock = stubMocksFile([{ path: missingPath, exists: false, custom: true }, { path: missingPath, exists: true, custom: true }])
+    const statusCalls = () => fetchMock.mock.calls.filter(([url]) => String(url) === '/api/mocks-file').length
+    const renderWith = (mockRules: MockRule[]) => (
+      <div style={{ height: 600 }}>
+        <MockConfig
+          mockRules={mockRules}
+          fetchMocks={vi.fn(async () => undefined)}
+          createMock={vi.fn(async () => null)}
+          updateMock={vi.fn(async () => true)}
+          deleteMock={vi.fn(async () => true)}
+        />
+      </div>
+    )
+    const view = render(renderWith([]))
+    expect(await screen.findByTestId('mock-config-file-missing')).toBeInTheDocument()
+    view.rerender(renderWith(rules))
+    await vi.waitFor(() => expect(statusCalls()).toBe(2))
+    // e.g. the rule is deleted again: the file exists now, so no notice
+    view.rerender(renderWith([]))
+    await vi.waitFor(() => expect(statusCalls()).toBe(3))
+    await vi.waitFor(() => expect(screen.queryByTestId('mock-config-file-missing')).not.toBeInTheDocument())
+  })
+})

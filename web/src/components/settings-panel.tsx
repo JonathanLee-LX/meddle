@@ -50,6 +50,8 @@ import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut
 import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
 import { fetchAppVersion } from '@/lib/app-version'
 import { toast } from '@/components/ui/toast'
+import { MocksFileMissingNote } from '@/components/mocks-file-missing-note'
+import { shouldShowMocksFileMissing, useMocksFileStatus } from '@/hooks/use-mocks-file-status'
 
 interface SettingsPanelProps {
   open?: boolean
@@ -134,6 +136,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
 
   // 配置文件状态
   const [mocksFilePath, setMocksFilePath] = useState('')
+  const { status: mocksFile, refresh: refreshMocksFile } = useMocksFileStatus()
   const [ruleFiles, setRuleFiles] = useState<Array<{ name: string; enabled: boolean; ruleCount: number }>>([])
   const [clientAliases, setClientAliases] = useState<Record<string, string>>({})
   const [newClientIp, setNewClientIp] = useState('')
@@ -324,6 +327,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
       const res = await fetch('/api/refresh-config', { method: 'POST' })
       if (res.ok) {
         const data = await res.json()
+        void refreshMocksFile()
         setAiTestResult('success')
         setAiTestMessage(data.message || '配置已刷新')
         setTimeout(() => {
@@ -348,7 +352,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
         setAiTestMessage('')
       }, 2000)
     }
-  }, [])
+  }, [refreshMocksFile])
 
   const handleDiagnose = useCallback(async () => {
     setDiagnosing(true)
@@ -409,8 +413,10 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
     setSaving(true)
     try {
       await updateSettings({ mocksFilePath })
+      // The server switches files on save (issue #118); re-check the new file.
+      void refreshMocksFile()
       setAiTestResult('success')
-      setAiTestMessage('Mock 文件路径已更新，刷新页面后生效')
+      setAiTestMessage('Mock 文件路径已更新，已切换到新文件')
       toast.success('Mock 文件路径保存成功')
       setTimeout(() => {
         setAiTestResult(null)
@@ -633,6 +639,9 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                   </SaveButton>
                 </div>
                 <p className="text-xs text-muted-foreground">必须是 JSON 格式的 Mock 规则文件</p>
+                {shouldShowMocksFileMissing(mocksFile) ? (
+                  <MocksFileMissingNote testId="settings-mocks-file-missing" />
+                ) : null}
               </div>
             </div>
           </div>
