@@ -650,6 +650,9 @@ export interface MockHandler {
     getMockFilePath(): string;
     loadMockRules(): void;
     saveMockRules(): void;
+    /** Throws MocksFileInvalidError when the mocks file failed to parse (issue #120). */
+    assertMocksWritable(): void;
+    getMocksParseError(): { line: number | null; column: number | null; message: string } | null;
     matchMockRule(url: string, method: string): MockRuleEntry | null;
     buildMockResponseForTest(rule: MockRuleEntry, requestHeaders?: Record<string, any>): { statusCode: number; headers: Record<string, string>; body: string };
     sendMockResponse(req: any, res: any, rule: MockRuleEntry, logInfo: { method: string; source: string; target: string }): void;

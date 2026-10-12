@@ -14,15 +14,18 @@ function reloadMocksFromSettings(ctx: ServerContext): void {
     ctx.broadcastToAllClients({ type: 'mocksUpdated', rules: ctx.mockRules })
 }
 
-export function refreshConfig(ctx: ServerContext): { status: string; message: string; mocksPath: string } {
+export function refreshConfig(ctx: ServerContext): { status: string; message: string; mocksPath: string; mocksParseError?: unknown } {
     ctx.reloadAllRuleFiles()
 
     reloadMocksFromSettings(ctx)
 
+    // Issue #120: surface a broken mocks file instead of reporting a silent empty list.
+    const parseError = ctx.getMocksParseError?.() || null
     return {
         status: 'success',
-        message: '配置已刷新',
+        message: parseError ? '配置已刷新（Mock 文件格式错误，未加载规则）' : '配置已刷新',
         mocksPath: ctx.getMockFilePath(),
+        ...(parseError ? { mocksParseError: parseError } : {}),
     }
 }
 

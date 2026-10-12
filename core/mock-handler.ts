@@ -29,6 +29,115 @@ export function dedupeMockRulesById(rules: MockRuleEntry[]): MockRuleEntry[] {
     return Array.from(byId.values()).sort((a, b) => a.id - b.id)
 }
 
+export interface MocksParseError {
+    /** 1-based line of the parse failure (null when the engine gives no position). */
+    line: number | null
+    /** 1-based column of the parse failure. */
+    column: number | null
+    /** Raw JSON.parse message. */
+    message: string
+}
+
+/** Thrown when a write would overwrite a mocks file that failed to parse (issue #120). */
+export class MocksFileInvalidError extends Error {
+    readonly code = 'MOCKS_FILE_INVALID'
+    constructor(readonly filePath: string, readonly parseError: MocksParseError) {
+        super(formatMocksParseError(filePath, parseError))
+        this.name = 'MocksFileInvalidError'
+    }
+}
+
+export function formatMocksParseError(filePath: string, err: MocksParseError): string {
+    const loc = err.line != null ? `第 ${err.line} 行第 ${err.column} 列：` : ''
+    return `Mock 文件格式错误，已禁止写入以免覆盖: ${filePath} ${loc}${err.message}`
+}
+
+/**
+ * Parse mocks file text. Issue #120: empty / whitespace-only text is an empty
+ * rule list (not an error); anything else that fails JSON.parse returns a
+ * parse error with 1-based line/column.
+ */
+export function parseMocksFileText(text: string): { data: any; error: null } | { data: null; error: MocksParseError } {
+    if (text.replace(/^\uFEFF/, '').trim() === '') return { data: {}, error: null }
+    try {
+        return { data: JSON.parse(text.replace(/^\uFEFF/, '')), error: null }
+    } catch (e: any) {
+        const message = String(e?.message || e)
+        let line: number | null = null
+        let column: number | null = null
+        const body = text.replace(/^\uFEFF/, '')
+        const lc = /\(line (\d+) column (\d+)\)/.exec(message)
+        const pos = /at position (\d+)/.exec(message)
+        const offset = lc ? null : pos ? Number(pos[1]) : findJsonErrorOffset(body)
+        if (lc) {
+            line = Number(lc[1]); column = Number(lc[2])
+        } else {
+            const before = body.slice(0, offset ?? body.length).split('\n')
+            line = before.length; column = before[before.length - 1].length + 1
+        }
+        // Drop V8's quoted source snippet and the "(line x column y)" suffix; position is reported separately.
+        const short = message.replace(/\s*\(line \d+ column \d+\)/, '').split(/,\s*(?:\.\.\.)?"/s)[0].replace(/\s+in JSON at position \d+/, '').trim()
+        return { data: null, error: { line, column, message: short } }
+    }
+}
+
+/**
+ * Offset of the first JSON syntax error (V8 does not always report a
+ * position, e.g. "Unexpected token ']', ... is not valid JSON").
+ */
+export function findJsonErrorOffset(t: string): number {
+    let i = 0
+    const ws = () => { while (i < t.length && ' \t\n\r'.includes(t[i])) i++ }
+    const fail = (): never => { throw i }
+    const str = () => {
+        i++
+        while (i < t.length && t[i] !== '"') {
+            if (t[i] === '\\') i++
+            else if (t.charCodeAt(i) < 0x20) fail()
+            i++
+        }
+        if (i >= t.length) fail()
+        i++
+    }
+    const value = (): void => {
+        ws()
+        const c = t[i]
+        if (c === '{') {
+            i++; ws()
+            if (t[i] === '}') { i++; return }
+            for (;;) {
+                ws(); if (t[i] !== '"') fail(); str(); ws()
+                if (t[i] !== ':') fail(); i++; value(); ws()
+                if (t[i] === ',') { i++; continue }
+                if (t[i] === '}') { i++; return }
+                fail()
+            }
+        } else if (c === '[') {
+            i++; ws()
+            if (t[i] === ']') { i++; return }
+            for (;;) {
+                value(); ws()
+                if (t[i] === ',') { i++; continue }
+                if (t[i] === ']') { i++; return }
+                fail()
+            }
+        } else if (c === '"') str()
+        else if (/[-0-9]/.test(c || '')) {
+            const m = /^-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?/.exec(t.slice(i))
+            if (!m) fail(); i += m![0].length
+        } else {
+            for (const w of ['true', 'false', 'null']) if (t.startsWith(w, i)) { i += w.length; return }
+            fail()
+        }
+    }
+    try {
+        value(); ws()
+        return i < t.length ? i : t.length
+    } catch (at) {
+        return typeof at === 'number' ? Math.min(at, t.length) : t.length
+    }
+}
+
 export function createMockHandler(ctx: ProxyContext): MockHandler {
     const DEFAULT_MOCK_FILE = path.join(ctx.meddleDir, 'mocks.json')
 
@@ -60,6 +169,9 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
 
     /** Path whose contents are currently in ctx.mockRules (null before first load). */
     let loadedMocksPath: string | null = null
+    /** Issue #120: parse failure of the loaded file; while set, every write is refused. */
+    let parseError: MocksParseError | null = null
+    function getMocksParseError(): MocksParseError | null { return parseError }
 
     function loadMockRules(): void {
         const mockFile = getMockFilePath()
@@ -76,7 +188,18 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
         if (watcherState && watcherState.file !== mockFile) startWatcher(mockFile)
         try {
             if (fs.existsSync(mockFile)) {
-                const data = JSON.parse(fs.readFileSync(mockFile, 'utf8'))
+                const parsed = parseMocksFileText(fs.readFileSync(mockFile, 'utf8'))
+                if (parsed.error) {
+                    // Issue #120: never treat a broken file as empty-and-writable.
+                    const wasSame = parseError && parseError.message === parsed.error.message && parseError.line === parsed.error.line
+                    parseError = parsed.error
+                    ctx.mockRules = []
+                    if (!wasSame) console.error(formatMocksParseError(mockFile, parsed.error))
+                    return
+                }
+                if (parseError) console.log(`Mock 文件已修复，恢复正常: ${mockFile}`)
+                parseError = null
+                const data = parsed.data || {}
                 const loaded = Array.isArray(data.rules) ? data.rules : []
                 // Issue #115: never drop rules that share an id — give the
                 // later duplicates fresh ids instead (no silent data loss).
@@ -98,6 +221,7 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
                 // unlink, or a configured path that does not exist yet). The
                 // file is created on the first save; nothing else is touched.
                 ctx.mockRules = []
+                parseError = null
                 if (firstLoadOfThisFile && mockFile !== DEFAULT_MOCK_FILE) {
                     console.warn(`Mock 规则文件不存在，将以空列表开始，首次保存时创建: ${mockFile}`)
                 }
@@ -109,7 +233,25 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
         }
     }
 
+    function assertMocksWritable(): void {
+        const mockFile = getMockFilePath()
+        // Re-validate what is on disk right before writing: the file may have
+        // been broken after the last load (watcher not fired yet, stale tab).
+        if (!parseError && fs.existsSync(mockFile)) {
+            try {
+                const parsed = parseMocksFileText(fs.readFileSync(mockFile, 'utf8'))
+                if (parsed.error) {
+                    parseError = parsed.error
+                    console.error(formatMocksParseError(mockFile, parsed.error))
+                }
+            } catch (_) { /* unreadable: let the write report it */ }
+        }
+        if (parseError) throw new MocksFileInvalidError(mockFile, parseError)
+    }
+
     function saveMockRules(): void {
+        // Issue #120: single choke point for every write — refuse to overwrite a broken file.
+        assertMocksWritable()
         try {
             // Issue #115: keep every rule (re-id duplicates instead of dropping
             // them) and persist a sequence that is above every stored id.
@@ -118,10 +260,19 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
             const mockFile = getMockFilePath()
             const dir = path.dirname(mockFile)
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-            fs.writeFileSync(mockFile, JSON.stringify({ nextId: ctx.mockIdSeq, rules: ctx.mockRules }, null, 2), 'utf8')
+            // Write to a temp file then rename, so a crash never leaves half a file (issue #120).
+            const tmp = `${mockFile}.${process.pid}.${Date.now()}.tmp`
+            fs.writeFileSync(tmp, JSON.stringify({ nextId: ctx.mockIdSeq, rules: ctx.mockRules }, null, 2), 'utf8')
+            try {
+                fs.renameSync(tmp, mockFile)
+            } catch (e) {
+                try { fs.unlinkSync(tmp) } catch (_) { /* ignore */ }
+                throw e
+            }
             proxyDebug(`Mock 规则已保存到 ${mockFile}`)
         } catch (err: any) {
             console.error('保存 mock 规则失败:', err.message)
+            throw err
         }
     }
 
@@ -377,7 +528,7 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
     }
 
     return {
-        getMockFilePath, loadMockRules, saveMockRules, matchMockRule,
+        getMockFilePath, loadMockRules, saveMockRules, assertMocksWritable, getMocksParseError, matchMockRule,
         buildMockResponseForTest, sendMockResponse, loadCustomPathsFromSettings,
         initMockFileWatcher,
     }

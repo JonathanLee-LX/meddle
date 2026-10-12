@@ -6,6 +6,26 @@ export interface MocksFileStatus {
   exists: boolean
   /** A custom mocksFilePath is in effect (not the default <MEDDLE_HOME>/mocks.json). */
   custom: boolean
+  /** Issue #120: false when the file exists but failed to parse; the server refuses every write. */
+  valid: boolean
+  /** Parse failure position reported by the server (single source; never parsed in the browser). */
+  parseError: MocksParseError | null
+}
+
+export interface MocksParseError {
+  line: number | null
+  column: number | null
+  message: string
+}
+
+/** Server reported the active mocks file as unparseable (issue #120). */
+export function isMocksFileInvalid(status: MocksFileStatus | null): status is MocksFileStatus & { parseError: MocksParseError } {
+  return !!status && status.valid === false && !!status.parseError
+}
+
+/** 「第 12 行第 5 列：Unexpected token }」 */
+export function formatMocksParseLocation(err: MocksParseError): string {
+  return err.line != null ? `第 ${err.line} 行第 ${err.column} 列：${err.message}` : err.message
 }
 
 /**
@@ -17,13 +37,24 @@ export function shouldShowMocksFileMissing(status: MocksFileStatus | null): stat
 }
 
 const MOCKS_UPDATED_EVENT = 'mocksUpdated'
+/** Fired by use-mocks when a write was refused (issue #120). */
+export const MOCKS_FILE_STATUS_CHANGED_EVENT = 'mocksFileStatusChanged'
 
 export function parseMocksFileStatus(data: unknown): MocksFileStatus | null {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return null
-  const { path, exists, custom } = data as Record<string, unknown>
+  const { path, exists, custom, valid, parseError } = data as Record<string, unknown>
   if (typeof path !== 'string' || typeof exists !== 'boolean') return null
-  // Older servers without `custom`: treat as default so no notice is shown.
-  return { path, exists, custom: custom === true }
+  let pe: MocksParseError | null = null
+  if (valid === false && parseError && typeof parseError === 'object') {
+    const r = parseError as Record<string, unknown>
+    pe = {
+      line: typeof r.line === 'number' ? r.line : null,
+      column: typeof r.column === 'number' ? r.column : null,
+      message: typeof r.message === 'string' ? r.message : '',
+    }
+  }
+  // Older servers without `custom` / `valid`: treat as default + valid.
+  return { path, exists, custom: custom === true, valid: !pe, parseError: pe }
 }
 
 /**
@@ -52,7 +83,11 @@ export function useMocksFileStatus(refreshKey?: unknown) {
   useEffect(() => {
     const handler = () => { void refresh() }
     window.addEventListener(MOCKS_UPDATED_EVENT, handler)
-    return () => window.removeEventListener(MOCKS_UPDATED_EVENT, handler)
+    window.addEventListener(MOCKS_FILE_STATUS_CHANGED_EVENT, handler)
+    return () => {
+      window.removeEventListener(MOCKS_UPDATED_EVENT, handler)
+      window.removeEventListener(MOCKS_FILE_STATUS_CHANGED_EVENT, handler)
+    }
   }, [refresh])
 
   return { status, refresh }

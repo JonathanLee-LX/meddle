@@ -12,8 +12,35 @@ function setMockJsonHeaders(res: Response): void {
 export type MockRule = ServerContext['mockRules'][number]
 export type MockRuleInput = Partial<Omit<MockRule, 'id'>>
 
-function persistMockRules(ctx: ServerContext): void {
-    ctx.saveMockRules()
+/** Issue #120: refuse before mutating memory, so a rejected write changes nothing. */
+function assertWritable(ctx: ServerContext): void {
+    ctx.assertMocksWritable?.()
+}
+
+function isInvalidFileError(err: unknown): boolean {
+    return (err as { code?: string })?.code === 'MOCKS_FILE_INVALID'
+}
+
+function writeError(res: Response, err: unknown, fallbackStatus: number): void {
+    const e = err as Error & { parseError?: unknown; filePath?: string }
+    if (isInvalidFileError(err)) {
+        res.statusCode = 409
+        res.write(JSON.stringify({ error: e.message, code: 'MOCKS_FILE_INVALID', path: e.filePath, parseError: e.parseError }))
+        return
+    }
+    res.statusCode = e.message === 'Not found' ? 404 : fallbackStatus
+    res.write(JSON.stringify({ error: e.message }))
+}
+
+function persistMockRules(ctx: ServerContext, snapshot: { rules: MockRule[]; seq: number }): void {
+    try {
+        ctx.saveMockRules()
+    } catch (err) {
+        // Roll memory back so it keeps matching the (unchanged) file.
+        ctx.mockRules = snapshot.rules
+        ctx.mockIdSeq = snapshot.seq
+        throw err
+    }
     ctx.broadcastToAllClients({ type: 'mocksUpdated', rules: ctx.mockRules })
 }
 
@@ -21,6 +48,8 @@ export function createMockRule(ctx: ServerContext, data: MockRuleInput): MockRul
     // Issue #115: derive the id from both the sequence and the rules actually
     // present, so a stale sequence can never reuse an existing id. Any
     // client-supplied `id` in `data` is ignored — create never overwrites.
+    assertWritable(ctx)
+    const snapshot = { rules: ctx.mockRules.slice(), seq: ctx.mockIdSeq }
     const id = nextMockRuleId(ctx.mockRules, ctx.mockIdSeq)
     ctx.mockIdSeq = id + 1
     const rule = {
@@ -37,29 +66,33 @@ export function createMockRule(ctx: ServerContext, data: MockRuleInput): MockRul
         enabled: data.enabled !== false
     }
     ctx.mockRules.push(rule)
-    persistMockRules(ctx)
+    persistMockRules(ctx, snapshot)
     return rule
 }
 
 export function updateMockRule(ctx: ServerContext, id: number, data: MockRuleInput): MockRule {
+    assertWritable(ctx)
+    const snapshot = { rules: ctx.mockRules.slice(), seq: ctx.mockIdSeq }
     const idx = ctx.mockRules.findIndex(r => r.id === id)
     if (idx === -1) {
         throw new Error('Not found')
     }
 
     ctx.mockRules[idx] = { ...ctx.mockRules[idx], ...data, id }
-    persistMockRules(ctx)
+    persistMockRules(ctx, snapshot)
     return ctx.mockRules[idx]
 }
 
 export function deleteMockRule(ctx: ServerContext, id: number): void {
+    assertWritable(ctx)
+    const snapshot = { rules: ctx.mockRules.slice(), seq: ctx.mockIdSeq }
     const idx = ctx.mockRules.findIndex(r => r.id === id)
     if (idx === -1) {
         throw new Error('Not found')
     }
 
     ctx.mockRules.splice(idx, 1)
-    persistMockRules(ctx)
+    persistMockRules(ctx, snapshot)
 }
 
 export interface MocksFileStatus {
@@ -73,6 +106,12 @@ export interface MocksFileStatus {
      * file when it is custom — same rule as the server-side startup warning.
      */
     custom: boolean
+    /** Issue #120: false when the file exists but is not valid JSON; every write is then refused. */
+    valid: boolean
+    /** Parse failure (1-based line/column) when `valid` is false, else null. */
+    parseError: { line: number | null; column: number | null; message: string } | null
+    /** Full human-readable error (path + position) when `valid` is false. */
+    error?: string
 }
 
 export function getMocksFileStatus(ctx: ServerContext): MocksFileStatus {
@@ -82,7 +121,13 @@ export function getMocksFileStatus(ctx: ServerContext): MocksFileStatus {
         exists = fs.statSync(file).isFile()
     } catch (_) { /* missing */ }
     const custom = file !== path.resolve(ctx.meddleDir, 'mocks.json')
-    return { path: file, exists, custom }
+    const parseError = (exists && ctx.getMocksParseError?.()) || null
+    const status: MocksFileStatus = { path: file, exists, custom, valid: !parseError, parseError }
+    if (parseError) {
+        const loc = parseError.line != null ? `第 ${parseError.line} 行第 ${parseError.column} 列：` : ''
+        status.error = `Mock 文件格式错误: ${file} ${loc}${parseError.message}`
+    }
+    return status
 }
 
 export function registerMocksRoutes(app: Application, ctx: ServerContext): void {
@@ -108,8 +153,7 @@ export function registerMocksRoutes(app: Application, ctx: ServerContext): void 
                 const rule = createMockRule(ctx, req.body)
                 res.write(JSON.stringify({ status: 'success', rule }))
             } catch (err) {
-                res.statusCode = 400
-                res.write(JSON.stringify({ error: (err as Error).message }))
+                writeError(res, err, 400)
             }
             res.end()
         })
@@ -125,9 +169,8 @@ export function registerMocksRoutes(app: Application, ctx: ServerContext): void 
             try {
                 deleteMockRule(ctx, id)
                 res.write(JSON.stringify({ status: 'success' }))
-            } catch {
-                res.statusCode = 404
-                res.write(JSON.stringify({ error: 'Not found' }))
+            } catch (err) {
+                writeError(res, err, 404)
             }
             res.end()
             return
@@ -140,8 +183,7 @@ export function registerMocksRoutes(app: Application, ctx: ServerContext): void 
                 const rule = updateMockRule(ctx, id, req.body)
                 res.write(JSON.stringify({ status: 'success', rule }))
             } catch (err) {
-                res.statusCode = (err as Error).message === 'Not found' ? 404 : 400
-                res.write(JSON.stringify({ error: (err as Error).message }))
+                writeError(res, err, 400)
             }
             res.end()
             return

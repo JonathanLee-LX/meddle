@@ -123,14 +123,14 @@ describe('switching mocksFilePath at runtime (issue #118)', () => {
         writeMocks(newFile, 10, [rule(4, 'new-x'), rule(9, 'new-y')])
         const { base } = await startProxy(home)
         expect(names(await list(base))).toEqual(['old-a', 'old-b'])
-        expect(await api(base, 'GET', '/api/mocks-file')).toEqual({ path: oldFile, exists: true, custom: false })
+        expect(await api(base, 'GET', '/api/mocks-file')).toMatchObject({ path: oldFile, exists: true, custom: false })
         const oldBytes = readFileSync(oldFile, 'utf8')
 
         setMocksPathOnDisk(home, newFile)
         const refreshed = await api<{ status: string; mocksPath: string }>(base, 'POST', '/api/refresh-config')
         expect(refreshed).toMatchObject({ status: 'success', mocksPath: newFile })
         expect(names(await list(base))).toEqual(['new-x', 'new-y'])
-        expect(await api(base, 'GET', '/api/mocks-file')).toEqual({ path: newFile, exists: true, custom: true })
+        expect(await api(base, 'GET', '/api/mocks-file')).toMatchObject({ path: newFile, exists: true, custom: true })
 
         // create -> new file, id from the new file's counter
         const created = await api<{ rule: Rule }>(base, 'POST', '/api/mocks', { name: 'new-z', urlPattern: '/z' })
@@ -167,12 +167,12 @@ describe('switching mocksFilePath at runtime (issue #118)', () => {
         expect(await list(base)).toEqual([])
         expect(existsSync(newFile)).toBe(false)
         // UI status: the missing file is reported with its absolute path
-        expect(await api(base, 'GET', '/api/mocks-file')).toEqual({ path: newFile, exists: false, custom: true })
+        expect(await api(base, 'GET', '/api/mocks-file')).toMatchObject({ path: newFile, exists: false, custom: true })
 
         const created = await api<{ rule: Rule }>(base, 'POST', '/api/mocks', { name: 'first', urlPattern: '/f' })
         expect(created.rule.id).toBe(1)
         expect(names(readRules(newFile))).toEqual(['first'])
-        expect(await api(base, 'GET', '/api/mocks-file')).toEqual({ path: newFile, exists: true, custom: true })
+        expect(await api(base, 'GET', '/api/mocks-file')).toMatchObject({ path: newFile, exists: true, custom: true })
         expect(readFileSync(oldFile, 'utf8')).toBe(oldBytes)
 
         // the watcher was moved to the new (just created) file
@@ -214,13 +214,13 @@ describe('switching mocksFilePath at runtime (issue #118)', () => {
         expect(Array.isArray(await list(base))).toBe(true)
         // default path not created yet: reported as default (UI stays silent)
         expect(existsSync(join(home, 'mocks.json'))).toBe(false)
-        expect(await api(base, 'GET', '/api/mocks-file')).toEqual({ path: join(home, 'mocks.json'), exists: false, custom: false })
+        expect(await api(base, 'GET', '/api/mocks-file')).toMatchObject({ path: join(home, 'mocks.json'), exists: false, custom: false })
         // relative paths resolve against the proxy cwd (repo root in this
         // harness); point it back into the temp home so nothing lands in the repo
         const absolute = join(home, 'rel', 'mocks.json')
         setMocksPathOnDisk(home, relative(repoRoot, absolute))
         await api(base, 'POST', '/api/refresh-config')
         expect(Array.isArray(await list(base))).toBe(true)
-        expect(await api(base, 'GET', '/api/mocks-file')).toEqual({ path: absolute, exists: false, custom: true })
+        expect(await api(base, 'GET', '/api/mocks-file')).toMatchObject({ path: absolute, exists: false, custom: true })
     }, 30_000)
 })
