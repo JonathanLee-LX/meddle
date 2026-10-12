@@ -10,10 +10,26 @@ const MOCKS_UPDATED_EVENT = 'mocksUpdated'
  * JSON. Show its message (full path + line/column) and make the file-status
  * hook re-fetch so the list / button switch to the error state (stale tab).
  */
-function reportInvalidMocksFile(data: unknown): void {
+/** Issue #123: the editor shows its own inline notice, so it asks for no toast. */
+export interface MockWriteOptions { silentInvalid?: boolean }
+
+let lastWriteRefusedInvalid = false
+/**
+ * Issue #123: true when the most recent create/update was refused with 409
+ * MOCKS_FILE_INVALID. The editor uses it to show its inline notice instead of
+ * a generic error / toast. Reading it resets it.
+ */
+export function consumeMocksWriteRefusedInvalid(): boolean {
+  const v = lastWriteRefusedInvalid
+  lastWriteRefusedInvalid = false
+  return v
+}
+
+function reportInvalidMocksFile(data: unknown, opts: { silent?: boolean } = {}): void {
   const d = data as { code?: string; error?: string } | null
   if (d?.code !== 'MOCKS_FILE_INVALID') return
-  toast.error(d.error || 'Mock 文件格式错误')
+  lastWriteRefusedInvalid = true
+  if (!opts.silent) toast.error(d.error || 'Mock 文件格式错误')
   window.dispatchEvent(new CustomEvent(MOCKS_FILE_STATUS_CHANGED_EVENT))
 }
 
@@ -60,7 +76,7 @@ export function useMocks() {
     return () => window.removeEventListener(MOCKS_UPDATED_EVENT, handler)
   }, [])
 
-  const createMock = useCallback(async (rule: Omit<MockRule, 'id'>) => {
+  const createMock = useCallback(async (rule: Omit<MockRule, 'id'>, opts?: MockWriteOptions) => {
     try {
       const res = await fetch('/api/mocks', {
         method: 'POST',
@@ -72,7 +88,7 @@ export function useMocks() {
         setMockRules((prev) => upsertMockRule(prev, data.rule as MockRule))
         return data.rule as MockRule
       }
-      reportInvalidMocksFile(data)
+      reportInvalidMocksFile(data, { silent: opts?.silentInvalid })
       return null
     } catch (err) {
       console.error('Failed to create mock:', err)
@@ -80,7 +96,7 @@ export function useMocks() {
     }
   }, [])
 
-  const updateMock = useCallback(async (id: number, updates: Partial<MockRule>) => {
+  const updateMock = useCallback(async (id: number, updates: Partial<MockRule>, opts?: MockWriteOptions) => {
     let previous: MockRule | undefined
     setMockRules((prev) => {
       previous = prev.find((rule) => rule.id === id)
@@ -99,7 +115,7 @@ export function useMocks() {
         setMockRules((prev) => upsertMockRule(prev, data.rule as MockRule))
         return true
       }
-      reportInvalidMocksFile(data)
+      reportInvalidMocksFile(data, { silent: opts?.silentInvalid })
       if (previous) {
         const rollback = previous
         setMockRules((prev) => upsertMockRule(prev, rollback))

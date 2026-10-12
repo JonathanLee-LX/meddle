@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { Plus, Trash2, FileText, Code } from 'lucide-react'
 import type { MockRule } from '@/types'
+import type { MockWriteOptions } from '@/hooks/use-mocks'
 import { MockEditorPanel } from '@/components/mock-editor-panel'
 import { toast } from '@/components/ui/toast'
 import { MOCK_OPEN_CREATE_EVENT, type MockOpenCreateDetail } from '@/lib/mock-config-events'
@@ -16,7 +17,7 @@ import { SplitPane } from '@/components/split-pane'
 import { EditorPaneActionsProvider } from '@/components/editor-pane-actions'
 import { mockPaneSplit } from '@/lib/mock-pane-split'
 import { MocksFileInvalidEmptyState, MocksFileMissingEmptyState } from '@/components/mocks-file-missing-note'
-import { formatMocksParseLocation, isMocksFileInvalid, shouldShowMocksFileMissing, useMocksFileStatus } from '@/hooks/use-mocks-file-status'
+import { MOCKS_FILE_STATUS_CHANGED_EVENT, formatMocksParseLocation, isMocksFileInvalid, shouldShowMocksFileMissing, useMocksFileStatus } from '@/hooks/use-mocks-file-status'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 const INVALID_FILE_CREATE_HINT = 'Mock 文件格式错误，修复后才能新增'
@@ -27,8 +28,8 @@ export type { MockOpenCreateDetail }
 interface MockConfigProps {
   mockRules: MockRule[]
   fetchMocks: () => Promise<void>
-  createMock: (rule: Omit<MockRule, 'id'>) => Promise<MockRule | null>
-  updateMock: (id: number, updates: Partial<MockRule>) => Promise<boolean>
+  createMock: (rule: Omit<MockRule, 'id'>, opts?: MockWriteOptions) => Promise<MockRule | null>
+  updateMock: (id: number, updates: Partial<MockRule>, opts?: MockWriteOptions) => Promise<boolean>
   deleteMock: (id: number) => Promise<boolean>
   /** @deprecated Prefer MOCK_OPEN_CREATE_EVENT; kept for callers that still pass prop. */
   initialEditData?: Partial<MockRule> | null
@@ -62,10 +63,10 @@ export function MockConfig({
   const fileInvalidRef = useRef(fileInvalid)
   useEffect(() => {
     fileInvalidRef.current = fileInvalid
-    // Close a create/edit editor opened before the file broke.
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: react to server file status
-    if (fileInvalid) setEditor({ kind: 'idle' })
+    // Issue #123: an editor opened before the file broke stays open (unsaved
+    // input kept); MockEditorPanel disables 「保存」 until the file is fixed.
   }, [fileInvalid])
+  const fileInvalidLocation = isMocksFileInvalid(mocksFile) ? formatMocksParseLocation(mocksFile.parseError) : null
 
   const openCreate = useCallback((initialData?: Partial<MockRule>) => {
     // Issue #120: the server refuses writes while the file is broken.
@@ -101,17 +102,40 @@ export function MockConfig({
     }
   }, [initialEditData, onInitialEditConsumed, openCreate])
 
-  const editingRule = useMemo(() => {
+  // Issue #123: while the file is broken the list is empty; keep editing the
+  // last known copy of the rule instead of closing the editor.
+  const [lastEditingRule, setLastEditingRule] = useState<MockRule | undefined>(undefined)
+  const foundEditingRule = useMemo(() => {
     if (editor.kind !== 'edit') return undefined
     return mockRules.find((rule) => rule.id === editor.ruleId)
   }, [editor, mockRules])
+  useEffect(() => {
+    if (foundEditingRule) setLastEditingRule(foundEditingRule)
+  }, [foundEditingRule])
+  // Issue #123: a rule missing from the list may just mean the file broke
+  // (list emptied before the status arrives). Keep editing the last known copy
+  // and only close once a fresh, valid file status confirms it is gone.
+  const editingMissing = editor.kind === 'edit' && !foundEditingRule
+  const missSinceRef = useRef<{ status: typeof mocksFile } | null>(null)
+  useEffect(() => {
+    if (!editingMissing) { missSinceRef.current = null; return }
+    // Remember which status was current when the rule vanished, then re-check it.
+    missSinceRef.current = { status: mocksFile }
+    window.dispatchEvent(new CustomEvent(MOCKS_FILE_STATUS_CHANGED_EVENT))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on miss transitions
+  }, [editingMissing])
+  const editingRule =
+    foundEditingRule ??
+    (editor.kind === 'edit' && lastEditingRule?.id === editor.ruleId ? lastEditingRule : undefined)
 
   // If edited rule was deleted elsewhere, return to idle
   useEffect(() => {
-    if (editor.kind === 'edit' && !editingRule) {
-      setEditor({ kind: 'idle' })
-    }
-  }, [editor.kind, editingRule])
+    if (!editingMissing) return
+    const since = missSinceRef.current
+    const confirmedGone = !lastEditingRule || lastEditingRule.id !== (editor.kind === 'edit' ? editor.ruleId : -1)
+      || (since !== null && mocksFile !== since.status && !fileInvalid)
+    if (confirmedGone) setEditor({ kind: 'idle' })
+  }, [editingMissing, editor, lastEditingRule, mocksFile, fileInvalid])
 
   const handleToggle = useCallback(
     async (rule: MockRule, enabled: boolean) => {
@@ -314,6 +338,7 @@ export function MockConfig({
                 createMock={createMock}
                 updateMock={updateMock}
                 onSaved={handleSaved}
+                fileInvalidLocation={fileInvalidLocation}
               />
             ) : editingRule ? (
               <MockEditorPanel
@@ -322,6 +347,7 @@ export function MockConfig({
                 createMock={createMock}
                 updateMock={updateMock}
                 onSaved={handleSaved}
+                fileInvalidLocation={fileInvalidLocation}
               />
             ) : null}
           </div>

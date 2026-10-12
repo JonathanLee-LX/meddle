@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { once } from 'node:events'
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -232,5 +232,68 @@ describe('invalid mocks JSON (issue #120)', () => {
         const created = await api(base, 'POST', '/api/mocks', { name: 'first', urlPattern: '/f' })
         expect(created.rule.id).toBe(1)
         expect(names(readRules(file))).toEqual(['first'])
+    }, 30_000)
+})
+
+describe('mocks write through a symlink (issue #123)', () => {
+    it('keeps the symlink, updates the real target and preserves its mode', async () => {
+        const home = makeHome()
+        const realDir = join(home, 'dotfiles')
+        mkdirSync(realDir)
+        const target = join(realDir, 'mocks.json')
+        writeMocks(target, 2, [rule(1, 'a')])
+        chmodSync(target, 0o640)
+        const link = join(home, 'mocks.json')
+        symlinkSync(target, link)
+        const { base } = await startProxy(home)
+
+        await api(base, 'POST', '/api/mocks', { name: 'b', urlPattern: '/b' })
+        await api(base, 'PUT', '/api/mocks/1', { name: 'a2' })
+
+        expect(lstatSync(link).isSymbolicLink()).toBe(true)
+        expect(readlinkSync(link)).toBe(target)
+        expect(names(readRules(target))).toEqual(['a2', 'b'])
+        expect(statSync(target).mode & 0o777).toBe(0o640)
+        expect(readdirSync(realDir).filter((f) => f.endsWith('.tmp'))).toEqual([])
+        expect(readdirSync(home).filter((f) => f.endsWith('.tmp'))).toEqual([])
+    }, 30_000)
+
+    it('relative symlink: target resolved against the link directory', async () => {
+        const home = makeHome()
+        mkdirSync(join(home, 'real'))
+        const target = join(home, 'real', 'm.json')
+        writeMocks(target, 1, [])
+        symlinkSync('real/m.json', join(home, 'mocks.json'))
+        const { base } = await startProxy(home)
+        await api(base, 'POST', '/api/mocks', { name: 'r', urlPattern: '/r' })
+        expect(lstatSync(join(home, 'mocks.json')).isSymbolicLink()).toBe(true)
+        expect(names(readRules(target))).toEqual(['r'])
+    }, 30_000)
+
+    it('dangling symlink whose directory exists: creates the target, link kept', async () => {
+        const home = makeHome()
+        mkdirSync(join(home, 'dotfiles'))
+        const target = join(home, 'dotfiles', 'mocks.json')
+        const link = join(home, 'mocks.json')
+        symlinkSync(target, link)
+        const { base } = await startProxy(home)
+        await api(base, 'POST', '/api/mocks', { name: 'first', urlPattern: '/f' })
+        expect(lstatSync(link).isSymbolicLink()).toBe(true)
+        expect(names(readRules(target))).toEqual(['first'])
+    }, 30_000)
+
+    it('dangling symlink whose directory is missing: clear error, link untouched', async () => {
+        const home = makeHome()
+        const target = join(home, 'missing-dir', 'mocks.json')
+        const link = join(home, 'mocks.json')
+        symlinkSync(target, link)
+        const { base } = await startProxy(home)
+        const r = await raw(base, 'POST', '/api/mocks', { name: 'x', urlPattern: '/x' })
+        expect(r.status).toBe(400)
+        expect(r.body.error).toContain('符号链接')
+        expect(r.body.error).toContain(target)
+        expect(lstatSync(link).isSymbolicLink()).toBe(true)
+        expect(existsSync(join(home, 'missing-dir'))).toBe(false)
+        expect(await list(base)).toEqual([]) // memory rolled back
     }, 30_000)
 })

@@ -138,6 +138,32 @@ export function findJsonErrorOffset(t: string): number {
     }
 }
 
+/**
+ * Issue #123: the real file a write to `file` must replace. Symlinks are
+ * followed so the link itself is never replaced. A dangling link (target
+ * missing) creates the target at the link destination when its directory
+ * exists, otherwise throws a clear error (the link is left untouched).
+ */
+export function resolveMocksWriteTarget(file: string): string {
+    try { return fs.realpathSync(file) } catch (_) { /* missing or dangling */ }
+    let cur = path.resolve(file)
+    for (let hops = 0; hops < 40; hops++) {
+        let st: fs.Stats
+        try { st = fs.lstatSync(cur) } catch (_) { break }
+        if (!st.isSymbolicLink()) break
+        cur = path.resolve(path.dirname(cur), fs.readlinkSync(cur))
+    }
+    if (cur !== path.resolve(file)) {
+        const parent = path.dirname(cur)
+        let parentReal: string
+        try { parentReal = fs.realpathSync(parent) } catch (_) {
+            throw new Error(`Mock 文件是指向不存在位置的符号链接，无法写入: ${file} -> ${cur}（目录 ${parent} 不存在）`)
+        }
+        return path.join(parentReal, path.basename(cur))
+    }
+    return cur
+}
+
 export function createMockHandler(ctx: ProxyContext): MockHandler {
     const DEFAULT_MOCK_FILE = path.join(ctx.meddleDir, 'mocks.json')
 
@@ -260,11 +286,20 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
             const mockFile = getMockFilePath()
             const dir = path.dirname(mockFile)
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+            // Issue #123: write next to the real file so a symlinked mocks file
+            // (e.g. into a dotfiles repo) stays a symlink, and keep its mode/owner.
+            const target = resolveMocksWriteTarget(mockFile)
+            let existing: fs.Stats | null = null
+            try { existing = fs.statSync(target) } catch (_) { /* new file */ }
             // Write to a temp file then rename, so a crash never leaves half a file (issue #120).
-            const tmp = `${mockFile}.${process.pid}.${Date.now()}.tmp`
-            fs.writeFileSync(tmp, JSON.stringify({ nextId: ctx.mockIdSeq, rules: ctx.mockRules }, null, 2), 'utf8')
+            const tmp = `${target}.${process.pid}.${Date.now()}.tmp`
+            fs.writeFileSync(tmp, JSON.stringify({ nextId: ctx.mockIdSeq, rules: ctx.mockRules }, null, 2), { encoding: 'utf8', mode: existing ? existing.mode & 0o7777 : 0o666 })
             try {
-                fs.renameSync(tmp, mockFile)
+                if (existing) {
+                    fs.chmodSync(tmp, existing.mode & 0o7777)
+                    try { fs.chownSync(tmp, existing.uid, existing.gid) } catch (_) { /* not permitted: best effort */ }
+                }
+                fs.renameSync(tmp, target)
             } catch (e) {
                 try { fs.unlinkSync(tmp) } catch (_) { /* ignore */ }
                 throw e
