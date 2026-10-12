@@ -216,7 +216,9 @@ describe('mock-handler createMockHandler', () => {
 
             expect(ctx.mockRules.length).toBe(1)
             expect(ctx.mockRules[0].name).toBe('R1')
-            expect(ctx.mockIdSeq).toBe(3)
+            // nextId is the next id to hand out (issue #115: no off-by-one skip,
+            // but never below max(existing id) + 1).
+            expect(ctx.mockIdSeq).toBe(2)
 
             ctx.mockRules.push({ id: 2, name: 'R2', urlPattern: '/api', method: 'GET', enabled: true, statusCode: 201, delay: 0, bodyType: 'inline', headers: {}, body: 'ok' })
             ctx.mockIdSeq = 3
@@ -227,7 +229,7 @@ describe('mock-handler createMockHandler', () => {
             expect(saved.nextId).toBe(3)
         })
 
-        it('dedupes duplicate ids when loading from file', () => {
+        it('keeps every rule when the file has duplicate ids (issue #115)', () => {
             const mockFile = path.join(tmpDir, 'mocks-dup.json')
             const rules = [
                 { id: 1, name: 'old', urlPattern: '.*', method: '*', enabled: true, statusCode: 200, delay: 0, bodyType: 'inline', headers: {}, body: '{}' },
@@ -239,9 +241,17 @@ describe('mock-handler createMockHandler', () => {
             const handler = createMockHandler(ctx)
             handler.loadMockRules()
 
-            expect(ctx.mockRules).toHaveLength(1)
-            expect(ctx.mockRules[0].name).toBe('new')
-            expect(ctx.mockRules[0].enabled).toBe(false)
+            // Last duplicate keeps the id (same winner as before); the earlier
+            // one is re-id'd instead of silently dropped.
+            expect(ctx.mockRules).toHaveLength(2)
+            expect(ctx.mockRules[0]).toMatchObject({ id: 1, name: 'new', enabled: false })
+            expect(ctx.mockRules[1]).toMatchObject({ id: 2, name: 'old' })
+            expect(ctx.mockIdSeq).toBe(3)
+
+            handler.saveMockRules()
+            const saved = JSON.parse(fs.readFileSync(mockFile, 'utf8'))
+            expect(saved.rules.map((r: any) => [r.id, r.name])).toEqual([[1, 'new'], [2, 'old']])
+            expect(saved.nextId).toBe(3)
         })
     })
 

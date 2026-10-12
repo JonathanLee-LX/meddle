@@ -208,8 +208,14 @@ const serverContext = {
     proxyRecordArr: ctx.proxyRecordArr,
     proxyRecordDetailMap: ctx.proxyRecordDetailMap,
     recordIdSeq: ctx.recordIdSeq,
-    mockRules: ctx.mockRules,
-    mockIdSeq: ctx.mockIdSeq,
+    // Issue #115: mock state must live in exactly one place. Plain copies went
+    // stale because /api handlers run asynchronously (after body parsing),
+    // after handleLocalRequest had already synced serverContext -> ctx, so
+    // every quick create reused the same id and overwrote the previous rule.
+    get mockRules() { return ctx.mockRules },
+    set mockRules(rules) { ctx.mockRules = rules },
+    get mockIdSeq() { return ctx.mockIdSeq },
+    set mockIdSeq(seq) { ctx.mockIdSeq = seq },
     requestPipeline: ctx.requestPipeline,
     builtinLoggerPlugin: ctx.builtinLoggerPlugin,
     shadowCompareTracker: ctx.shadowCompareTracker,
