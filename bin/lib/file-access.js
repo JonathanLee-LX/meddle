@@ -75,23 +75,49 @@ function loadMockRules() {
   return []
 }
 
+function readMocksFileMeta(mocksPath) {
+  try {
+    if (fs.existsSync(mocksPath)) {
+      const data = JSON.parse(fs.readFileSync(mocksPath, 'utf8'))
+      return { nextId: Number(data.nextId) || 0, lastId: Number(data.lastId) || 0 }
+    }
+  } catch (_) {}
+  return { nextId: 0, lastId: 0 }
+}
+
+function maxRuleId(rules) {
+  let maxId = 0
+  rules.forEach(r => {
+    if (r && Number.isInteger(r.id) && r.id > maxId) maxId = r.id
+  })
+  return maxId
+}
+
+/**
+ * Next id to hand out. Shares the server's `nextId` field so ids stay
+ * monotonic across CLI file-mode and the running proxy (issue #115); also
+ * honours the legacy CLI `lastId` field.
+ */
+function nextMockId(rules, meta) {
+  return Math.max(1, meta.nextId || 0, (meta.lastId || 0) + 1, maxRuleId(rules) + 1)
+}
+
 /**
  * Save mock rules to file
  */
-function saveMockRules(rules) {
+function saveMockRules(rules, nextId) {
   const mocksPath = getMocksPath()
   const dir = path.dirname(mocksPath)
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
 
-  // Find max id for sequence
-  let maxId = 0
-  rules.forEach(r => {
-    if (r.id > maxId) maxId = r.id
-  })
-
+  const meta = readMocksFileMeta(mocksPath)
+  const seq = Math.max(nextId || 0, nextMockId(rules, meta))
   const data = {
+    // `nextId` is what the proxy reads; keep it so deleting the newest rule
+    // does not make its id reusable (issue #115). `lastId` kept for older CLIs.
+    nextId: seq,
     rules,
-    lastId: maxId
+    lastId: seq - 1
   }
   fs.writeFileSync(mocksPath, JSON.stringify(data, null, 2), 'utf8')
 }
@@ -103,23 +129,14 @@ function addMockRule(rule) {
   const rules = loadMockRules()
   const mocksPath = getMocksPath()
 
-  // Get next id
-  let nextId = 1
-  try {
-    if (fs.existsSync(mocksPath)) {
-      const data = JSON.parse(fs.readFileSync(mocksPath, 'utf8'))
-      nextId = (data.lastId || 0) + 1
-    }
-  } catch (_) {}
-  if (rules.length > 0) {
-    const maxId = Math.max(...rules.map(r => r.id))
-    if (maxId >= nextId) nextId = maxId + 1
-  }
+  // Issue #115: never reuse an existing (or previously handed-out) id, and
+  // ignore any id the caller put on the rule — add never overwrites.
+  const nextId = nextMockId(rules, readMocksFileMeta(mocksPath))
 
-  rule.id = nextId
-  rules.push(rule)
-  saveMockRules(rules)
-  return rule
+  const created = { ...rule, id: nextId }
+  rules.push(created)
+  saveMockRules(rules, nextId + 1)
+  return created
 }
 
 /**
