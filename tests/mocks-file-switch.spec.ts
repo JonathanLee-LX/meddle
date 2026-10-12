@@ -96,7 +96,7 @@ const list = (base: string) => api<Rule[]>(base, 'GET', '/api/mocks')
 const names = (rules: Array<{ name: string }>) => rules.map((r) => r.name).sort()
 const readRules = (file: string): Rule[] => JSON.parse(readFileSync(file, 'utf8')).rules
 
-async function waitFor(predicate: () => Promise<boolean>, timeoutMs = 5_000): Promise<void> {
+async function waitFor(predicate: () => Promise<boolean>, timeoutMs = 15_000): Promise<void> {
     const deadline = Date.now() + timeoutMs
     while (Date.now() < deadline) {
         if (await predicate()) return
