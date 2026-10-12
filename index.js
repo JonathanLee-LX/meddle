@@ -200,7 +200,10 @@ const { createApp } = require('./dist/server/index')
 let configDiag = null
 
 const serverContext = {
-    currentMocksPath: ctx.currentMocksPath,
+    // Issue #118: the mocks path must also live only on ctx. refresh-config
+    // reset a stale serverContext copy, so the proxy kept the old file.
+    get currentMocksPath() { return ctx.currentMocksPath },
+    set currentMocksPath(p) { ctx.currentMocksPath = p },
     routeRules: ctx.routeRules,
     ruleMap: ctx.ruleMap,
     excludeMap: ctx.excludeMap,

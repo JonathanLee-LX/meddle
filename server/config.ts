@@ -2,11 +2,22 @@ import { Application, Request, Response } from 'express'
 import * as fs from 'fs'
 import { ServerContext } from './index'
 
+/**
+ * Re-resolve the mocks file from settings and load it (issue #118). When the
+ * path changed, the mock handler also moves its file watcher and starts the
+ * id counter from the new file; later saves go to the new file. The old file
+ * is never modified or deleted.
+ */
+function reloadMocksFromSettings(ctx: ServerContext): void {
+    ctx.currentMocksPath = null
+    ctx.loadMockRules()
+    ctx.broadcastToAllClients({ type: 'mocksUpdated', rules: ctx.mockRules })
+}
+
 export function refreshConfig(ctx: ServerContext): { status: string; message: string; mocksPath: string } {
     ctx.reloadAllRuleFiles()
 
-    ctx.currentMocksPath = null
-    ctx.loadMockRules()
+    reloadMocksFromSettings(ctx)
 
     return {
         status: 'success',
@@ -67,8 +78,14 @@ export function registerConfigRoutes(app: Application, ctx: ServerContext): void
         res.setHeader('Content-Type', 'application/json')
         try {
             const settings = req.body
+            const previousMocksPath = ctx.getMockFilePath()
             fs.writeFileSync(ctx.settingsPath, JSON.stringify(settings, null, 2), 'utf8')
             ctx.refreshClientAliases()
+            // Issue #118: a changed mocksFilePath takes effect right away (no
+            // restart / refresh needed). Unrelated settings saves leave the
+            // loaded mocks alone.
+            ctx.currentMocksPath = null
+            if (ctx.getMockFilePath() !== previousMocksPath) reloadMocksFromSettings(ctx)
             res.write(JSON.stringify({ status: 'success', message: '设置已保存' }))
         } catch (error) {
             res.statusCode = 500

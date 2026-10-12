@@ -410,7 +410,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
     try {
       await updateSettings({ mocksFilePath })
       setAiTestResult('success')
-      setAiTestMessage('Mock 文件路径已更新，刷新页面后生效')
+      setAiTestMessage('Mock 文件路径已更新，已切换到新文件')
       toast.success('Mock 文件路径保存成功')
       setTimeout(() => {
         setAiTestResult(null)

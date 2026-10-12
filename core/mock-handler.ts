@@ -44,20 +44,37 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
         return { mocksFilePath: null }
     }
 
+    /**
+     * Effective mocks file. Issue #118: a configured `mocksFilePath` is honoured
+     * even when the file does not exist yet (same as the CLI file mode) — the
+     * proxy starts with an empty rule list and the file is created on the first
+     * save. Previously a missing custom file silently fell back to the default
+     * file, so "switching" to a new file kept reading/writing the old one.
+     */
     function getMockFilePath(): string {
         if (ctx.currentMocksPath) return ctx.currentMocksPath
         const customPaths = loadCustomPathsFromSettings()
-        if (customPaths.mocksFilePath && fs.existsSync(customPaths.mocksFilePath)) {
-            ctx.currentMocksPath = customPaths.mocksFilePath
-            return ctx.currentMocksPath
-        }
-        ctx.currentMocksPath = DEFAULT_MOCK_FILE
-        return DEFAULT_MOCK_FILE
+        ctx.currentMocksPath = customPaths.mocksFilePath || DEFAULT_MOCK_FILE
+        return ctx.currentMocksPath
     }
 
+    /** Path whose contents are currently in ctx.mockRules (null before first load). */
+    let loadedMocksPath: string | null = null
+
     function loadMockRules(): void {
+        const mockFile = getMockFilePath()
+        // Issue #118: switching to another file must not inherit the old
+        // file's id counter or rules; re-reading the same file keeps the
+        // counter monotonic (issue #115).
+        const switched = loadedMocksPath !== null && loadedMocksPath !== mockFile
+        const firstLoadOfThisFile = loadedMocksPath !== mockFile
+        if (switched) {
+            proxyDebug(`Mock 文件切换: ${loadedMocksPath} -> ${mockFile}`)
+            ctx.mockIdSeq = 1
+        }
+        loadedMocksPath = mockFile
+        if (watcherState && watcherState.file !== mockFile) startWatcher(mockFile)
         try {
-            const mockFile = getMockFilePath()
             if (fs.existsSync(mockFile)) {
                 const data = JSON.parse(fs.readFileSync(mockFile, 'utf8'))
                 const loaded = Array.isArray(data.rules) ? data.rules : []
@@ -77,8 +94,13 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
                 ))
                 proxyDebug(`已加载 ${ctx.mockRules.length} 条 Mock 规则 (${mockFile})`)
             } else {
-                // File removed / never created — clear in-memory rules (watcher unlink).
+                // File removed / never created — clear in-memory rules (watcher
+                // unlink, or a configured path that does not exist yet). The
+                // file is created on the first save; nothing else is touched.
                 ctx.mockRules = []
+                if (firstLoadOfThisFile && mockFile !== DEFAULT_MOCK_FILE) {
+                    console.warn(`Mock 规则文件不存在，将以空列表开始，首次保存时创建: ${mockFile}`)
+                }
                 proxyDebug(`Mock 规则文件不存在，已清空内存规则 (${mockFile})`)
             }
         } catch (err: any) {
@@ -94,6 +116,8 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
             ctx.mockRules = ensureUniqueMockRuleIds(ctx.mockRules).rules
             ctx.mockIdSeq = nextMockRuleId(ctx.mockRules, ctx.mockIdSeq)
             const mockFile = getMockFilePath()
+            const dir = path.dirname(mockFile)
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
             fs.writeFileSync(mockFile, JSON.stringify({ nextId: ctx.mockIdSeq, rules: ctx.mockRules }, null, 2), 'utf8')
             proxyDebug(`Mock 规则已保存到 ${mockFile}`)
         } catch (err: any) {
@@ -297,12 +321,15 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
         if (delay > 0) { setTimeout(doSend, delay) } else { doSend() }
     }
 
-    /**
-     * Watch the mocks file for external edits (CLI file-mode / hand edits).
-     * Aligns with route-rules watcher so file-only writes still hot-reload (issue #85).
-     */
-    function initMockFileWatcher(onReload?: () => void): void {
-        const mockFile = getMockFilePath()
+    /** Active file watcher (issue #118: follows the effective mocks file). */
+    let watcherState: { file: string; close: () => void } | null = null
+    let watcherOnReload: (() => void) | undefined
+
+    function startWatcher(mockFile: string): void {
+        if (watcherState) {
+            watcherState.close()
+            proxyDebug(`stopped watching mocks file: ${watcherState.file}`)
+        }
         const dir = path.dirname(mockFile)
         const base = path.basename(mockFile)
         try {
@@ -315,16 +342,38 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
             ignoreInitial: true,
             awaitWriteFinish: { stabilityThreshold: 50, pollInterval: 25 },
         })
+        let closed = false
         const reload = (event: string, changedPath?: string) => {
-            if (changedPath && path.basename(changedPath) !== base) return
+            // Ignore late events from a watcher that was replaced, and any
+            // file in the directory other than the active mocks file.
+            if (closed || !watcherState || watcherState.file !== mockFile) return
+            if (changedPath && path.resolve(changedPath) !== path.resolve(mockFile)) return
             proxyDebug(`mocks file ${event}: ${base}`)
             loadMockRules()
-            if (onReload) onReload()
+            if (watcherOnReload) watcherOnReload()
         }
         watcher.on('change', (p: string) => reload('changed', p))
         watcher.on('add', (p: string) => reload('added', p))
         watcher.on('unlink', (p: string) => reload('removed', p))
+        watcherState = {
+            file: mockFile,
+            close: () => {
+                closed = true
+                watcher.close().catch(() => { /* ignore */ })
+            },
+        }
         proxyDebug(`watching mocks file: ${mockFile}`)
+    }
+
+    /**
+     * Watch the mocks file for external edits (CLI file-mode / hand edits).
+     * Aligns with route-rules watcher so file-only writes still hot-reload (issue #85).
+     * When the effective mocks file changes (issue #118), loadMockRules moves
+     * the watcher to the new file automatically.
+     */
+    function initMockFileWatcher(onReload?: () => void): void {
+        watcherOnReload = onReload
+        startWatcher(getMockFilePath())
     }
 
     return {
