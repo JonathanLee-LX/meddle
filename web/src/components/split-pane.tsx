@@ -21,7 +21,9 @@ interface SplitPaneProps {
 
 /**
  * List | editor split used by the rules, mock, and plugin pages.
- * Wide: fixed pixel list with a draggable separator. Narrow: list stacks above the editor.
+ * >= 768px (md): fixed pixel list with a draggable separator, side by side even
+ * when the shell sidebar is collapsed on a narrow window (#109). < 768px: list
+ * stacks above the editor.
  */
 export function SplitPane({
   testId,
@@ -47,7 +49,7 @@ export function SplitPane({
   return (
     <div
       ref={layoutRef}
-      className="app-page-stack flex min-h-0 flex-1 flex-col gap-0 overflow-hidden lg:flex-row"
+      className="app-page-stack flex min-h-0 flex-1 flex-col gap-0 overflow-hidden md:flex-row"
       data-testid={testId}
       data-layout={layout}
       {...{ [`data-${widthAttr}`]: paneWidth }}
@@ -55,7 +57,7 @@ export function SplitPane({
       <aside
         data-testid={listTestId}
         data-slot={listSlot}
-        className="flex max-h-[46%] min-h-0 w-full shrink-0 flex-col lg:max-h-none"
+        className="flex max-h-[46%] min-h-0 w-full shrink-0 flex-col md:max-h-none"
         style={isWide ? { width: paneWidth, flex: `0 0 ${paneWidth}px` } : undefined}
       >
         {list}
@@ -64,7 +66,7 @@ export function SplitPane({
       <div
         role="separator"
         aria-orientation="horizontal"
-        className="relative h-px w-full shrink-0 bg-border lg:hidden"
+        className="relative h-px w-full shrink-0 bg-border md:hidden"
       />
       <div
         role="separator"
@@ -75,7 +77,7 @@ export function SplitPane({
         aria-label={separatorLabel}
         data-testid={separatorTestId}
         data-resizing={resizing ? 'true' : 'false'}
-        className="group relative z-10 hidden w-px shrink-0 cursor-col-resize self-stretch lg:block"
+        className="group relative z-10 hidden w-px shrink-0 cursor-col-resize self-stretch md:block"
         onMouseDown={onResizeStart}
       >
         <div
