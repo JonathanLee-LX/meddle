@@ -15,8 +15,8 @@ import { MOCK_OPEN_CREATE_EVENT, type MockOpenCreateDetail } from '@/lib/mock-co
 import { SplitPane } from '@/components/split-pane'
 import { EditorPaneActionsProvider } from '@/components/editor-pane-actions'
 import { mockPaneSplit } from '@/lib/mock-pane-split'
-import { MocksFileMissingNote } from '@/components/mocks-file-missing-note'
-import { useMocksFileStatus } from '@/hooks/use-mocks-file-status'
+import { MocksFileMissingEmptyState } from '@/components/mocks-file-missing-note'
+import { shouldShowMocksFileMissing, useMocksFileStatus } from '@/hooks/use-mocks-file-status'
 
 export { MOCK_OPEN_CREATE_EVENT }
 export type { MockOpenCreateDetail }
@@ -166,14 +166,13 @@ export function MockConfig({
                 {mockRules.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="py-8 text-center text-muted-foreground whitespace-normal">
-                      {mocksFile && !mocksFile.exists ? (
-                        <MocksFileMissingNote
-                          path={mocksFile.path}
-                          testId="mock-config-file-missing"
-                          className="mx-auto mb-2 max-w-md justify-center text-left"
-                        />
-                      ) : null}
-                      暂无 Mock 规则，点击「新增规则」或从流量详情一键创建
+                      {shouldShowMocksFileMissing(mocksFile) ? (
+                        <MocksFileMissingEmptyState path={mocksFile.path}>
+                          暂无 Mock 规则，点击「新增规则」或从流量详情一键创建
+                        </MocksFileMissingEmptyState>
+                      ) : (
+                        '暂无 Mock 规则，点击「新增规则」或从流量详情一键创建'
+                      )}
                     </TableCell>
                   </TableRow>
                 ) : (

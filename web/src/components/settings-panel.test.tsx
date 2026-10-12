@@ -108,15 +108,23 @@ describe('SettingsPanel missing mocks file notice (#118)', () => {
 
   it('shows the notice under the mocks path input when the file does not exist', async () => {
     const missing = '/tmp/meddle-home/nested/fresh-mocks.json'
-    stubFetch({ path: missing, exists: false })
+    stubFetch({ path: missing, exists: false, custom: true })
     await openConfigTab()
-    expect(await screen.findByTestId('settings-mocks-file-missing')).toHaveTextContent(
-      `文件不存在：${missing}，保存第一条规则时会创建`,
-    )
+    const note = await screen.findByTestId('settings-mocks-file-missing')
+    // the path is already in the input above, so the note omits it
+    expect(note).toHaveTextContent(/^文件不存在，保存第一条规则时会创建$/)
+    expect(note).not.toHaveTextContent(missing)
   })
 
   it('shows no notice when the file exists', async () => {
-    stubFetch({ path: '/tmp/meddle-home/mocks.json', exists: true })
+    stubFetch({ path: '/tmp/meddle-home/custom-mocks.json', exists: true, custom: true })
+    await openConfigTab()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(screen.queryByTestId('settings-mocks-file-missing')).not.toBeInTheDocument()
+  })
+
+  it('shows no notice when the default mocks file has not been created yet', async () => {
+    stubFetch({ path: '/tmp/meddle-home/mocks.json', exists: false, custom: false })
     await openConfigTab()
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(screen.queryByTestId('settings-mocks-file-missing')).not.toBeInTheDocument()

@@ -67,6 +67,12 @@ export interface MocksFileStatus {
     path: string
     /** False until the first save creates a configured file that does not exist yet (issue #118). */
     exists: boolean
+    /**
+     * True when a custom `mocksFilePath` is in effect (anything other than the
+     * default `<MEDDLE_HOME>/mocks.json`). The UI only warns about a missing
+     * file when it is custom — same rule as the server-side startup warning.
+     */
+    custom: boolean
 }
 
 export function getMocksFileStatus(ctx: ServerContext): MocksFileStatus {
@@ -75,7 +81,8 @@ export function getMocksFileStatus(ctx: ServerContext): MocksFileStatus {
     try {
         exists = fs.statSync(file).isFile()
     } catch (_) { /* missing */ }
-    return { path: file, exists }
+    const custom = file !== path.resolve(ctx.meddleDir, 'mocks.json')
+    return { path: file, exists, custom }
 }
 
 export function registerMocksRoutes(app: Application, ctx: ServerContext): void {

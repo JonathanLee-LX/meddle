@@ -4,20 +4,26 @@ import { useCallback, useEffect, useState } from 'react'
 export interface MocksFileStatus {
   path: string
   exists: boolean
+  /** A custom mocksFilePath is in effect (not the default <MEDDLE_HOME>/mocks.json). */
+  custom: boolean
+}
+
+/**
+ * Show the missing-file notice only for a custom path that does not exist yet.
+ * A default mocks.json that has not been created is normal and stays silent.
+ */
+export function shouldShowMocksFileMissing(status: MocksFileStatus | null): status is MocksFileStatus {
+  return !!status && status.custom && !status.exists
 }
 
 const MOCKS_UPDATED_EVENT = 'mocksUpdated'
 
-/** Notice shown when the configured mocks file does not exist yet. */
-export function mocksFileMissingNotice(path: string): string {
-  return `文件不存在：${path}，保存第一条规则时会创建`
-}
-
 export function parseMocksFileStatus(data: unknown): MocksFileStatus | null {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return null
-  const { path, exists } = data as Record<string, unknown>
+  const { path, exists, custom } = data as Record<string, unknown>
   if (typeof path !== 'string' || typeof exists !== 'boolean') return null
-  return { path, exists }
+  // Older servers without `custom`: treat as default so no notice is shown.
+  return { path, exists, custom: custom === true }
 }
 
 /**

@@ -51,7 +51,7 @@ import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
 import { fetchAppVersion } from '@/lib/app-version'
 import { toast } from '@/components/ui/toast'
 import { MocksFileMissingNote } from '@/components/mocks-file-missing-note'
-import { useMocksFileStatus } from '@/hooks/use-mocks-file-status'
+import { shouldShowMocksFileMissing, useMocksFileStatus } from '@/hooks/use-mocks-file-status'
 
 interface SettingsPanelProps {
   open?: boolean
@@ -639,8 +639,8 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                   </SaveButton>
                 </div>
                 <p className="text-xs text-muted-foreground">必须是 JSON 格式的 Mock 规则文件</p>
-                {mocksFile && !mocksFile.exists ? (
-                  <MocksFileMissingNote path={mocksFile.path} testId="settings-mocks-file-missing" />
+                {shouldShowMocksFileMissing(mocksFile) ? (
+                  <MocksFileMissingNote testId="settings-mocks-file-missing" />
                 ) : null}
               </div>
             </div>
