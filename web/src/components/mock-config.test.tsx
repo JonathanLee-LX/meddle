@@ -123,7 +123,7 @@ describe('MockConfig list|edit (P3 / #90)', () => {
 describe('MockConfig missing mocks file notice (#118)', () => {
   const missingPath = '/tmp/some/very/long/nested/directory/structure/for/meddle/fresh-mocks.json'
 
-  function stubMocksFile(statuses: Array<{ path: string; exists: boolean; custom: boolean }>) {
+  function stubMocksFile(statuses: Array<Record<string, unknown>>) {
     let call = 0
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       if (String(input) === '/api/mocks-file') {
@@ -208,5 +208,53 @@ describe('MockConfig missing mocks file notice (#118)', () => {
     view.rerender(renderWith([]))
     await vi.waitFor(() => expect(statusCalls()).toBe(3))
     await vi.waitFor(() => expect(screen.queryByTestId('mock-config-file-missing')).not.toBeInTheDocument())
+  })
+
+  describe('invalid mocks file (issue #120)', () => {
+    const badPath = '/tmp/some/nested/dir/broken-mocks.json'
+    const invalid = {
+      path: badPath, exists: true, custom: true, valid: false,
+      parseError: { line: 12, column: 5, message: 'Unexpected token }' },
+    }
+
+    it('shows 「文件格式错误」 with path + location instead of the empty text, and disables create', async () => {
+      stubMocksFile([invalid])
+      renderMock({ mockRules: [] })
+      const block = await screen.findByTestId('mock-config-file-invalid')
+      expect(block).toHaveTextContent('文件格式错误')
+      expect(block.parentElement).toHaveClass('max-w-[360px]', 'mx-auto', 'text-center')
+      expect(block.querySelector('.text-destructive')).toHaveTextContent('文件格式错误')
+      const pathEl = screen.getByTestId('mock-config-file-invalid-path')
+      expect(pathEl.textContent).toBe(badPath)
+      expect(pathEl).toHaveClass('font-mono')
+      expect(pathEl.querySelectorAll('wbr')).toHaveLength(badPath.split('/').length - 1)
+      const loc = screen.getByTestId('mock-config-file-invalid-location')
+      expect(loc).toHaveTextContent('第 12 行第 5 列：Unexpected token }')
+      expect(loc).toHaveClass('font-mono', 'text-muted-foreground')
+      expect(screen.queryByText(/暂无 Mock 规则/)).not.toBeInTheDocument()
+      expect(screen.getByTestId('mock-config-create')).toBeDisabled()
+      expect(screen.getByTestId('mock-config-create-wrapper')).toHaveAttribute('aria-label', 'Mock 文件格式错误，修复后才能新增')
+    })
+
+    it('blocks one-click create from traffic while invalid', async () => {
+      stubMocksFile([invalid])
+      renderMock({ mockRules: [] })
+      await screen.findByTestId('mock-config-file-invalid')
+      act(() => {
+        window.dispatchEvent(new CustomEvent(MOCK_OPEN_CREATE_EVENT, { detail: { urlPattern: '/x' } }))
+      })
+      expect(screen.queryByTestId('mock-editor-stub')).not.toBeInTheDocument()
+    })
+
+    it('recovers after the server broadcasts the fixed file', async () => {
+      stubMocksFile([invalid, { path: badPath, exists: true, custom: true, valid: true, parseError: null }])
+      renderMock({ mockRules: [] })
+      await screen.findByTestId('mock-config-file-invalid')
+      act(() => {
+        window.dispatchEvent(new CustomEvent('mocksUpdated', { detail: [] }))
+      })
+      await vi.waitFor(() => expect(screen.queryByTestId('mock-config-file-invalid')).not.toBeInTheDocument())
+      expect(screen.getByTestId('mock-config-create')).not.toBeDisabled()
+    })
   })
 })

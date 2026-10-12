@@ -1,7 +1,21 @@
+import { toast } from '@/components/ui/toast'
+import { MOCKS_FILE_STATUS_CHANGED_EVENT } from '@/hooks/use-mocks-file-status'
 import { useState, useCallback, useEffect } from 'react'
 import type { MockRule } from '@/types'
 
 const MOCKS_UPDATED_EVENT = 'mocksUpdated'
+
+/**
+ * Issue #120: the server refused a write because the mocks file is not valid
+ * JSON. Show its message (full path + line/column) and make the file-status
+ * hook re-fetch so the list / button switch to the error state (stale tab).
+ */
+function reportInvalidMocksFile(data: unknown): void {
+  const d = data as { code?: string; error?: string } | null
+  if (d?.code !== 'MOCKS_FILE_INVALID') return
+  toast.error(d.error || 'Mock 文件格式错误')
+  window.dispatchEvent(new CustomEvent(MOCKS_FILE_STATUS_CHANGED_EVENT))
+}
 
 export function dedupeMockRules(rules: MockRule[]): MockRule[] {
   const byId = new Map<number, MockRule>()
@@ -58,6 +72,7 @@ export function useMocks() {
         setMockRules((prev) => upsertMockRule(prev, data.rule as MockRule))
         return data.rule as MockRule
       }
+      reportInvalidMocksFile(data)
       return null
     } catch (err) {
       console.error('Failed to create mock:', err)
@@ -84,6 +99,7 @@ export function useMocks() {
         setMockRules((prev) => upsertMockRule(prev, data.rule as MockRule))
         return true
       }
+      reportInvalidMocksFile(data)
       if (previous) {
         const rollback = previous
         setMockRules((prev) => upsertMockRule(prev, rollback))
@@ -107,6 +123,7 @@ export function useMocks() {
         setMockRules((prev) => prev.filter((r) => r.id !== id))
         return true
       }
+      reportInvalidMocksFile(data)
       return false
     } catch (err) {
       console.error('Failed to delete mock:', err)

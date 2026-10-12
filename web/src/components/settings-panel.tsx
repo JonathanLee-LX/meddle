@@ -50,8 +50,8 @@ import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut
 import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
 import { fetchAppVersion } from '@/lib/app-version'
 import { toast } from '@/components/ui/toast'
-import { MocksFileMissingNote } from '@/components/mocks-file-missing-note'
-import { shouldShowMocksFileMissing, useMocksFileStatus } from '@/hooks/use-mocks-file-status'
+import { MocksFileInvalidNote, MocksFileMissingNote } from '@/components/mocks-file-missing-note'
+import { formatMocksParseLocation, isMocksFileInvalid, shouldShowMocksFileMissing, useMocksFileStatus } from '@/hooks/use-mocks-file-status'
 
 interface SettingsPanelProps {
   open?: boolean
@@ -639,7 +639,12 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                   </SaveButton>
                 </div>
                 <p className="text-xs text-muted-foreground">必须是 JSON 格式的 Mock 规则文件</p>
-                {shouldShowMocksFileMissing(mocksFile) ? (
+                {isMocksFileInvalid(mocksFile) ? (
+                  <MocksFileInvalidNote
+                    testId="settings-mocks-file-invalid"
+                    location={formatMocksParseLocation(mocksFile.parseError)}
+                  />
+                ) : shouldShowMocksFileMissing(mocksFile) ? (
                   <MocksFileMissingNote testId="settings-mocks-file-missing" />
                 ) : null}
               </div>

@@ -66,3 +66,46 @@ export function MocksFileMissingNote({ className, testId = 'mocks-file-missing-n
     </p>
   )
 }
+
+/**
+ * Unparseable mocks file — Mock list error state (issue #120). Same centered
+ * 360px block as the missing-file state: destructive icon + 「文件格式错误」,
+ * the full path in monospace, then the parse location in muted monospace.
+ * Replaces the 「暂无 Mock 规则」 text: the list is not empty, it is unreadable.
+ */
+export function MocksFileInvalidEmptyState({ path, location }: { path: string; location: string }) {
+  return (
+    <div className="mx-auto flex max-w-[360px] flex-col items-center text-center">
+      <div data-testid="mock-config-file-invalid" role="alert" className="flex flex-col items-center gap-0.5 text-xs">
+        <span className="inline-flex items-center gap-1 text-destructive">
+          <TriangleAlert aria-hidden="true" className="size-3.5 shrink-0" />
+          文件格式错误
+        </span>
+        <span data-testid="mock-config-file-invalid-path" className="font-mono wrap-anywhere text-foreground">
+          <BreakablePath path={path} />
+        </span>
+        <span data-testid="mock-config-file-invalid-location" className="font-mono wrap-anywhere text-muted-foreground">
+          {location}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+/** Unparseable mocks file — inline note under the settings input (no path; it is in the input). */
+export function MocksFileInvalidNote({ location, className, testId = 'mocks-file-invalid-note' }: {
+  location: string
+  className?: string
+  testId?: string
+}) {
+  return (
+    <p
+      data-testid={testId}
+      role="alert"
+      className={cn('flex items-start gap-1 text-xs text-destructive', className)}
+    >
+      <TriangleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+      <span className="min-w-0">文件格式错误，修复前不会写入：<span className="font-mono">{location}</span></span>
+    </p>
+  )
+}

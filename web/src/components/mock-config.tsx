@@ -2,7 +2,7 @@
  * Mock config — full-width list | edit (modules/02-mock).
  * Not traffic B: config-page internal split. Traffic → one-click create lands here with prefill.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -15,8 +15,11 @@ import { MOCK_OPEN_CREATE_EVENT, type MockOpenCreateDetail } from '@/lib/mock-co
 import { SplitPane } from '@/components/split-pane'
 import { EditorPaneActionsProvider } from '@/components/editor-pane-actions'
 import { mockPaneSplit } from '@/lib/mock-pane-split'
-import { MocksFileMissingEmptyState } from '@/components/mocks-file-missing-note'
-import { shouldShowMocksFileMissing, useMocksFileStatus } from '@/hooks/use-mocks-file-status'
+import { MocksFileInvalidEmptyState, MocksFileMissingEmptyState } from '@/components/mocks-file-missing-note'
+import { formatMocksParseLocation, isMocksFileInvalid, shouldShowMocksFileMissing, useMocksFileStatus } from '@/hooks/use-mocks-file-status'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+
+const INVALID_FILE_CREATE_HINT = 'Mock 文件格式错误，修复后才能新增'
 
 export { MOCK_OPEN_CREATE_EVENT }
 export type { MockOpenCreateDetail }
@@ -55,7 +58,21 @@ export function MockConfig({
     void fetchMocks()
   }, [fetchMocks])
 
+  const fileInvalid = isMocksFileInvalid(mocksFile)
+  const fileInvalidRef = useRef(fileInvalid)
+  useEffect(() => {
+    fileInvalidRef.current = fileInvalid
+    // Close a create/edit editor opened before the file broke.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: react to server file status
+    if (fileInvalid) setEditor({ kind: 'idle' })
+  }, [fileInvalid])
+
   const openCreate = useCallback((initialData?: Partial<MockRule>) => {
+    // Issue #120: the server refuses writes while the file is broken.
+    if (fileInvalidRef.current) {
+      toast.error(INVALID_FILE_CREATE_HINT)
+      return
+    }
     setEditor({ kind: 'create', initialData, nonce: Date.now() })
   }, [])
 
@@ -145,10 +162,25 @@ export function MockConfig({
       <>
         <div className="app-pane-bar flex shrink-0 items-center justify-between gap-2 border-b">
           <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Mock 规则</div>
-          <Button variant="outline" size="sm" onClick={() => openCreate()} data-testid="mock-config-create">
-            <Plus data-icon="inline-start" />
-            新增规则
-          </Button>
+          {fileInvalid ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {/* Disabled buttons get no pointer events; the wrapper carries the tooltip. */}
+                <span tabIndex={0} data-testid="mock-config-create-wrapper" aria-label={INVALID_FILE_CREATE_HINT}>
+                  <Button variant="outline" size="sm" disabled data-testid="mock-config-create" className="pointer-events-none">
+                    <Plus data-icon="inline-start" />
+                    新增规则
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent data-testid="mock-config-create-tooltip">{INVALID_FILE_CREATE_HINT}</TooltipContent>
+            </Tooltip>
+          ) : (
+            <Button variant="outline" size="sm" onClick={() => openCreate()} data-testid="mock-config-create">
+              <Plus data-icon="inline-start" />
+              新增规则
+            </Button>
+          )}
         </div>
         <div className="meddle-thin-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
             <Table>
@@ -166,7 +198,12 @@ export function MockConfig({
                 {mockRules.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="py-8 text-center text-muted-foreground whitespace-normal">
-                      {shouldShowMocksFileMissing(mocksFile) ? (
+                      {isMocksFileInvalid(mocksFile) ? (
+                        <MocksFileInvalidEmptyState
+                          path={mocksFile.path}
+                          location={formatMocksParseLocation(mocksFile.parseError)}
+                        />
+                      ) : shouldShowMocksFileMissing(mocksFile) ? (
                         <MocksFileMissingEmptyState path={mocksFile.path}>
                           暂无 Mock 规则，点击「新增规则」或从流量详情一键创建
                         </MocksFileMissingEmptyState>

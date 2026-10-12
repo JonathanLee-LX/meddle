@@ -235,6 +235,8 @@ const serverContext = {
         serverContext.mockIdSeq = ctx.mockIdSeq
     },
     saveMockRules: () => mockHandler.saveMockRules(),
+    assertMocksWritable: () => mockHandler.assertMocksWritable(),
+    getMocksParseError: () => mockHandler.getMocksParseError(),
     reloadCustomPlugins: () => pluginBoot.reloadCustomPlugins(),
     unloadCustomPlugin: (pluginId) => pluginBoot.unloadCustomPlugin(pluginId),
     logRuleMap: () => routeLoader.logRuleMap(),

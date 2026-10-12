@@ -116,6 +116,18 @@ describe('SettingsPanel missing mocks file notice (#118)', () => {
     expect(note).not.toHaveTextContent(missing)
   })
 
+  it('shows the destructive format-error note with location but no path when the file is invalid (#120)', async () => {
+    const bad = '/tmp/meddle-home/broken-mocks.json'
+    stubFetch({ path: bad, exists: true, custom: true, valid: false, parseError: { line: 12, column: 5, message: 'Unexpected token }' } })
+    await openConfigTab()
+    const note = await screen.findByTestId('settings-mocks-file-invalid')
+    expect(note).toHaveClass('text-destructive')
+    expect(note).toHaveTextContent('文件格式错误')
+    expect(note).toHaveTextContent('第 12 行第 5 列：Unexpected token }')
+    expect(note).not.toHaveTextContent(bad)
+    expect(screen.queryByTestId('settings-mocks-file-missing')).not.toBeInTheDocument()
+  })
+
   it('shows no notice when the file exists', async () => {
     stubFetch({ path: '/tmp/meddle-home/custom-mocks.json', exists: true, custom: true })
     await openConfigTab()
