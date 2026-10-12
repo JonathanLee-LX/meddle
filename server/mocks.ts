@@ -1,4 +1,6 @@
 import { Application, Request, Response } from 'express'
+import * as fs from 'fs'
+import * as path from 'path'
 import { ServerContext } from './index'
 import { nextMockRuleId } from '../core/mock-utils'
 
@@ -60,7 +62,32 @@ export function deleteMockRule(ctx: ServerContext, id: number): void {
     persistMockRules(ctx)
 }
 
+export interface MocksFileStatus {
+    /** Absolute path of the mocks file the proxy currently reads and writes. */
+    path: string
+    /** False until the first save creates a configured file that does not exist yet (issue #118). */
+    exists: boolean
+}
+
+export function getMocksFileStatus(ctx: ServerContext): MocksFileStatus {
+    const file = path.resolve(ctx.getMockFilePath())
+    let exists = false
+    try {
+        exists = fs.statSync(file).isFile()
+    } catch (_) { /* missing */ }
+    return { path: file, exists }
+}
+
 export function registerMocksRoutes(app: Application, ctx: ServerContext): void {
+    // API: /api/mocks-file - GET status of the active mocks file (issue #118).
+    // Separate endpoint so GET /api/mocks keeps returning a bare array
+    // (MCP / CLI / older web builds depend on that shape).
+    app.get('/api/mocks-file', (_req: Request, res: Response) => {
+        setMockJsonHeaders(res)
+        res.write(JSON.stringify(getMocksFileStatus(ctx)))
+        res.end()
+    })
+
     // API: /api/mocks - GET (list), POST (create)
     app.route('/api/mocks')
         .get((_req: Request, res: Response) => {

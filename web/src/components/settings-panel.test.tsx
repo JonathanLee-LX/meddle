@@ -89,3 +89,43 @@ describe('SettingsPanel about section (#112)', () => {
     expect(screen.queryByText('版本: 1.0.0')).not.toBeInTheDocument()
   })
 })
+
+describe('SettingsPanel missing mocks file notice (#118)', () => {
+  function stubFetch(mocksFile: unknown) {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const body = String(input) === '/api/mocks-file' ? mocksFile : []
+      return new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } })
+    }))
+  }
+
+  async function openConfigTab() {
+    const user = userEvent.setup()
+    render(<SettingsPanel embedded />)
+    const navigation = screen.getByRole('tablist', { name: '设置分类' })
+    await user.click(within(navigation).getByRole('tab', { name: '配置文件' }))
+    await screen.findByText('Mock 规则文件')
+  }
+
+  it('shows the notice under the mocks path input when the file does not exist', async () => {
+    const missing = '/tmp/meddle-home/nested/fresh-mocks.json'
+    stubFetch({ path: missing, exists: false })
+    await openConfigTab()
+    expect(await screen.findByTestId('settings-mocks-file-missing')).toHaveTextContent(
+      `文件不存在：${missing}，保存第一条规则时会创建`,
+    )
+  })
+
+  it('shows no notice when the file exists', async () => {
+    stubFetch({ path: '/tmp/meddle-home/mocks.json', exists: true })
+    await openConfigTab()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(screen.queryByTestId('settings-mocks-file-missing')).not.toBeInTheDocument()
+  })
+
+  it('shows no notice when the server does not report a status (older server)', async () => {
+    stubFetch([])
+    await openConfigTab()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(screen.queryByTestId('settings-mocks-file-missing')).not.toBeInTheDocument()
+  })
+})
