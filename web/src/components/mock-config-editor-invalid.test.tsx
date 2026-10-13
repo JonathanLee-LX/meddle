@@ -106,6 +106,35 @@ describe('Mock editor while the mocks file is broken (issue #123)', () => {
     expect(saveButton()).toBeDisabled()
   })
 
+  it('notice collapses in place instead of mounting/unmounting, so the form does not jump (issue #125)', async () => {
+    const state = stubServer()
+    render(<Harness />)
+    fireEvent.click(await screen.findByText('/cart/items'))
+    const nameInput = await screen.findByDisplayValue('cart')
+    // reserved wrapper is present (collapsed) before any error
+    const wrap = screen.getByTestId('mock-editor-file-invalid-wrap')
+    expect(wrap).toHaveAttribute('data-visible', 'false')
+    expect(wrap).toHaveClass('grid-rows-[0fr]', 'opacity-0', 'duration-150', 'ease-out', 'motion-reduce:transition-none', '-mb-[var(--ui-content-gap)]')
+    expect(wrap).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    state.invalid = true
+    act(() => { window.dispatchEvent(new CustomEvent('mocksUpdated', { detail: [rule] })) })
+    await screen.findByTestId('mock-editor-file-invalid')
+    expect(screen.getByTestId('mock-editor-file-invalid-wrap')).toBe(wrap) // same node, not remounted
+    expect(wrap).toHaveClass('grid-rows-[1fr]', 'opacity-100')
+    expect(wrap).toHaveAttribute('data-visible', 'true')
+    expect(screen.getByDisplayValue('cart')).toBe(nameInput) // form not remounted
+
+    state.invalid = false
+    act(() => { window.dispatchEvent(new CustomEvent('mocksUpdated', { detail: [rule] })) })
+    await vi.waitFor(() => expect(wrap).toHaveAttribute('data-visible', 'false'))
+    expect(wrap).toHaveClass('grid-rows-[0fr]', 'opacity-0')
+    // text stays while collapsing (no empty flash), but is hidden from AT
+    expect(wrap).toHaveTextContent('第 5 行第 3 列')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('rule deleted elsewhere while the file is valid: editor closes', async () => {
     stubServer()
     render(<Harness />)

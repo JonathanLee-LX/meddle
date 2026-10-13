@@ -358,6 +358,25 @@ describe('mocks write through a symlink (issue #123)', () => {
         }
     }, 120_000)
 
+    it('symlink whose target directory is created after startup gets watched (issue #125)', async () => {
+        const home = makeHome()
+        const realDir = join(home, 'later', 'dotfiles')
+        const target = join(realDir, 'mocks.json')
+        mkdirSync(join(home, 'links'))
+        const link = join(home, 'links', 'mocks.json')
+        symlinkSync(target, link) // dangling: neither 'later' nor 'dotfiles' exists yet
+        setMocksPathOnDisk(home, link)
+        const { base } = await startProxy(home)
+        expect(names(await list(base))).toEqual([])
+        await delay(300) // let the initial watch settle
+        mkdirSync(realDir, { recursive: true })
+        await delay(300)
+        writeMocks(target, 2, [rule(1, 'created-later')])
+        await waitFor(async () => names(await list(base)).includes('created-later'))
+        writeMocks(target, 3, [rule(1, 'created-later'), rule(2, 'edited')])
+        await waitFor(async () => names(await list(base)).includes('edited'))
+    }, 60_000)
+
     it('symlink retargeted to a new directory: an edit right after the switch is not lost', async () => {
         const home = makeHome()
         mkdirSync(join(home, 'd0'))

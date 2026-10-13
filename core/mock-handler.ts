@@ -145,8 +145,8 @@ export function findJsonErrorOffset(t: string): number {
  * missing) creates the target at the link destination when its directory
  * exists, otherwise throws a clear error (the link is left untouched).
  */
-export function resolveMocksWriteTarget(file: string): string {
-    try { return fs.realpathSync(file) } catch (_) { /* missing or dangling */ }
+/** Follow a symlink chain lexically (works for dangling links). */
+function followSymlinkChain(file: string): string {
     let cur = path.resolve(file)
     for (let hops = 0; hops < 40; hops++) {
         let st: fs.Stats
@@ -154,6 +154,12 @@ export function resolveMocksWriteTarget(file: string): string {
         if (!st.isSymbolicLink()) break
         cur = path.resolve(path.dirname(cur), fs.readlinkSync(cur))
     }
+    return cur
+}
+
+export function resolveMocksWriteTarget(file: string): string {
+    try { return fs.realpathSync(file) } catch (_) { /* missing or dangling */ }
+    const cur = followSymlinkChain(file)
     if (cur !== path.resolve(file)) {
         const parent = path.dirname(cur)
         let parentReal: string
@@ -598,7 +604,11 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
         // target (git pull in a dotfiles repo, fixing JSON there), so watch the
         // target's directory too and accept events for either path.
         const resolveTarget = (): string => {
-            try { return resolveMocksWriteTarget(mockFile) } catch (_) { return path.resolve(mockFile) }
+            try { return resolveMocksWriteTarget(mockFile) } catch (_) {
+                // Issue #125: a dangling link whose target directory does not
+                // exist yet still has a destination to wait for.
+                return followSymlinkChain(mockFile)
+            }
         }
         let target = resolveTarget()
         let targetDir: string | null = null
@@ -622,21 +632,36 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
             if (closed || !watcherState || watcherState.file !== mockFile) return
             if (fileSig(mockFile) !== loadedSig) reload(why)
         }
+        // Issue #125: the target directory may not exist yet (dangling link to a
+        // repo that is cloned later). Watch its nearest existing ancestor
+        // instead and move on to the real directory once it shows up.
+        let pendingAncestor: string | null = null
+        const nearestExistingAncestor = (p: string): string => {
+            let cur = path.dirname(p)
+            while (!fs.existsSync(cur) && path.dirname(cur) !== cur) cur = path.dirname(cur)
+            return cur
+        }
         const watchTargetDir = () => {
             const want = path.dirname(target)
             const next = path.resolve(want) === path.resolve(dir) ? null : want
-            if (next === targetDir) return
-            if (targetDir) watcher.unwatch(targetDir)
+            const exists = !!next && fs.existsSync(next)
+            if (next === targetDir && (exists || !next) && !pendingAncestor) return
+            if (targetDir && targetDir !== next) watcher.unwatch(targetDir)
+            if (pendingAncestor && pendingAncestor !== dir) watcher.unwatch(pendingAncestor)
+            pendingAncestor = null
             targetDir = next
-            if (targetDir && fs.existsSync(targetDir)) {
+            if (targetDir && exists) {
                 watcher.add(targetDir)
                 // chokidar emits no 'ready' for add(); re-check a few times
                 // while the new directory watch comes up.
                 for (const ms of [100, 300, 1000]) {
                     setTimeout(() => catchUp('changed while target watch was starting'), ms).unref?.()
                 }
+            } else if (targetDir) {
+                pendingAncestor = nearestExistingAncestor(targetDir)
+                if (path.resolve(pendingAncestor) !== path.resolve(dir)) watcher.add(pendingAncestor)
             }
-            dbg(`target ${target}; extra dir ${targetDir ?? '(none)'}`)
+            dbg(`target ${target}; extra dir ${targetDir ?? '(none)'}${pendingAncestor ? ` (missing; waiting in ${pendingAncestor})` : ''}`)
         }
         watchTargetDir()
         let closed = false
@@ -674,6 +699,13 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
         watcher.on('change', (p: string) => reload('changed', p))
         watcher.on('add', (p: string) => reload('added', p))
         watcher.on('unlink', (p: string) => reload('removed', p))
+        // A missing ancestor of the target directory appeared: re-evaluate.
+        watcher.on('addDir', (p: string) => {
+            if (closed || !pendingAncestor || !targetDir) return
+            const rel = path.relative(path.resolve(p), path.resolve(targetDir))
+            if (rel.startsWith('..') || path.isAbsolute(rel)) return
+            watchTargetDir()
+        })
         watcherState = {
             file: mockFile,
             close: () => {

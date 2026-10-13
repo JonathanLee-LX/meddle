@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { Code, GripVertical, Loader2, Save, TriangleAlert, Wand2 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { consumeMocksWriteRefusedInvalid } from '@/hooks/use-mocks'
@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { cn } from '@/lib/utils'
 import { fixCode } from '@/lib/code-fixer'
 import { formatContent } from '@/lib/formatter'
 import { getAIConfig, isAIConfigValid } from '@/lib/ai-config-store'
@@ -58,6 +59,10 @@ export function MockEditorPanel({
   fileInvalidLocation = null,
 }: MockEditorPanelProps) {
   const fileInvalid = fileInvalidLocation != null
+  // Keep the last location while the notice collapses so its text does not vanish mid-animation.
+  const lastInvalidLocation = useRef<string | null>(null)
+  if (fileInvalidLocation != null) lastInvalidLocation.current = fileInvalidLocation
+  const shownInvalidLocation = fileInvalidLocation ?? lastInvalidLocation.current ?? ''
   const initialForm = useMemo<Omit<MockRule, 'id'>>(() => {
     if (rule) {
       return {
@@ -221,12 +226,31 @@ export function MockEditorPanel({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="app-panel-content">
-        {fileInvalidLocation != null && (
-          <p data-testid="mock-editor-file-invalid" role="alert" className="flex items-start gap-1 text-xs text-destructive">
-            <TriangleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" />
-            <span className="min-w-0">{INVALID_FILE_SAVE_HINT}：<span className="font-mono">{fileInvalidLocation}</span></span>
-          </p>
-        )}
+        {/* Issue #125: collapse instead of mount/unmount so the form below
+            does not jump ~26px. The parent's flex gap is pulled into the
+            collapsing wrapper so a hidden notice leaves no gap. */}
+        <div
+          data-testid="mock-editor-file-invalid-wrap"
+          data-visible={fileInvalid ? 'true' : 'false'}
+          aria-hidden={!fileInvalid}
+          className={cn(
+            '-mb-[var(--ui-content-gap)] grid shrink-0 transition-[grid-template-rows,opacity] duration-150 ease-out motion-reduce:transition-none',
+            fileInvalid ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
+          )}
+        >
+          <div className="min-h-0 overflow-hidden" inert={!fileInvalid || undefined}>
+            <div className="pb-[var(--ui-content-gap)]">
+              <p
+                data-testid={fileInvalid ? 'mock-editor-file-invalid' : undefined}
+                role={fileInvalid ? 'alert' : undefined}
+                className="flex items-start gap-1 text-xs text-destructive"
+              >
+                <TriangleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+                <span className="min-w-0">{INVALID_FILE_SAVE_HINT}：<span className="font-mono">{shownInvalidLocation}</span></span>
+              </p>
+            </div>
+          </div>
+        </div>
         {error && !fileInvalid && (
           <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/20 dark:text-red-300">
             {error}
