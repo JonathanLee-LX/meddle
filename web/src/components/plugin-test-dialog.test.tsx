@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { EditorPaneActionsProvider } from './editor-pane-actions'
 import { PluginTestDialog } from './plugin-test-dialog'
 
@@ -36,7 +36,9 @@ describe('PluginTestDialog embedded code', () => {
       />,
     )
 
-    expect(await screen.findByTestId('plugin-test-code')).toHaveTextContent('exports.plugin')
+    // The editor renders (empty) before the source fetch resolves; findByTestId
+    // returns at that point, so wait for the content itself (issue #116).
+    await waitFor(() => expect(screen.getByTestId('plugin-test-code')).toHaveTextContent('exports.plugin'))
     expect(screen.queryByText('发起真实 HTTP 请求，在请求/响应过程中运行插件代码')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '关闭' })).toBeInTheDocument()
   })
@@ -50,7 +52,9 @@ describe('PluginTestDialog embedded code', () => {
       </EditorPaneActionsProvider>,
     )
 
-    expect(await screen.findByTestId('plugin-test-code')).toHaveTextContent('exports.plugin')
+    // The editor renders (empty) before the source fetch resolves; findByTestId
+    // returns at that point, so wait for the content itself (issue #116).
+    await waitFor(() => expect(screen.getByTestId('plugin-test-code')).toHaveTextContent('exports.plugin'))
     expect(host).toHaveTextContent('发起测试请求')
     expect(screen.queryByRole('button', { name: '关闭' })).not.toBeInTheDocument()
     host.remove()

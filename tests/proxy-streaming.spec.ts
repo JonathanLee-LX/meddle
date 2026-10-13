@@ -159,6 +159,9 @@ function startHttpProxyRequest(targetUrl: string, state: StreamState): HttpProxy
 
 async function connectThroughMitm(): Promise<TLSSocket> {
     const socket = netConnect({ host: '127.0.0.1', port: proxyPort })
+    // Issue #116: a reset on this raw socket after the TLS layer took over had
+    // no listener and surfaced as an unhandled ECONNRESET that hid the real failure.
+    socket.on('error', () => { /* reported through the TLS socket / awaits below */ })
     await once(socket, 'connect')
     socket.write(`CONNECT 127.0.0.1:${upstreamPort} HTTP/1.1\r\nHost: 127.0.0.1:${upstreamPort}\r\nConnection: keep-alive\r\n\r\n`)
 
