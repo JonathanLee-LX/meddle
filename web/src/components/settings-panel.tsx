@@ -50,8 +50,8 @@ import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut
 import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
 import { fetchAppVersion } from '@/lib/app-version'
 import { toast } from '@/components/ui/toast'
-import { BreakablePath, MocksFileInvalidNote, MocksFileLegacyPathNote, MocksFileMissingNote, isRelativeMocksPathInput } from '@/components/mocks-file-missing-note'
-import { formatMocksParseLocation, isMocksFileInvalid, shouldShowMocksFileMissing, useMocksFileStatus } from '@/hooks/use-mocks-file-status'
+import { BreakablePath, MocksFileInvalidNote, MocksFileLegacyPathNote, MocksFileMissingNote } from '@/components/mocks-file-missing-note'
+import { formatMocksParseLocation, isRelativeMocksPathInput, isMocksFileInvalid, shouldShowMocksFileMissing, useMocksFileStatus } from '@/hooks/use-mocks-file-status'
 
 interface SettingsPanelProps {
   open?: boolean

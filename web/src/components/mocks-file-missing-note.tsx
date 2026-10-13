@@ -110,15 +110,6 @@ export function MocksFileInvalidNote({ location, className, testId = 'mocks-file
   )
 }
 
-/** True when the typed mocks path is relative (not empty, not absolute, not ~). */
-export function isRelativeMocksPathInput(value: string): boolean {
-  const v = value.trim()
-  if (!v) return false
-  if (v.startsWith('/') || v.startsWith('\\') || /^[A-Za-z]:[\\/]/.test(v)) return false
-  if (v === '~' || v.startsWith('~/') || v.startsWith('~\\')) return false
-  return true
-}
-
 /**
  * Issue #121 migration notice (below the settings path input, above the help
  * text). Relative paths used to resolve against the proxy's start directory;

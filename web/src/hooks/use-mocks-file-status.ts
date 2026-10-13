@@ -107,3 +107,13 @@ export function useMocksFileStatus(refreshKey?: unknown) {
 
   return { status, refresh }
 }
+
+/** True when the typed mocks path is relative (not empty, not absolute, not ~). */
+export function isRelativeMocksPathInput(value: string): boolean {
+  const v = value.trim()
+  if (!v) return false
+  if (v.startsWith('/') || v.startsWith('\\') || /^[A-Za-z]:[\\/]/.test(v)) return false
+  if (v === '~' || v.startsWith('~/') || v.startsWith('~\\')) return false
+  return true
+}
+
