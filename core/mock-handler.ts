@@ -640,6 +640,7 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
         }
         watchTargetDir()
         let closed = false
+        let trailingCheck: ReturnType<typeof setTimeout> | null = null
         const reload = (event: string, changedPath?: string) => {
             // Ignore late events from a watcher that was replaced, and any
             // file in the directory other than the active mocks file / its target.
@@ -654,6 +655,14 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
             proxyDebug(`mocks file ${event}: ${base}`)
             loadMockRules()
             if (watcherOnReload) watcherOnReload()
+            // Issue #116: chokidar throttles raw fs events per file on the
+            // leading edge (5ms, no trailing emit), so a write landing right
+            // after the one being handled (e.g. broken -> fixed a few ms apart,
+            // especially while the watcher is still starting) can be dropped.
+            // Re-check the file signature once the burst is over.
+            if (trailingCheck) clearTimeout(trailingCheck)
+            trailingCheck = setTimeout(() => { trailingCheck = null; catchUp('changed during a burst of writes') }, 150)
+            trailingCheck.unref?.()
         }
         if (debugWatch) {
             watcher.on('all', (ev: string, p: string) => dbg(`${ev} ${p}`))
@@ -669,6 +678,7 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
             file: mockFile,
             close: () => {
                 closed = true
+                if (trailingCheck) clearTimeout(trailingCheck)
                 watcher.close().catch(() => { /* ignore */ })
             },
         }
