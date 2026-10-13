@@ -138,6 +138,32 @@ export function findJsonErrorOffset(t: string): number {
     }
 }
 
+/**
+ * Issue #123: the real file a write to `file` must replace. Symlinks are
+ * followed so the link itself is never replaced. A dangling link (target
+ * missing) creates the target at the link destination when its directory
+ * exists, otherwise throws a clear error (the link is left untouched).
+ */
+export function resolveMocksWriteTarget(file: string): string {
+    try { return fs.realpathSync(file) } catch (_) { /* missing or dangling */ }
+    let cur = path.resolve(file)
+    for (let hops = 0; hops < 40; hops++) {
+        let st: fs.Stats
+        try { st = fs.lstatSync(cur) } catch (_) { break }
+        if (!st.isSymbolicLink()) break
+        cur = path.resolve(path.dirname(cur), fs.readlinkSync(cur))
+    }
+    if (cur !== path.resolve(file)) {
+        const parent = path.dirname(cur)
+        let parentReal: string
+        try { parentReal = fs.realpathSync(parent) } catch (_) {
+            throw new Error(`Mock 文件是指向不存在位置的符号链接，无法写入: ${file} -> ${cur}（目录 ${parent} 不存在）`)
+        }
+        return path.join(parentReal, path.basename(cur))
+    }
+    return cur
+}
+
 export function createMockHandler(ctx: ProxyContext): MockHandler {
     const DEFAULT_MOCK_FILE = path.join(ctx.meddleDir, 'mocks.json')
 
@@ -173,6 +199,16 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
     let parseError: MocksParseError | null = null
     function getMocksParseError(): MocksParseError | null { return parseError }
 
+    /**
+     * Issue #123 (CI flake root cause): chokidar does not report writes that
+     * land while it is still setting up (ignoreInitial). Remember what was
+     * loaded so the watcher can re-check once it is ready.
+     */
+    let loadedSig: string | null = null
+    function fileSig(file: string): string {
+        try { const st = fs.statSync(file); return `${st.ino}:${st.size}:${st.mtimeMs}` } catch (_) { return 'missing' }
+    }
+
     function loadMockRules(): void {
         const mockFile = getMockFilePath()
         // Issue #118: switching to another file must not inherit the old
@@ -188,6 +224,7 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
         if (watcherState && watcherState.file !== mockFile) startWatcher(mockFile)
         try {
             if (fs.existsSync(mockFile)) {
+                loadedSig = fileSig(mockFile)
                 const parsed = parseMocksFileText(fs.readFileSync(mockFile, 'utf8'))
                 if (parsed.error) {
                     // Issue #120: never treat a broken file as empty-and-writable.
@@ -222,6 +259,7 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
                 // file is created on the first save; nothing else is touched.
                 ctx.mockRules = []
                 parseError = null
+                loadedSig = 'missing'
                 if (firstLoadOfThisFile && mockFile !== DEFAULT_MOCK_FILE) {
                     console.warn(`Mock 规则文件不存在，将以空列表开始，首次保存时创建: ${mockFile}`)
                 }
@@ -260,11 +298,21 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
             const mockFile = getMockFilePath()
             const dir = path.dirname(mockFile)
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+            // Issue #123: write next to the real file so a symlinked mocks file
+            // (e.g. into a dotfiles repo) stays a symlink, and keep its mode/owner.
+            const target = resolveMocksWriteTarget(mockFile)
+            let existing: fs.Stats | null = null
+            try { existing = fs.statSync(target) } catch (_) { /* new file */ }
             // Write to a temp file then rename, so a crash never leaves half a file (issue #120).
-            const tmp = `${mockFile}.${process.pid}.${Date.now()}.tmp`
-            fs.writeFileSync(tmp, JSON.stringify({ nextId: ctx.mockIdSeq, rules: ctx.mockRules }, null, 2), 'utf8')
+            const tmp = `${target}.${process.pid}.${Date.now()}.tmp`
+            fs.writeFileSync(tmp, JSON.stringify({ nextId: ctx.mockIdSeq, rules: ctx.mockRules }, null, 2), { encoding: 'utf8', mode: existing ? existing.mode & 0o7777 : 0o666 })
             try {
-                fs.renameSync(tmp, mockFile)
+                if (existing) {
+                    fs.chmodSync(tmp, existing.mode & 0o7777)
+                    try { fs.chownSync(tmp, existing.uid, existing.gid) } catch (_) { /* not permitted: best effort */ }
+                }
+                fs.renameSync(tmp, target)
+                loadedSig = fileSig(mockFile)
             } catch (e) {
                 try { fs.unlinkSync(tmp) } catch (_) { /* ignore */ }
                 throw e
@@ -486,23 +534,68 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
         try {
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
         } catch (_) { /* ignore */ }
+        const debugWatch = process.env.MEDDLE_DEBUG_WATCH === '1'
+        const t0 = Date.now()
+        const dbg = (msg: string) => { if (debugWatch) console.error(`[watch +${Date.now() - t0}ms] ${msg}`) }
+
+        // Issue #123: when the mocks path is a symlink, edits land on the real
+        // target (git pull in a dotfiles repo, fixing JSON there), so watch the
+        // target's directory too and accept events for either path.
+        const resolveTarget = (): string => {
+            try { return resolveMocksWriteTarget(mockFile) } catch (_) { return path.resolve(mockFile) }
+        }
+        let target = resolveTarget()
+        let targetDir: string | null = null
 
         // Watch the directory (not only the file) so atomic replace / recreate
         // still triggers — same pattern as route-rules watcher.
-        const watcher = chokidar.watch(dir, {
+        const initialTargetDir = path.dirname(target)
+        targetDir = path.resolve(initialTargetDir) !== path.resolve(dir) && fs.existsSync(initialTargetDir) ? initialTargetDir : null
+        // Both directories go into the initial watch so they are ready together.
+        const watcher = chokidar.watch(targetDir ? [dir, targetDir] : dir, {
             ignoreInitial: true,
+            depth: 0,
+            // Follow the symlink target explicitly (below) instead of relying on
+            // chokidar's implicit following, which differs per platform backend.
+            followSymlinks: false,
             awaitWriteFinish: { stabilityThreshold: 50, pollInterval: 25 },
         })
+        const watchTargetDir = () => {
+            const want = path.dirname(target)
+            const next = path.resolve(want) === path.resolve(dir) ? null : want
+            if (next === targetDir) return
+            if (targetDir) watcher.unwatch(targetDir)
+            targetDir = next
+            if (targetDir && fs.existsSync(targetDir)) watcher.add(targetDir)
+            dbg(`target ${target}; extra dir ${targetDir ?? '(none)'}`)
+        }
+        watchTargetDir()
         let closed = false
         const reload = (event: string, changedPath?: string) => {
             // Ignore late events from a watcher that was replaced, and any
-            // file in the directory other than the active mocks file.
+            // file in the directory other than the active mocks file / its target.
             if (closed || !watcherState || watcherState.file !== mockFile) return
-            if (changedPath && path.resolve(changedPath) !== path.resolve(mockFile)) return
+            if (changedPath) {
+                const p = path.resolve(changedPath)
+                if (p !== path.resolve(mockFile) && p !== target) return
+            }
+            // The link itself may have been retargeted: follow the new target.
+            const nextTarget = resolveTarget()
+            if (nextTarget !== target) { target = nextTarget; watchTargetDir() }
             proxyDebug(`mocks file ${event}: ${base}`)
             loadMockRules()
             if (watcherOnReload) watcherOnReload()
         }
+        if (debugWatch) {
+            watcher.on('all', (ev: string, p: string) => dbg(`${ev} ${p}`))
+        }
+        watcher.on('ready', () => {
+            dbg('ready')
+            // Catch up on a write that happened before the watcher was ready.
+            if (closed || !watcherState || watcherState.file !== mockFile) return
+            const sig = fileSig(mockFile)
+            if (sig !== loadedSig) reload('changed before watcher ready')
+        })
         watcher.on('change', (p: string) => reload('changed', p))
         watcher.on('add', (p: string) => reload('added', p))
         watcher.on('unlink', (p: string) => reload('removed', p))

@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react'
-import { Code, GripVertical, Loader2, Save, Wand2 } from 'lucide-react'
+import { Code, GripVertical, Loader2, Save, TriangleAlert, Wand2 } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { consumeMocksWriteRefusedInvalid } from '@/hooks/use-mocks'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -10,6 +12,7 @@ import { formatContent } from '@/lib/formatter'
 import { getAIConfig, isAIConfigValid } from '@/lib/ai-config-store'
 import { validateContent } from '@/lib/syntax-highlight'
 import type { MockRule } from '@/types'
+import type { MockWriteOptions } from '@/hooks/use-mocks'
 import { MonacoEditor } from './monaco-editor'
 import { MockHeadersEditor } from './mock-headers-editor'
 import { EditorPaneActions, useInEditorPane } from '@/components/editor-pane-actions'
@@ -21,10 +24,17 @@ import { toast } from '@/components/ui/toast'
 interface MockEditorPanelProps {
   rule?: MockRule
   initialData?: Partial<MockRule>
-  createMock: (rule: Omit<MockRule, 'id'>) => Promise<MockRule | null>
-  updateMock: (id: number, updates: Partial<MockRule>) => Promise<boolean>
+  createMock: (rule: Omit<MockRule, 'id'>, opts?: MockWriteOptions) => Promise<MockRule | null>
+  updateMock: (id: number, updates: Partial<MockRule>, opts?: MockWriteOptions) => Promise<boolean>
   onSaved?: () => void
+  /**
+   * Issue #123: parse location while the mocks file is broken. The editor
+   * stays open and editable; only 「保存」 is disabled until the file is fixed.
+   */
+  fileInvalidLocation?: string | null
 }
+
+export const INVALID_FILE_SAVE_HINT = 'Mock 文件格式错误，修复后才能保存'
 
 const EMPTY_RULE: Omit<MockRule, 'id'> = {
   name: '',
@@ -45,7 +55,9 @@ export function MockEditorPanel({
   createMock,
   updateMock,
   onSaved,
+  fileInvalidLocation = null,
 }: MockEditorPanelProps) {
+  const fileInvalid = fileInvalidLocation != null
   const initialForm = useMemo<Omit<MockRule, 'id'>>(() => {
     if (rule) {
       return {
@@ -149,6 +161,7 @@ export function MockEditorPanel({
   }
 
   const handleSave = async () => {
+    if (fileInvalid) return
     if (!form.urlPattern.trim()) {
       setError('请填写 URL 匹配')
       return
@@ -176,11 +189,14 @@ export function MockEditorPanel({
 
       const payload = { ...form, headers }
       let saved = false
+      consumeMocksWriteRefusedInvalid()
       if (rule) {
-        saved = await updateMock(rule.id, payload)
+        saved = await updateMock(rule.id, payload, { silentInvalid: true })
       } else {
-        saved = Boolean(await createMock(payload))
+        saved = Boolean(await createMock(payload, { silentInvalid: true }))
       }
+      // Issue #123: file broke while editing — keep the form, the inline notice explains it.
+      if (!saved && consumeMocksWriteRefusedInvalid()) return
       if (!saved) throw new Error('保存 Mock 规则失败')
       toast.success(rule ? 'Mock 规则已更新' : 'Mock 规则已创建')
       onSaved?.()
@@ -195,7 +211,7 @@ export function MockEditorPanel({
 
   useSaveShortcut({
     active: true,
-    enabled: !saving && Boolean(form.urlPattern.trim()),
+    enabled: !saving && !fileInvalid && Boolean(form.urlPattern.trim()),
     priority: SAVE_SHORTCUT_PRIORITY.panel,
     onSave: handleSave,
   })
@@ -205,7 +221,13 @@ export function MockEditorPanel({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="app-panel-content">
-        {error && (
+        {fileInvalidLocation != null && (
+          <p data-testid="mock-editor-file-invalid" role="alert" className="flex items-start gap-1 text-xs text-destructive">
+            <TriangleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+            <span className="min-w-0">{INVALID_FILE_SAVE_HINT}：<span className="font-mono">{fileInvalidLocation}</span></span>
+          </p>
+        )}
+        {error && !fileInvalid && (
           <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/20 dark:text-red-300">
             {error}
           </div>
@@ -344,10 +366,25 @@ export function MockEditorPanel({
       {inPaneBar ? null : <Separator />}
 
       <EditorPaneActions className="flex justify-end gap-2 px-5 py-3">
-        <SaveButton size="sm" onClick={handleSave} disabled={saving || !form.urlPattern.trim()}>
-          {saving ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <Save data-icon="inline-start" />}
-          {saving ? '保存中...' : '保存'}
-        </SaveButton>
+        {fileInvalid ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {/* Disabled buttons get no pointer events; the wrapper carries the tooltip (same as 新增规则). */}
+              <span tabIndex={0} data-testid="mock-editor-save-wrapper" aria-label={INVALID_FILE_SAVE_HINT}>
+                <SaveButton size="sm" disabled className="pointer-events-none">
+                  <Save data-icon="inline-start" />
+                  保存
+                </SaveButton>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent data-testid="mock-editor-save-tooltip">{INVALID_FILE_SAVE_HINT}</TooltipContent>
+          </Tooltip>
+        ) : (
+          <SaveButton size="sm" onClick={handleSave} disabled={saving || !form.urlPattern.trim()}>
+            {saving ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <Save data-icon="inline-start" />}
+            {saving ? '保存中...' : '保存'}
+            </SaveButton>
+        )}
       </EditorPaneActions>
     </div>
   )

@@ -49,7 +49,7 @@ export function createMockRule(ctx: ServerContext, data: MockRuleInput): MockRul
     // present, so a stale sequence can never reuse an existing id. Any
     // client-supplied `id` in `data` is ignored — create never overwrites.
     assertWritable(ctx)
-    const snapshot = { rules: ctx.mockRules.slice(), seq: ctx.mockIdSeq }
+    const snapshot = { rules: structuredClone(ctx.mockRules), seq: ctx.mockIdSeq }
     const id = nextMockRuleId(ctx.mockRules, ctx.mockIdSeq)
     ctx.mockIdSeq = id + 1
     const rule = {
@@ -72,7 +72,7 @@ export function createMockRule(ctx: ServerContext, data: MockRuleInput): MockRul
 
 export function updateMockRule(ctx: ServerContext, id: number, data: MockRuleInput): MockRule {
     assertWritable(ctx)
-    const snapshot = { rules: ctx.mockRules.slice(), seq: ctx.mockIdSeq }
+    const snapshot = { rules: structuredClone(ctx.mockRules), seq: ctx.mockIdSeq }
     const idx = ctx.mockRules.findIndex(r => r.id === id)
     if (idx === -1) {
         throw new Error('Not found')
@@ -85,7 +85,7 @@ export function updateMockRule(ctx: ServerContext, id: number, data: MockRuleInp
 
 export function deleteMockRule(ctx: ServerContext, id: number): void {
     assertWritable(ctx)
-    const snapshot = { rules: ctx.mockRules.slice(), seq: ctx.mockIdSeq }
+    const snapshot = { rules: structuredClone(ctx.mockRules), seq: ctx.mockIdSeq }
     const idx = ctx.mockRules.findIndex(r => r.id === id)
     if (idx === -1) {
         throw new Error('Not found')
