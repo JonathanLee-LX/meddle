@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { once } from 'node:events'
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, unlinkSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -97,7 +97,7 @@ const list = (base: string) => api<Rule[]>(base, 'GET', '/api/mocks')
 const names = (rules: Array<{ name: string }>) => rules.map((r) => r.name).sort()
 const readRules = (file: string): Rule[] => JSON.parse(readFileSync(file, 'utf8')).rules
 
-async function waitFor(predicate: () => Promise<boolean>, timeoutMs = 15_000): Promise<void> {
+async function waitFor(predicate: () => Promise<boolean>, timeoutMs = 5_000): Promise<void> {
     const deadline = Date.now() + timeoutMs
     while (Date.now() < deadline) {
         if (await predicate()) return
@@ -296,4 +296,51 @@ describe('mocks write through a symlink (issue #123)', () => {
         expect(existsSync(join(home, 'missing-dir'))).toBe(false)
         expect(await list(base)).toEqual([]) // memory rolled back
     }, 30_000)
+
+    it('watcher follows the symlink target: direct edits refresh the list, broken -> fixed recovers, retarget followed', async () => {
+        const home = makeHome()
+        const realDir = join(home, 'dotfiles')
+        mkdirSync(realDir)
+        const target = join(realDir, 'mocks.json')
+        writeMocks(target, 2, [rule(1, 'a')])
+        const link = join(home, 'mocks.json')
+        symlinkSync(target, link)
+        const { base } = await startProxy(home)
+        expect(names(await list(base))).toEqual(['a'])
+
+        // e.g. git pull in the dotfiles repo
+        writeMocks(target, 3, [rule(1, 'a'), rule(2, 'pulled')])
+        await waitFor(async () => names(await list(base)).includes('pulled'))
+
+        writeFileSync(target, BROKEN, 'utf8')
+        await waitFor(async () => (await api(base, 'GET', '/api/mocks-file')).valid === false)
+        writeMocks(target, 3, [rule(1, 'fixed')])
+        await waitFor(async () => (await api(base, 'GET', '/api/mocks-file')).valid === true)
+        expect(names(await list(base))).toEqual(['fixed'])
+
+        // the link itself is retargeted to a file in another directory
+        const otherDir = join(home, 'other')
+        mkdirSync(otherDir)
+        const other = join(otherDir, 'mocks.json')
+        writeMocks(other, 2, [rule(1, 'other')])
+        unlinkSync(link)
+        symlinkSync(other, link)
+        await waitFor(async () => names(await list(base)).includes('other'))
+        writeMocks(other, 3, [rule(1, 'other'), rule(2, 'other-edit')])
+        await waitFor(async () => names(await list(base)).includes('other-edit'))
+        expect(lstatSync(link).isSymbolicLink()).toBe(true)
+    }, 60_000)
+
+    it('write that lands while the watcher is still starting is not lost (CI flake root cause)', async () => {
+        const home = makeHome()
+        const { base } = await startProxy(home)
+        for (let round = 0; round < 5; round++) {
+            const file = join(home, `switch-${round}.json`)
+            writeMocks(file, 2, [rule(1, `before-${round}`)])
+            setMocksPathOnDisk(home, file)
+            await api(base, 'POST', '/api/refresh-config') // watcher restarts here
+            writeMocks(file, 3, [rule(1, `before-${round}`), rule(2, `racing-${round}`)]) // immediately
+            await waitFor(async () => names(await list(base)).includes(`racing-${round}`), 3_000)
+        }
+    }, 60_000)
 })
