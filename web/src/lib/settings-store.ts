@@ -114,15 +114,29 @@ export function getCachedSettings(): SystemSettings {
 
 /**
  * 更新设置的部分字段
+ *
+ * Issue #121: only the changed fields are sent (PATCH). The server merges them
+ * into the file on disk, so a long-open tab saving one setting can no longer
+ * revert fields (e.g. mocksFilePath) another tab changed meanwhile.
  */
 export async function updateSettings(updates: Partial<SystemSettings>): Promise<void> {
-  // 确保先加载最新的设置
-  let currentSettings = getCachedSettings()
-  if (!currentSettings || !currentSettings.aiConfig?.apiKey) {
-    currentSettings = await loadSettings()
+  const response = await fetch('/api/settings', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  })
+  if (!response.ok) {
+    console.error('保存设置失败:', response.status)
+    throw new Error('保存设置失败')
   }
-  const newSettings = { ...currentSettings, ...updates }
-  await saveSettings(newSettings)
+  const data = (await response.json().catch(() => null)) as { settings?: Partial<SystemSettings> } | null
+  // Refresh the cache with the merged result (includes other tabs' changes).
+  cachedSettings = {
+    ...DEFAULT_SETTINGS,
+    ...(cachedSettings || {}),
+    ...(data?.settings || {}),
+    ...updates,
+  } as SystemSettings
 }
 
 /**

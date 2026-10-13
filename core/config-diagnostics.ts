@@ -39,7 +39,8 @@ export function createConfigDiagnostics(ctx: ProxyContext, serverContext: Server
                     details: {
                         theme: settings.theme, fontSize: settings.fontSize,
                         aiEnabled: settings.aiConfig?.enabled || false,
-                        customMocksPath: settings.mocksFilePath || null
+                        customMocksPath: settings.mocksFilePath || null,
+                        resolvedMocksPath: mockHandler.getMockFilePath()
                     }
                 })
             } catch (error: any) {

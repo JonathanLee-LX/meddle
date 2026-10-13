@@ -128,6 +128,19 @@ describe('SettingsPanel missing mocks file notice (#118)', () => {
     expect(screen.queryByTestId('settings-mocks-file-missing')).not.toBeInTheDocument()
   })
 
+  it('shows the resolved absolute path the proxy uses, not the raw ~ input (#121)', async () => {
+    const resolved = '/home/alice/x/mocks.json'
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      const body = url === '/api/mocks-file'
+        ? { path: resolved, exists: true, custom: true, valid: true, parseError: null }
+        : url === '/api/settings' ? { mocksFilePath: '~/x/mocks.json' } : []
+      return new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } })
+    }))
+    await openConfigTab()
+    await vi.waitFor(() => expect(screen.getByTestId('settings-mocks-file-resolved').textContent).toBe(resolved))
+  })
+
   it('shows no notice when the file exists', async () => {
     stubFetch({ path: '/tmp/meddle-home/custom-mocks.json', exists: true, custom: true })
     await openConfigTab()

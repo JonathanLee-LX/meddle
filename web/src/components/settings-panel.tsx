@@ -50,7 +50,7 @@ import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut
 import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
 import { fetchAppVersion } from '@/lib/app-version'
 import { toast } from '@/components/ui/toast'
-import { MocksFileInvalidNote, MocksFileMissingNote } from '@/components/mocks-file-missing-note'
+import { BreakablePath, MocksFileInvalidNote, MocksFileMissingNote } from '@/components/mocks-file-missing-note'
 import { formatMocksParseLocation, isMocksFileInvalid, shouldShowMocksFileMissing, useMocksFileStatus } from '@/hooks/use-mocks-file-status'
 
 interface SettingsPanelProps {
@@ -613,7 +613,10 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
             <div className={settingsGroupClassName}>
               <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
                 <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                <span className="text-xs font-mono truncate flex-1">{mocksFilePath || '默认: ~/.meddle/mocks.json'}</span>
+                <span data-testid="settings-mocks-file-resolved" className="text-xs font-mono flex-1 wrap-anywhere" title={mocksFile?.path}>
+                  {/* Issue #121: show the absolute path the proxy actually uses (~ expanded). */}
+                  {mocksFile?.path ? <BreakablePath path={mocksFile.path} /> : (mocksFilePath || '默认: ~/.meddle/mocks.json')}
+                </span>
               </div>
               <div className={settingsGroupClassName}>
                 <Label htmlFor="mocksPath" className="text-xs text-muted-foreground">
@@ -638,7 +641,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                     应用
                   </SaveButton>
                 </div>
-                <p className="text-xs text-muted-foreground">必须是 JSON 格式的 Mock 规则文件</p>
+                <p className="text-xs text-muted-foreground">必须是 JSON 格式的 Mock 规则文件。支持 ~ 表示用户主目录；相对路径相对于 Meddle 配置目录。上方显示实际使用的绝对路径。</p>
                 {isMocksFileInvalid(mocksFile) ? (
                   <MocksFileInvalidNote
                     testId="settings-mocks-file-invalid"

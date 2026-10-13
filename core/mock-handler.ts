@@ -1,5 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
+import * as os from 'os'
 import chokidar from 'chokidar'
 import _debug from 'debug'
 import { getMimeType } from './map-local'
@@ -164,6 +165,21 @@ export function resolveMocksWriteTarget(file: string): string {
     return cur
 }
 
+/**
+ * Issue #121: turn the configured `mocksFilePath` into an absolute path.
+ * `~` / `~/…` expand to the user's home directory; a relative path is
+ * resolved against the meddle directory (MEDDLE_HOME), not the directory the
+ * proxy happened to be started from.
+ */
+export function resolveConfiguredMocksPath(raw: string | null | undefined, meddleDir: string, homeDir: string = os.homedir()): string | null {
+    const v = typeof raw === 'string' ? raw.trim() : ''
+    if (!v) return null
+    let p = v
+    if (p === '~') p = homeDir
+    else if (p.startsWith('~/') || p.startsWith('~\\')) p = path.join(homeDir, p.slice(2))
+    return path.resolve(meddleDir, p)
+}
+
 export function createMockHandler(ctx: ProxyContext): MockHandler {
     const DEFAULT_MOCK_FILE = path.join(ctx.meddleDir, 'mocks.json')
 
@@ -171,7 +187,7 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
         try {
             if (fs.existsSync(ctx.settingsPath)) {
                 const settings = JSON.parse(fs.readFileSync(ctx.settingsPath, 'utf8'))
-                return { mocksFilePath: settings.mocksFilePath || null }
+                return { mocksFilePath: resolveConfiguredMocksPath(settings.mocksFilePath, ctx.meddleDir) }
             }
         } catch (error) {
             console.error('加载自定义配置路径失败:', error)
