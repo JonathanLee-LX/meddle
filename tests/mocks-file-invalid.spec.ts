@@ -331,6 +331,33 @@ describe('mocks write through a symlink (issue #123)', () => {
         expect(lstatSync(link).isSymbolicLink()).toBe(true)
     }, 60_000)
 
+    it('last write of a rapid burst is not lost (issue #128: chokidar drops events inside its 5ms throttle)', async () => {
+        // A burst right after start-up is where the dropped trailing event
+        // showed up in CI; repeat it across fresh proxies to make it likely.
+        const spin = (ms: number) => { const end = Date.now() + ms; while (Date.now() < end) { /* stay inside chokidar's throttle window */ } }
+        for (let round = 1; round <= 6; round++) {
+            const home = makeHome()
+            const dir = join(home, 'dotfiles')
+            mkdirSync(dir)
+            const target = join(dir, 'mocks.json')
+            writeMocks(target, 2, [rule(1, 'start')])
+            symlinkSync(target, join(home, 'mocks.json'))
+            const { base } = await startProxy(home)
+            for (let burst = 0; burst < 5; burst++) {
+                writeMocks(target, 3, [rule(1, `pulled${burst}`)])
+                spin(1)
+                writeFileSync(target, BROKEN, 'utf8')
+                spin(2)
+                writeMocks(target, 3, [rule(1, `fixed${round}-${burst}`)])
+                await waitFor(async () => {
+                    const f = await api(base, 'GET', '/api/mocks-file')
+                    return f.valid === true && names(await list(base)).includes(`fixed${round}-${burst}`)
+                }, 3_000)
+                await delay(20 * burst)
+            }
+        }
+    }, 120_000)
+
     it('symlink retargeted to a new directory: an edit right after the switch is not lost', async () => {
         const home = makeHome()
         mkdirSync(join(home, 'd0'))
