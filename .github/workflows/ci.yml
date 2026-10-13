@@ -55,4 +55,5 @@ jobs:
         run: pnpm test
 
       - name: Test (web)
+        timeout-minutes: 10
         run: cd web && pnpm run test:run

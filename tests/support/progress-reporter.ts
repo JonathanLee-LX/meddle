@@ -11,4 +11,9 @@ export default class ProgressReporter implements Reporter {
     onTestModuleStart(m: TestModule): void { console.log(`[progress ${this.ts()}] START ${m.moduleId}`) }
     onTestModuleEnd(m: TestModule): void { console.log(`[progress ${this.ts()}] END   ${m.moduleId} (${m.state()})`) }
     onTestCaseReady(t: TestCase): void { console.log(`[progress ${this.ts()}]   test ${t.fullName}`) }
+    onTestCaseResult(t: TestCase): void {
+        const d = t.diagnostic()
+        const dur = d ? `${d.duration.toFixed(0)}ms` : 'n/a'
+        console.log(`[progress ${this.ts()}]   done ${t.fullName} (${t.result().state}, ${dur})`)
+    }
 }
