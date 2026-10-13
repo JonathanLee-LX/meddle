@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SettingsPanel } from './settings-panel'
+import { updateSettings } from '@/lib/settings-store'
 
 vi.mock('@/components/theme-provider', () => ({
   useTheme: () => ({
@@ -160,5 +161,87 @@ describe('SettingsPanel missing mocks file notice (#118)', () => {
     await openConfigTab()
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(screen.queryByTestId('settings-mocks-file-missing')).not.toBeInTheDocument()
+  })
+})
+
+describe('SettingsPanel legacy relative mocks path notice (#121)', () => {
+  const oldPath = '/Users/alice/projects/app/team/mocks.json'
+  const newPath = '/Users/alice/.meddle/team/mocks.json'
+
+  function stub(legacy: unknown) {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const body = String(input) === '/api/mocks-file'
+        ? { path: newPath, exists: false, custom: true, valid: true, parseError: null, legacyMocksPath: legacy }
+        : []
+      return new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } })
+    }))
+  }
+
+  async function open() {
+    const user = userEvent.setup()
+    render(<SettingsPanel embedded />)
+    await user.click(within(screen.getByRole('tablist', { name: '设置分类' })).getByRole('tab', { name: '配置文件' }))
+    await screen.findByText('Mock 规则文件')
+    return user
+  }
+
+  it('shows both paths for a relative input; 「改用此路径」 only fills the input (no save) and the notice hides', async () => {
+    vi.mocked(updateSettings).mockClear()
+    stub({ configured: 'team/mocks.json', oldPath, newPath })
+    const user = await open()
+    expect(screen.getByTestId('settings-mocks-file-current-label')).toHaveTextContent('当前使用')
+    expect(screen.queryByText(/上方显示实际使用的绝对路径/)).not.toBeInTheDocument()
+
+    const input = screen.getByLabelText(/自定义 Mock 规则文件路径/) as HTMLInputElement
+    await user.clear(input)
+    await user.type(input, 'team/mocks.json')
+    const wrap = await screen.findByTestId('settings-mocks-file-legacy-wrap')
+    await vi.waitFor(() => expect(wrap).toHaveAttribute('data-visible', 'true'))
+    const note = screen.getByTestId('settings-mocks-file-legacy')
+    expect(note).toHaveTextContent('相对路径的解析规则已变更，当前可能读不到原来的 Mock 文件')
+    expect(note).toHaveClass('border-l-2', 'border-amber-500')
+    expect(note.className).not.toMatch(/destructive|red/)
+    const oldEl = screen.getByTestId('settings-mocks-file-legacy-old')
+    expect(oldEl.textContent).toBe(`原来读取：${oldPath}`)
+    expect(oldEl.querySelectorAll('wbr')).toHaveLength(oldPath.split('/').length - 1)
+    expect(oldEl).toHaveClass('font-mono')
+    const newEl = screen.getByTestId('settings-mocks-file-legacy-new')
+    expect(newEl.textContent).toBe(`现在读取：${newPath}（文件不存在）`)
+    expect(newEl.querySelectorAll('wbr')).toHaveLength(newPath.split('/').length - 1)
+    expect(wrap).toHaveClass('duration-150')
+    // notice sits between the input and the help text
+    const help = screen.getByText(/必须是 JSON 格式的 Mock 规则文件/)
+    expect(input.compareDocumentPosition(wrap) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(wrap.compareDocumentPosition(help) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // no duplicate 「文件不存在」 note
+    expect(screen.queryByTestId('settings-mocks-file-missing')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '改用此路径' }))
+    expect(input.value).toBe(oldPath)
+    // other settings (e.g. zoom) may sync on mount, but the path is never saved
+    expect(vi.mocked(updateSettings).mock.calls.filter(([u]) => 'mocksFilePath' in (u as object))).toEqual([])
+    expect(wrap).toHaveAttribute('data-visible', 'false')
+    expect(wrap).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('hides for an empty input and shows again for a relative one', async () => {
+    stub({ configured: 'team/mocks.json', oldPath, newPath })
+    const user = await open()
+    const input = screen.getByLabelText(/自定义 Mock 规则文件路径/) as HTMLInputElement
+    const wrap = await screen.findByTestId('settings-mocks-file-legacy-wrap')
+    await user.clear(input)
+    expect(wrap).toHaveAttribute('data-visible', 'false')
+    await user.type(input, 'x.json')
+    expect(wrap).toHaveAttribute('data-visible', 'true')
+    await user.clear(input)
+    await user.type(input, '~/x.json')
+    expect(wrap).toHaveAttribute('data-visible', 'false')
+  })
+
+  it('renders nothing when the server reports no legacy path', async () => {
+    stub(null)
+    await open()
+    await screen.findByTestId('settings-mocks-file-resolved')
+    expect(screen.queryByTestId('settings-mocks-file-legacy-wrap')).not.toBeInTheDocument()
   })
 })

@@ -109,3 +109,68 @@ export function MocksFileInvalidNote({ location, className, testId = 'mocks-file
     </p>
   )
 }
+
+/** True when the typed mocks path is relative (not empty, not absolute, not ~). */
+export function isRelativeMocksPathInput(value: string): boolean {
+  const v = value.trim()
+  if (!v) return false
+  if (v.startsWith('/') || v.startsWith('\\') || /^[A-Za-z]:[\\/]/.test(v)) return false
+  if (v === '~' || v.startsWith('~/') || v.startsWith('~\\')) return false
+  return true
+}
+
+/**
+ * Issue #121 migration notice (below the settings path input, above the help
+ * text). Relative paths used to resolve against the proxy's start directory;
+ * shows both absolute paths. 「改用此路径」 only fills the input — the user
+ * still has to click 「应用」. Collapses (≤150ms) once the input is no longer a
+ * relative path.
+ */
+export function MocksFileLegacyPathNote({ oldPath, newPath, visible, onUseOldPath }: {
+  oldPath: string
+  newPath: string
+  visible: boolean
+  onUseOldPath: () => void
+}) {
+  return (
+    <div
+      data-testid="settings-mocks-file-legacy-wrap"
+      data-visible={visible ? 'true' : 'false'}
+      aria-hidden={!visible}
+      className={cn(
+        'grid transition-[grid-template-rows,opacity] duration-150 ease-out motion-reduce:transition-none',
+        visible ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
+      )}
+    >
+      {/* Content stays mounted so the collapse animates instead of jumping. */}
+      <div className="min-h-0 overflow-hidden" inert={!visible || undefined}>
+          <div
+            data-testid="settings-mocks-file-legacy"
+            role={visible ? 'status' : undefined}
+            className="flex items-start gap-1.5 border-l-2 border-amber-500 py-0.5 pl-2 text-xs dark:border-amber-400"
+          >
+            <TriangleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div className="min-w-0 space-y-1">
+              <p className="text-foreground">相对路径的解析规则已变更，当前可能读不到原来的 Mock 文件</p>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span data-testid="settings-mocks-file-legacy-old" className="min-w-0 font-mono wrap-anywhere text-muted-foreground">
+                  原来读取：<BreakablePath path={oldPath} />
+                </span>
+                <button
+                  type="button"
+                  data-testid="settings-mocks-file-legacy-use"
+                  onClick={onUseOldPath}
+                  className="shrink-0 rounded-sm text-foreground underline underline-offset-2 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  改用此路径
+                </button>
+              </div>
+              <p data-testid="settings-mocks-file-legacy-new" className="font-mono wrap-anywhere text-muted-foreground">
+                现在读取：<BreakablePath path={newPath} />（文件不存在）
+              </p>
+            </div>
+          </div>
+      </div>
+    </div>
+  )
+}

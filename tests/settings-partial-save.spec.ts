@@ -6,7 +6,7 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
-import { resolveConfiguredMocksPath } from '../core/mock-handler'
+import { detectLegacyMocksPath, resolveConfiguredMocksPath } from '../core/mock-handler'
 
 /**
  * Issue #121: a stale tab saving one setting must not revert fields another
@@ -44,10 +44,12 @@ async function reservePort(): Promise<number> {
     return port
 }
 
-async function startProxy(home: string, env: Record<string, string> = {}): Promise<string> {
+const outputs = new Map<string, string[]>()
+
+async function startProxy(home: string, env: Record<string, string> = {}, cwd: string = repoRoot): Promise<string> {
     const port = await reservePort()
     const child = spawn(process.execPath, [join(repoRoot, 'index.js')], {
-        cwd: repoRoot,
+        cwd,
         env: { ...process.env, ...env, MEDDLE_HOME: home, MEDDLE_HEADLESS: '1', PORT: String(port) },
         stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -56,6 +58,7 @@ async function startProxy(home: string, env: Record<string, string> = {}): Promi
     child.stdout.on('data', (c) => output.push(c.toString()))
     child.stderr.on('data', (c) => output.push(c.toString()))
     const base = `http://127.0.0.1:${port}`
+    outputs.set(base, output)
     const deadline = Date.now() + 15_000
     while (Date.now() < deadline) {
         if (child.exitCode !== null) throw new Error(`proxy exited early: ${output.join('')}`)
@@ -149,5 +152,61 @@ describe('resolveConfiguredMocksPath (issue #121)', () => {
         ['~bob/m.json', '/srv/meddle-home/~bob/m.json'],
     ])('%j -> %j', (raw, expected) => {
         expect(resolveConfiguredMocksPath(raw, meddle, user)).toBe(expected)
+    })
+})
+
+describe('legacy relative mocksFilePath notice (issue #121 migration)', () => {
+    function setup(opts: { oldExists: boolean; newExists: boolean; configured?: string }) {
+        const home = tmp('meddle-121-home-')
+        const startDir = tmp('meddle-121-cwd-')
+        const configured = opts.configured ?? 'team/mocks.json'
+        const oldPath = join(startDir, 'team', 'mocks.json')
+        const newPath = join(home, 'team', 'mocks.json')
+        const body = JSON.stringify({ nextId: 2, rules: [{ id: 1, name: 'legacy', urlPattern: '/l' }] })
+        if (opts.oldExists) { mkdirSync(join(startDir, 'team')); writeFileSync(oldPath, body, 'utf8') }
+        if (opts.newExists) { mkdirSync(join(home, 'team')); writeFileSync(newPath, body, 'utf8') }
+        const settingsText = JSON.stringify({ theme: 'light', mocksFilePath: configured }, null, 2)
+        writeFileSync(join(home, 'settings.json'), settingsText, 'utf8')
+        return { home, startDir, oldPath, newPath }
+    }
+
+    it('old location exists, new missing: notice in /api/mocks-file, diagnostics and the startup log (once); no migration', async () => {
+        const { home, startDir, oldPath, newPath } = setup({ oldExists: true, newExists: false })
+        const base = await startProxy(home, {}, startDir)
+        const before = readFileSync(join(home, 'settings.json'), 'utf8')
+        const status = await call(base, 'GET', '/api/mocks-file')
+        expect(status.path).toBe(newPath)
+        expect(status.legacyMocksPath).toEqual({ configured: 'team/mocks.json', oldPath, newPath })
+        const doctor = await call(base, 'GET', '/api/config-doctor')
+        expect(doctor.warnings.join('\n')).toContain(oldPath)
+        await call(base, 'POST', '/api/refresh-config')
+        await call(base, 'GET', '/api/mocks-file')
+        const log = outputs.get(base)!.join('')
+        const notices = log.split('\n').filter((l) => l.includes('按旧规则'))
+        expect(notices).toHaveLength(1)
+        expect(notices[0]).toContain(oldPath)
+        expect(notices[0]).toContain(newPath)
+        // never migrated / rewritten
+        expect(readFileSync(join(home, 'settings.json'), 'utf8')).toBe(before)
+        expect(readSettings(home).mocksFilePath).toBe('team/mocks.json')
+        expect(existsSync(newPath)).toBe(false)
+    }, 30_000)
+
+    it.each([
+        ['new location exists', { oldExists: true, newExists: true }],
+        ['old location missing', { oldExists: false, newExists: false }],
+        ['absolute path configured', { oldExists: true, newExists: false, configured: '/abs/mocks.json' }],
+        ['~ path configured', { oldExists: true, newExists: false, configured: '~/team/mocks.json' }],
+    ])('no notice when %s', async (_n, opts) => {
+        const { home, startDir } = setup(opts)
+        const base = await startProxy(home, {}, startDir)
+        expect((await call(base, 'GET', '/api/mocks-file')).legacyMocksPath).toBeNull()
+        expect(outputs.get(base)!.join('')).not.toContain('按旧规则')
+    }, 30_000)
+
+    it('detectLegacyMocksPath: same dir for both rules -> null', () => {
+        const d = tmp('meddle-121-same-')
+        writeFileSync(join(d, 'm.json'), '{}', 'utf8')
+        expect(detectLegacyMocksPath('m.json', d, d)).toBeNull()
     })
 })

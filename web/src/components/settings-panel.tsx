@@ -50,7 +50,7 @@ import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut
 import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
 import { fetchAppVersion } from '@/lib/app-version'
 import { toast } from '@/components/ui/toast'
-import { BreakablePath, MocksFileInvalidNote, MocksFileMissingNote } from '@/components/mocks-file-missing-note'
+import { BreakablePath, MocksFileInvalidNote, MocksFileLegacyPathNote, MocksFileMissingNote, isRelativeMocksPathInput } from '@/components/mocks-file-missing-note'
 import { formatMocksParseLocation, isMocksFileInvalid, shouldShowMocksFileMissing, useMocksFileStatus } from '@/hooks/use-mocks-file-status'
 
 interface SettingsPanelProps {
@@ -611,6 +611,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
           <div className={settingsSectionClassName}>
             <Label className="text-sm font-medium">Mock 规则文件</Label>
             <div className={settingsGroupClassName}>
+              <span data-testid="settings-mocks-file-current-label" className="text-xs text-muted-foreground">当前使用</span>
               <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
                 <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                 <span data-testid="settings-mocks-file-resolved" className="text-xs font-mono flex-1 wrap-anywhere" title={mocksFile?.path}>
@@ -641,13 +642,22 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                     应用
                   </SaveButton>
                 </div>
-                <p className="text-xs text-muted-foreground">必须是 JSON 格式的 Mock 规则文件。支持 ~ 表示用户主目录；相对路径相对于 Meddle 配置目录。上方显示实际使用的绝对路径。</p>
+                {mocksFile?.legacyMocksPath ? (
+                  <MocksFileLegacyPathNote
+                    oldPath={mocksFile.legacyMocksPath.oldPath}
+                    newPath={mocksFile.legacyMocksPath.newPath}
+                    visible={isRelativeMocksPathInput(mocksFilePath)}
+                    // Only fills the input; saving still needs 「应用」.
+                    onUseOldPath={() => setMocksFilePath(mocksFile.legacyMocksPath!.oldPath)}
+                  />
+                ) : null}
+                <p className="text-xs text-muted-foreground">必须是 JSON 格式的 Mock 规则文件。支持 ~ 表示用户主目录；相对路径相对于 Meddle 配置目录。</p>
                 {isMocksFileInvalid(mocksFile) ? (
                   <MocksFileInvalidNote
                     testId="settings-mocks-file-invalid"
                     location={formatMocksParseLocation(mocksFile.parseError)}
                   />
-                ) : shouldShowMocksFileMissing(mocksFile) ? (
+                ) : shouldShowMocksFileMissing(mocksFile) && !mocksFile.legacyMocksPath ? (
                   <MocksFileMissingNote testId="settings-mocks-file-missing" />
                 ) : null}
               </div>

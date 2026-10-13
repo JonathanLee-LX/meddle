@@ -180,6 +180,46 @@ export function resolveConfiguredMocksPath(raw: string | null | undefined, meddl
     return path.resolve(meddleDir, p)
 }
 
+export interface LegacyMocksPath {
+    /** What the user configured (a relative path). */
+    configured: string
+    /** Where the file was found under the old rule (relative to the proxy's start directory). */
+    oldPath: string
+    /** Where the path resolves now (relative to MEDDLE_HOME); does not exist. */
+    newPath: string
+}
+
+/**
+ * Issue #121 migration notice: a relative `mocksFilePath` used to resolve
+ * against the proxy's start directory. If the file exists there but not
+ * under the new rule (MEDDLE_HOME), report both paths so the user can switch
+ * to the old absolute path. Never migrates or rewrites settings.
+ */
+export function detectLegacyMocksPath(raw: string | null | undefined, meddleDir: string, cwd: string = process.cwd(), homeDir: string = os.homedir()): LegacyMocksPath | null {
+    const v = typeof raw === 'string' ? raw.trim() : ''
+    if (!v || path.isAbsolute(v) || v === '~' || v.startsWith('~/') || v.startsWith('~\\')) return null
+    const newPath = resolveConfiguredMocksPath(v, meddleDir, homeDir)
+    const oldPath = path.resolve(cwd, v)
+    if (!newPath || oldPath === newPath) return null
+    const isFile = (p: string) => { try { return fs.statSync(p).isFile() } catch (_) { return false } }
+    if (!isFile(oldPath) || isFile(newPath)) return null
+    return { configured: v, oldPath, newPath }
+}
+
+export function formatLegacyMocksNotice(l: LegacyMocksPath): string {
+    return `Mock 文件路径「${l.configured}」现在相对于 Meddle 配置目录解析为 ${l.newPath}（不存在）；` +
+        `按旧规则（相对于启动目录）找到的文件是 ${l.oldPath}。如需继续使用它，请把路径改为该绝对路径。`
+}
+
+/** Read the raw (unresolved) mocksFilePath from settings.json. */
+export function readConfiguredMocksPath(settingsPath: string): string | null {
+    try {
+        if (!fs.existsSync(settingsPath)) return null
+        const v = JSON.parse(fs.readFileSync(settingsPath, 'utf8')).mocksFilePath
+        return typeof v === 'string' ? v : null
+    } catch (_) { return null }
+}
+
 export function createMockHandler(ctx: ProxyContext): MockHandler {
     const DEFAULT_MOCK_FILE = path.join(ctx.meddleDir, 'mocks.json')
 
