@@ -117,7 +117,7 @@ describe('Mock editor while the mocks file is broken (issue #123)', () => {
     expect(wrap).toHaveClass('grid-rows-[0fr]', 'opacity-0', 'duration-150', 'ease-out', 'motion-reduce:transition-none', '-mb-[var(--ui-content-gap)]')
     // the live region is always mounted (so the change is announced) but empty for AT
     const alert = screen.getByRole('alert')
-    expect(alert).toHaveAttribute('aria-live', 'assertive')
+    expect(alert).not.toHaveAttribute('aria-live')
     expect(wrap).toContainElement(alert)
 
     state.invalid = true

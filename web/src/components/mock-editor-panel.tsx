@@ -245,7 +245,6 @@ export function MockEditorPanel({
               <p
                 data-testid={fileInvalid ? 'mock-editor-file-invalid' : undefined}
                 role="alert"
-                aria-live="assertive"
                 className="flex items-start gap-1 text-xs text-destructive"
               >
                 <span aria-hidden={!fileInvalid || undefined} className="flex min-w-0 items-start gap-1">
