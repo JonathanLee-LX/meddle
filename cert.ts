@@ -1,4 +1,5 @@
 const EasyCert = require('node-easy-cert');
+import * as crypto from 'crypto';
 import * as os from 'os';
 const inquirer = require('inquirer');
 import { execSync } from 'child_process';
@@ -21,6 +22,45 @@ const options = {
 
 // 所有外部子进程调用的超时保护：security/openssl 卡住时不阻塞启动
 const EXEC_TIMEOUT_MS = 5000;
+
+/**
+ * Issue #116: node-easy-cert generates every key with node-forge's pure-JS
+ * RSA (`forge.pki.rsa.generateKeyPair(2048)`), which runs synchronously on the
+ * event loop and takes 1–4 s on a fast machine and 10 s+ on a loaded 2-core CI
+ * runner. The first HTTPS MITM request to a new host blocked the whole proxy
+ * for that long (CI flake in proxy-streaming.spec). Route those calls through
+ * Node's native OpenSSL key generation (~50–150 ms) instead; the result is
+ * converted to forge key objects, so easy-cert's certificate code is unchanged.
+ */
+function useNativeRsaKeygenForEasyCert(): void {
+    let forge: any;
+    try {
+        forge = require(require.resolve('node-forge', { paths: [path.dirname(require.resolve('node-easy-cert'))] }));
+    } catch {
+        return;
+    }
+    const rsa = forge?.pki?.rsa;
+    if (!rsa || typeof rsa.generateKeyPair !== 'function' || rsa.__meddleNative) return;
+    const original = rsa.generateKeyPair;
+    rsa.generateKeyPair = function (bits: unknown, ...rest: unknown[]) {
+        // Only the synchronous `generateKeyPair(bits)` form easy-cert uses.
+        if (typeof bits !== 'number' || rest.length > 0) return original.call(this, bits, ...rest);
+        try {
+            const { privateKey } = crypto.generateKeyPairSync('rsa', {
+                modulusLength: bits,
+                publicExponent: 0x10001,
+                privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
+                publicKeyEncoding: { type: 'pkcs1', format: 'pem' },
+            });
+            const forgePrivate = forge.pki.privateKeyFromPem(privateKey);
+            return { privateKey: forgePrivate, publicKey: forge.pki.setRsaPublicKey(forgePrivate.n, forgePrivate.e) };
+        } catch {
+            return original.call(this, bits);
+        }
+    };
+    rsa.__meddleNative = true;
+}
+useNativeRsaKeygenForEasyCert();
 
 const easyCert = new EasyCert(options);
 const crtMgr = Object.assign({}, easyCert);
