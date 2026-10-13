@@ -577,10 +577,11 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
               </>
             ) : (
               <Button
+                variant="outline"
                 size="sm"
                 onClick={handleHotReload}
                 disabled={reloading}
-                className="bg-green-600 hover:bg-green-700"
+                data-testid="plugin-generator-hot-reload"
               >
                 {reloading ? (
                   <>

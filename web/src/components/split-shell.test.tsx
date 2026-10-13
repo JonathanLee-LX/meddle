@@ -149,6 +149,11 @@ describe('save buttons (issue #111)', () => {
     const code = readSource('./plugin-code-editor.tsx')
     const reload = code.slice(code.lastIndexOf('<Button', code.indexOf('保存并热加载')), code.indexOf('保存并热加载'))
     expect(reload).toContain('variant="outline"')
+    // plugin generator: the 热加载 button shown after saving is outline too, never green
+    const gen = readSource('./plugin-generator.tsx')
+    const hot = gen.slice(gen.lastIndexOf('<Button', gen.indexOf('data-testid="plugin-generator-hot-reload"')), gen.indexOf('data-testid="plugin-generator-hot-reload"'))
+    expect(hot).toContain('variant="outline"')
+    expect(hot).not.toMatch(/bg-green/)
   })
 })
 
