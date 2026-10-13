@@ -220,7 +220,9 @@ export function MockConfig({
               </TableHeader>
               <TableBody>
                 {mockRules.length === 0 ? (
-                  <TableRow>
+                  // Issue #133: a status block, not a rule row — no hover / selected fill
+                  // (the pointer is often still where the cleared row was).
+                  <TableRow data-testid="mock-config-empty-row" className="hover:bg-transparent hover:text-inherit">
                     <TableCell colSpan={6} className="py-8 text-center text-muted-foreground whitespace-normal">
                       {isMocksFileInvalid(mocksFile) ? (
                         <MocksFileInvalidEmptyState

@@ -160,6 +160,28 @@ describe('ShellNav narrow viewport (#109)', () => {
     expect(screen.getByTestId('app-shell-nav')).toHaveClass('w-14', 'overflow-x-hidden', 'gap-2.5')
   })
 
+  it('expanded rail keeps the mock badge slot when the count is 0, so the rail width does not change (issue #133)', () => {
+    localStorage.setItem(SHELL_NAV_COLLAPSED_KEY, '0')
+    installViewport(1280)
+    const { rerender } = renderNav({ mockEnabledCount: 1 })
+    const button = screen.getByTestId('shell-nav-mock')
+    const badge = screen.getByTestId('shell-nav-mock-badge')
+    expect(badge).toHaveClass('min-w-5')
+    rerender(
+      <MemoryRouter>
+        <div data-testid="page-content">page</div>
+        <ShellNav activeTab="logs" onTabChange={vi.fn()} mockEnabledCount={0} />
+      </MemoryRouter>,
+    )
+    expect(screen.queryByTestId('shell-nav-mock-badge')).not.toBeInTheDocument()
+    const slot = screen.getByTestId('shell-nav-mock-badge-slot')
+    expect(slot).toBe(badge) // same node, only hidden: no layout change
+    expect(slot).toHaveClass('invisible', 'h-5', 'min-w-5', "before:content-['0']") // one-digit width via CSS, no text for AT
+    expect(slot).toHaveAttribute('aria-hidden', 'true')
+    expect(button).toContainElement(slot)
+    expect(button).not.toHaveTextContent('0')
+  })
+
   it('uses the expanded inline badge when the rail is open', () => {
     installViewport(1280)
     renderNav({ mockEnabledCount: 3 })

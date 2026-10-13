@@ -164,9 +164,17 @@ export function ShellNav({ activeTab, onTabChange, mockEnabledCount = 0 }: Shell
         <span data-slot="shell-nav-label" className={collapsed ? 'sr-only' : undefined}>
           {item.label}
         </span>
-        {showBadge && !collapsed ? (
-          <Badge variant="secondary" data-testid="shell-nav-mock-badge" className="h-5 px-1.5 text-[10px]">
-            {mockEnabledCount}
+        {item.tab === 'mock' && !collapsed ? (
+          // Issue #133: the expanded rail is w-fit, so mounting the badge only
+          // when there are rules widened the whole rail (and shifted the page)
+          // by the badge's width. Keep the slot; hide it when there is no count.
+          <Badge
+            variant="secondary"
+            data-testid={showBadge ? 'shell-nav-mock-badge' : 'shell-nav-mock-badge-slot'}
+            aria-hidden={showBadge ? undefined : true}
+            className={cn('h-5 min-w-5 px-1.5 text-[10px] tabular-nums', !showBadge && "invisible before:content-['0']")}
+          >
+            {showBadge ? mockEnabledCount : null}
           </Badge>
         ) : null}
       </>
