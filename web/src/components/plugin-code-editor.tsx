@@ -12,8 +12,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { MonacoEditor } from './monaco-editor'
 import { getAIConfig, getActiveModel, isAIConfigValid } from '@/lib/ai-config-store'
-import { Code2, Save, Loader2, Zap, RotateCcw, PencilLine } from 'lucide-react'
-import { SaveButton } from '@/components/save-shortcut/save-button'
+import { Code2, Loader2, Zap, RotateCcw, PencilLine } from 'lucide-react'
+import { EditorSaveButton } from '@/components/pane-bar'
 import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
 import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
 import { toast } from '@/components/ui/toast'
@@ -406,16 +406,8 @@ export function PluginCodeEditor({
                 关闭
               </Button>
             )}
-            <SaveButton
-              variant="outline"
-              size="sm"
-              onClick={handleSave}
-              disabled={!isDirty || saving || revising}
-            >
-              {saving && !reloading ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <Save data-icon="inline-start" />}
-              保存
-            </SaveButton>
             <Button
+              variant="outline"
               size="sm"
               onClick={handleSaveAndReload}
               disabled={!isDirty || saving || revising}
@@ -423,6 +415,8 @@ export function PluginCodeEditor({
               {reloading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Zap className="h-4 w-4 mr-1" />}
               保存并热加载
             </Button>
+            {/* Issue #111: the one primary action, last in the bar. */}
+            <EditorSaveButton onClick={handleSave} saving={saving && !reloading} disabled={!isDirty || saving || revising} />
           </div>
         </EditorPaneActions>
     </>

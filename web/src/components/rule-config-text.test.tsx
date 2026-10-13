@@ -86,12 +86,15 @@ describe('RuleConfig text view', () => {
     const saveButton = screen.getByRole('button', { name: '保存' })
     fireEvent.click(saveButton)
     expect(saveButton).toBeDisabled()
-    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument()
+    // issue #111: the button itself reads 「保存中…」; no spinner
+    expect(saveButton).toHaveAccessibleName('保存中…')
+    expect(saveButton).toHaveAttribute('aria-busy', 'true')
+    expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument()
 
     resolveSave(true)
     await waitFor(() => {
       expect(saveRuleFileRawContent).toHaveBeenCalledWith('default', updatedText)
-      expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument()
+      expect(saveButton).toHaveAccessibleName('保存')
     })
     expect(screen.queryByText('已保存')).not.toBeInTheDocument()
     expect(saveButton).toHaveAccessibleName('保存')

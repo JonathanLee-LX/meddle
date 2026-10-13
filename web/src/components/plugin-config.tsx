@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Switch } from '@/components/ui/switch'
 import { Play, Square, Loader2, Shield, ShieldAlert, Sparkles, RefreshCw, Zap, TestTube2, Trash2, TriangleAlert, Unplug } from 'lucide-react'
 import type { Plugin } from '@/types'
+import { EditorTitleBar, PaneBar, PaneTitle } from '@/components/pane-bar'
+import { useEditorScrolled } from '@/hooks/use-editor-scrolled'
 import { SplitPane } from '@/components/split-pane'
 import { EditorPaneActionsProvider } from '@/components/editor-pane-actions'
 import { pluginPaneSplit } from '@/lib/plugin-pane-split'
@@ -79,6 +81,7 @@ export function PluginConfig({
   const [customPlugins, setCustomPlugins] = useState<CustomPluginFile[]>([])
   const [hotReloading, setHotReloading] = useState(false)
   const [editor, setEditor] = useState<EditorMode>({ kind: 'idle' })
+  const editorScroll = useEditorScrolled()
   const [actionsHost, setActionsHost] = useState<HTMLDivElement | null>(null)
   const dismissRef = useRef<(() => void) | null>(null)
   const registerDismiss = useCallback((dismiss: (() => void) | null) => {
@@ -284,9 +287,9 @@ export function PluginConfig({
       separatorLabel="调整插件列表宽度"
       list={
         <>
-          <div className="shrink-0 border-b">
-            <div className="app-pane-bar flex items-center justify-between gap-2">
-              <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">插件</div>
+          <div className="shrink-0">
+            <PaneBar>
+              <PaneTitle>插件</PaneTitle>
               <div className="flex items-center gap-1">
                 <Button variant="ghost" size="icon-sm" onClick={() => void fetchCustomPlugins()} disabled={loading || hotReloading} aria-label="刷新列表">
                   <RefreshCw />
@@ -299,8 +302,8 @@ export function PluginConfig({
                   AI 生成
                 </Button>
               </div>
-            </div>
-            <div className="flex items-center gap-2 px-[var(--ui-section-gap)] pb-[var(--ui-section-gap)]">
+            </PaneBar>
+            <div className="flex items-center gap-2 border-b p-[var(--ui-section-gap)]">
               <Select value={pluginMode} onValueChange={(value) => switchPluginMode(value as 'on' | 'off' | 'shadow')}>
                 <SelectTrigger className="h-7 w-full text-xs" aria-label="插件模式">
                   <SelectValue />
@@ -466,19 +469,23 @@ export function PluginConfig({
         </>
       }
     >
-      <div className="app-pane-bar flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b">
-        <div className="min-w-0 truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{editorTitle}</div>
-        <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
-          {editor.kind !== 'idle' ? (
-            <Button variant="ghost" size="sm" onClick={closeEditor}>
-              取消
-            </Button>
-          ) : null}
-          <div ref={setActionsHost} data-testid="editor-pane-actions" className="contents" />
-        </div>
-      </div>
+      <EditorTitleBar
+        data-testid="plugin-editor-title-bar"
+        scrolled={editorScroll.scrolled}
+        title={editorTitle}
+        actions={
+          <>
+            {editor.kind !== 'idle' ? (
+              <Button variant="ghost" size="sm" onClick={closeEditor}>
+                取消
+              </Button>
+            ) : null}
+            <div ref={setActionsHost} data-testid="editor-pane-actions" className="contents" />
+          </>
+        }
+      />
       <EditorPaneActionsProvider host={actionsHost} registerDismiss={registerDismiss}>
-      <div className={editorFillsPane ? 'min-h-0 flex-1 overflow-hidden' : 'min-h-0 flex-1 overflow-y-auto'}>
+      <div className={editorFillsPane ? 'min-h-0 flex-1 overflow-hidden' : 'min-h-0 flex-1 overflow-y-auto'} onScrollCapture={editorScroll.onScrollCapture}>
         {editor.kind === 'idle' ? (
           <div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
             <p>选择左侧插件进行编辑，或点击「AI 生成」</p>
@@ -587,7 +594,7 @@ function PluginGroup({
 }) {
   return (
     <section>
-      <div className="flex items-center justify-between gap-2 border-b px-[var(--ui-section-gap)] py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="flex items-center justify-between gap-2 border-b px-[var(--ui-section-gap)] py-1.5 text-xs font-medium text-muted-foreground">
         <span className="truncate">{title}</span>
         <span className="flex shrink-0 items-center gap-2">
           {extra}
