@@ -166,7 +166,7 @@ describe('ShellNav narrow viewport (#109)', () => {
     const { rerender } = renderNav({ mockEnabledCount: 1 })
     const button = screen.getByTestId('shell-nav-mock')
     const badge = screen.getByTestId('shell-nav-mock-badge')
-    expect(badge).toHaveClass('min-w-5')
+    expect(badge.querySelector('[data-slot="shell-nav-mock-count"]')).toHaveClass('inline-block', 'min-w-[2ch]', 'text-center', 'tabular-nums')
     rerender(
       <MemoryRouter>
         <div data-testid="page-content">page</div>
@@ -176,10 +176,31 @@ describe('ShellNav narrow viewport (#109)', () => {
     expect(screen.queryByTestId('shell-nav-mock-badge')).not.toBeInTheDocument()
     const slot = screen.getByTestId('shell-nav-mock-badge-slot')
     expect(slot).toBe(badge) // same node, only hidden: no layout change
-    expect(slot).toHaveClass('invisible', 'h-5', 'min-w-5', "before:content-['0']") // one-digit width via CSS, no text for AT
+    expect(slot).toHaveClass('invisible', 'h-5')
+    // the empty placeholder keeps the same 2ch tabular digit box as a real count
+    const box = slot.querySelector('[data-slot="shell-nav-mock-count"]')
+    expect(box).toHaveClass('min-w-[2ch]', 'tabular-nums')
+    expect(box).toBeEmptyDOMElement()
     expect(slot).toHaveAttribute('aria-hidden', 'true')
     expect(button).toContainElement(slot)
     expect(button).not.toHaveTextContent('0')
+  })
+
+  it.each([
+    [1, '1'], [10, '10'], [99, '99'], [100, '99+'], [1234, '99+'],
+  ])('mock badge shows %i as %s in a fixed 2ch tabular box (issue #133)', (count, text) => {
+    localStorage.setItem(SHELL_NAV_COLLAPSED_KEY, '0')
+    installViewport(1280)
+    renderNav({ mockEnabledCount: count })
+    const num = screen.getByTestId('shell-nav-mock-badge').querySelector('[data-slot="shell-nav-mock-count"]')!
+    expect(num.textContent).toBe(text)
+    expect(num).toHaveClass('min-w-[2ch]', 'tabular-nums')
+  })
+
+  it('collapsed badge also caps at 99+', () => {
+    installViewport(900)
+    renderNav({ mockEnabledCount: 250 })
+    expect(screen.getByTestId('shell-nav-mock-badge')).toHaveTextContent(/^99\+$/)
   })
 
   it('uses the expanded inline badge when the rail is open', () => {

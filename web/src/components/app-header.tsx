@@ -145,6 +145,11 @@ export function ShellNav({ activeTab, onTabChange, mockEnabledCount = 0 }: Shell
     const Icon = TAB_ICONS[item.tab]
     const active = activeTab === item.tab
     const showBadge = item.tab === 'mock' && mockEnabledCount > 0
+    // Issue #133: fixed-width digits (2ch, tabular) and a 99+ cap keep the badge width stable.
+    const badgeText = mockEnabledCount > 99 ? '99+' : String(mockEnabledCount)
+    const badgeNum = (text: string | null) => (
+      <span data-slot="shell-nav-mock-count" className="inline-block min-w-[2ch] text-center tabular-nums">{text}</span>
+    )
     // Tabs owns the button (TabsTrigger asChild → TooltipTrigger) so its
     // data-state="active" wins over the tooltip's open/closed data-state.
     const content = (
@@ -158,7 +163,7 @@ export function ShellNav({ activeTab, onTabChange, mockEnabledCount = 0 }: Shell
             // never sits on the glyph and stays inside the gap to the next button.
             className="pointer-events-none absolute -top-1 -right-1 h-[16px] min-w-[16px] px-1 text-[10px] leading-none"
           >
-            {mockEnabledCount}
+            {badgeNum(badgeText)}
           </Badge>
         ) : null}
         <span data-slot="shell-nav-label" className={collapsed ? 'sr-only' : undefined}>
@@ -172,9 +177,9 @@ export function ShellNav({ activeTab, onTabChange, mockEnabledCount = 0 }: Shell
             variant="secondary"
             data-testid={showBadge ? 'shell-nav-mock-badge' : 'shell-nav-mock-badge-slot'}
             aria-hidden={showBadge ? undefined : true}
-            className={cn('h-5 min-w-5 px-1.5 text-[10px] tabular-nums', !showBadge && "invisible before:content-['0']")}
+            className={cn('h-5 px-1.5 text-[10px]', !showBadge && 'invisible')}
           >
-            {showBadge ? mockEnabledCount : null}
+            {badgeNum(showBadge ? badgeText : null)}
           </Badge>
         ) : null}
       </>
