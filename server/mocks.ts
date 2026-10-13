@@ -3,6 +3,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { ServerContext } from './index'
 import { nextMockRuleId } from '../core/mock-utils'
+import { detectLegacyMocksPath, readConfiguredMocksPath, type LegacyMocksPath } from '../core/mock-handler'
 
 function setMockJsonHeaders(res: Response): void {
     res.setHeader('Content-Type', 'application/json')
@@ -112,6 +113,8 @@ export interface MocksFileStatus {
     parseError: { line: number | null; column: number | null; message: string } | null
     /** Full human-readable error (path + position) when `valid` is false. */
     error?: string
+    /** Issue #121: relative path that only exists under the old (start-directory) rule. */
+    legacyMocksPath: LegacyMocksPath | null
 }
 
 export function getMocksFileStatus(ctx: ServerContext): MocksFileStatus {
@@ -122,7 +125,8 @@ export function getMocksFileStatus(ctx: ServerContext): MocksFileStatus {
     } catch (_) { /* missing */ }
     const custom = file !== path.resolve(ctx.meddleDir, 'mocks.json')
     const parseError = (exists && ctx.getMocksParseError?.()) || null
-    const status: MocksFileStatus = { path: file, exists, custom, valid: !parseError, parseError }
+    const legacyMocksPath = detectLegacyMocksPath(readConfiguredMocksPath(ctx.settingsPath), ctx.meddleDir)
+    const status: MocksFileStatus = { path: file, exists, custom, valid: !parseError, parseError, legacyMocksPath }
     if (parseError) {
         const loc = parseError.line != null ? `第 ${parseError.line} 行第 ${parseError.column} 列：` : ''
         status.error = `Mock 文件格式错误: ${file} ${loc}${parseError.message}`

@@ -1,3 +1,4 @@
+import { detectLegacyMocksPath, formatLegacyMocksNotice, readConfiguredMocksPath } from './mock-handler'
 import * as fs from 'fs'
 import * as path from 'path'
 import type { ProxyContext, MockHandler, DiagnosticsResult } from './types'
@@ -39,7 +40,8 @@ export function createConfigDiagnostics(ctx: ProxyContext, serverContext: Server
                     details: {
                         theme: settings.theme, fontSize: settings.fontSize,
                         aiEnabled: settings.aiConfig?.enabled || false,
-                        customMocksPath: settings.mocksFilePath || null
+                        customMocksPath: settings.mocksFilePath || null,
+                        resolvedMocksPath: mockHandler.getMockFilePath()
                     }
                 })
             } catch (error: any) {
@@ -65,6 +67,8 @@ export function createConfigDiagnostics(ctx: ProxyContext, serverContext: Server
             diagnostics.warnings.push('路由规则目录不存在: ' + rulesDir)
         }
 
+        const legacyMocks = detectLegacyMocksPath(readConfiguredMocksPath(ctx.settingsPath), ctx.meddleDir)
+        if (legacyMocks) diagnostics.warnings.push(formatLegacyMocksNotice(legacyMocks))
         const customPaths = mockHandler.loadCustomPathsFromSettings()
         const mocksPath = customPaths.mocksFilePath || mockHandler.getMockFilePath()
         if (fs.existsSync(mocksPath)) {

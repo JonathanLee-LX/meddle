@@ -76,20 +76,51 @@ export function registerConfigRoutes(app: Application, ctx: ServerContext): void
         res.end()
     })
 
-    // API: 保存系统设置
+    function writeSettingsAndApply(settings: Record<string, unknown>): void {
+        const previousMocksPath = ctx.getMockFilePath()
+        const tmp = `${ctx.settingsPath}.${process.pid}.${Date.now()}.tmp`
+        fs.writeFileSync(tmp, JSON.stringify(settings, null, 2), 'utf8')
+        fs.renameSync(tmp, ctx.settingsPath)
+        ctx.refreshClientAliases()
+        // Issue #118: a changed mocksFilePath takes effect right away (no
+        // restart / refresh needed). Unrelated settings saves leave the
+        // loaded mocks alone.
+        ctx.currentMocksPath = null
+        if (ctx.getMockFilePath() !== previousMocksPath) reloadMocksFromSettings(ctx)
+    }
+
+    // API: 保存系统设置（整份替换；旧客户端 / 迁移使用）
     app.post('/api/settings', (req: Request, res: Response) => {
         res.setHeader('Content-Type', 'application/json')
         try {
-            const settings = req.body
-            const previousMocksPath = ctx.getMockFilePath()
-            fs.writeFileSync(ctx.settingsPath, JSON.stringify(settings, null, 2), 'utf8')
-            ctx.refreshClientAliases()
-            // Issue #118: a changed mocksFilePath takes effect right away (no
-            // restart / refresh needed). Unrelated settings saves leave the
-            // loaded mocks alone.
-            ctx.currentMocksPath = null
-            if (ctx.getMockFilePath() !== previousMocksPath) reloadMocksFromSettings(ctx)
+            writeSettingsAndApply(req.body)
             res.write(JSON.stringify({ status: 'success', message: '设置已保存' }))
+        } catch (error) {
+            res.statusCode = 500
+            res.write(JSON.stringify({ error: (error as Error).message }))
+        }
+        res.end()
+    })
+
+    // API: 只更新提交的字段（issue #121）。旧标签页保存某一项设置时，
+    // 不会把别处改过的字段（如 mocksFilePath）改回它手里的旧值。
+    app.patch('/api/settings', (req: Request, res: Response) => {
+        res.setHeader('Content-Type', 'application/json')
+        try {
+            const updates = req.body
+            if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+                res.statusCode = 400
+                res.write(JSON.stringify({ error: '设置更新必须是 JSON 对象' }))
+                res.end()
+                return
+            }
+            let current: Record<string, unknown> = {}
+            if (fs.existsSync(ctx.settingsPath)) {
+                current = JSON.parse(fs.readFileSync(ctx.settingsPath, 'utf8'))
+            }
+            const merged = { ...current, ...updates }
+            writeSettingsAndApply(merged)
+            res.write(JSON.stringify({ status: 'success', message: '设置已保存', settings: merged }))
         } catch (error) {
             res.statusCode = 500
             res.write(JSON.stringify({ error: (error as Error).message }))

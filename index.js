@@ -277,6 +277,13 @@ const expressApp = createApp(serverContext)
 
 // ===== 加载 Mock 和路由规则 =====
 serverContext.loadMockRules()
+{
+    // Issue #121: relative mocksFilePath now resolves against MEDDLE_HOME; warn once
+    // if the file only exists under the old rule (start directory). No auto-migration.
+    const { detectLegacyMocksPath, readConfiguredMocksPath, formatLegacyMocksNotice } = require('./dist/core/mock-handler')
+    const legacy = detectLegacyMocksPath(readConfiguredMocksPath(ctx.settingsPath), ctx.meddleDir)
+    if (legacy) console.warn(formatLegacyMocksNotice(legacy))
+}
 routeLoader.initRouteRules()
 // Hot-reload mocks when the file is edited externally (CLI file-mode / hand edit). Issue #85.
 mockHandler.initMockFileWatcher(() => {

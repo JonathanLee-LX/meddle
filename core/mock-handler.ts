@@ -1,5 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
+import * as os from 'os'
 import chokidar from 'chokidar'
 import _debug from 'debug'
 import { getMimeType } from './map-local'
@@ -164,6 +165,61 @@ export function resolveMocksWriteTarget(file: string): string {
     return cur
 }
 
+/**
+ * Issue #121: turn the configured `mocksFilePath` into an absolute path.
+ * `~` / `~/…` expand to the user's home directory; a relative path is
+ * resolved against the meddle directory (MEDDLE_HOME), not the directory the
+ * proxy happened to be started from.
+ */
+export function resolveConfiguredMocksPath(raw: string | null | undefined, meddleDir: string, homeDir: string = os.homedir()): string | null {
+    const v = typeof raw === 'string' ? raw.trim() : ''
+    if (!v) return null
+    let p = v
+    if (p === '~') p = homeDir
+    else if (p.startsWith('~/') || p.startsWith('~\\')) p = path.join(homeDir, p.slice(2))
+    return path.resolve(meddleDir, p)
+}
+
+export interface LegacyMocksPath {
+    /** What the user configured (a relative path). */
+    configured: string
+    /** Where the file was found under the old rule (relative to the proxy's start directory). */
+    oldPath: string
+    /** Where the path resolves now (relative to MEDDLE_HOME); does not exist. */
+    newPath: string
+}
+
+/**
+ * Issue #121 migration notice: a relative `mocksFilePath` used to resolve
+ * against the proxy's start directory. If the file exists there but not
+ * under the new rule (MEDDLE_HOME), report both paths so the user can switch
+ * to the old absolute path. Never migrates or rewrites settings.
+ */
+export function detectLegacyMocksPath(raw: string | null | undefined, meddleDir: string, cwd: string = process.cwd(), homeDir: string = os.homedir()): LegacyMocksPath | null {
+    const v = typeof raw === 'string' ? raw.trim() : ''
+    if (!v || path.isAbsolute(v) || v === '~' || v.startsWith('~/') || v.startsWith('~\\')) return null
+    const newPath = resolveConfiguredMocksPath(v, meddleDir, homeDir)
+    const oldPath = path.resolve(cwd, v)
+    if (!newPath || oldPath === newPath) return null
+    const isFile = (p: string) => { try { return fs.statSync(p).isFile() } catch (_) { return false } }
+    if (!isFile(oldPath) || isFile(newPath)) return null
+    return { configured: v, oldPath, newPath }
+}
+
+export function formatLegacyMocksNotice(l: LegacyMocksPath): string {
+    return `Mock 文件路径「${l.configured}」现在相对于 Meddle 配置目录解析为 ${l.newPath}（不存在）；` +
+        `按旧规则（相对于启动目录）找到的文件是 ${l.oldPath}。如需继续使用它，请把路径改为该绝对路径。`
+}
+
+/** Read the raw (unresolved) mocksFilePath from settings.json. */
+export function readConfiguredMocksPath(settingsPath: string): string | null {
+    try {
+        if (!fs.existsSync(settingsPath)) return null
+        const v = JSON.parse(fs.readFileSync(settingsPath, 'utf8')).mocksFilePath
+        return typeof v === 'string' ? v : null
+    } catch (_) { return null }
+}
+
 export function createMockHandler(ctx: ProxyContext): MockHandler {
     const DEFAULT_MOCK_FILE = path.join(ctx.meddleDir, 'mocks.json')
 
@@ -171,7 +227,7 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
         try {
             if (fs.existsSync(ctx.settingsPath)) {
                 const settings = JSON.parse(fs.readFileSync(ctx.settingsPath, 'utf8'))
-                return { mocksFilePath: settings.mocksFilePath || null }
+                return { mocksFilePath: resolveConfiguredMocksPath(settings.mocksFilePath, ctx.meddleDir) }
             }
         } catch (error) {
             console.error('加载自定义配置路径失败:', error)
@@ -560,13 +616,26 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
             followSymlinks: false,
             awaitWriteFinish: { stabilityThreshold: 50, pollInterval: 25 },
         })
+        // Catch up on a write chokidar did not report because it landed while a
+        // directory watch was still being set up (ignoreInitial).
+        const catchUp = (why: string) => {
+            if (closed || !watcherState || watcherState.file !== mockFile) return
+            if (fileSig(mockFile) !== loadedSig) reload(why)
+        }
         const watchTargetDir = () => {
             const want = path.dirname(target)
             const next = path.resolve(want) === path.resolve(dir) ? null : want
             if (next === targetDir) return
             if (targetDir) watcher.unwatch(targetDir)
             targetDir = next
-            if (targetDir && fs.existsSync(targetDir)) watcher.add(targetDir)
+            if (targetDir && fs.existsSync(targetDir)) {
+                watcher.add(targetDir)
+                // chokidar emits no 'ready' for add(); re-check a few times
+                // while the new directory watch comes up.
+                for (const ms of [100, 300, 1000]) {
+                    setTimeout(() => catchUp('changed while target watch was starting'), ms).unref?.()
+                }
+            }
             dbg(`target ${target}; extra dir ${targetDir ?? '(none)'}`)
         }
         watchTargetDir()
@@ -591,10 +660,7 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
         }
         watcher.on('ready', () => {
             dbg('ready')
-            // Catch up on a write that happened before the watcher was ready.
-            if (closed || !watcherState || watcherState.file !== mockFile) return
-            const sig = fileSig(mockFile)
-            if (sig !== loadedSig) reload('changed before watcher ready')
+            catchUp('changed before watcher ready')
         })
         watcher.on('change', (p: string) => reload('changed', p))
         watcher.on('add', (p: string) => reload('added', p))

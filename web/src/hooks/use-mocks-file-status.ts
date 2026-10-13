@@ -10,6 +10,14 @@ export interface MocksFileStatus {
   valid: boolean
   /** Parse failure position reported by the server (single source; never parsed in the browser). */
   parseError: MocksParseError | null
+  /** Issue #121: relative path that only exists under the old (start-directory) rule. */
+  legacyMocksPath?: LegacyMocksPath | null
+}
+
+export interface LegacyMocksPath {
+  configured: string
+  oldPath: string
+  newPath: string
 }
 
 export interface MocksParseError {
@@ -42,7 +50,7 @@ export const MOCKS_FILE_STATUS_CHANGED_EVENT = 'mocksFileStatusChanged'
 
 export function parseMocksFileStatus(data: unknown): MocksFileStatus | null {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return null
-  const { path, exists, custom, valid, parseError } = data as Record<string, unknown>
+  const { path, exists, custom, valid, parseError, legacyMocksPath } = data as Record<string, unknown>
   if (typeof path !== 'string' || typeof exists !== 'boolean') return null
   let pe: MocksParseError | null = null
   if (valid === false && parseError && typeof parseError === 'object') {
@@ -54,7 +62,14 @@ export function parseMocksFileStatus(data: unknown): MocksFileStatus | null {
     }
   }
   // Older servers without `custom` / `valid`: treat as default + valid.
-  return { path, exists, custom: custom === true, valid: !pe, parseError: pe }
+  let legacy: LegacyMocksPath | null = null
+  if (legacyMocksPath && typeof legacyMocksPath === 'object') {
+    const l = legacyMocksPath as Record<string, unknown>
+    if (typeof l.oldPath === 'string' && typeof l.newPath === 'string') {
+      legacy = { configured: typeof l.configured === 'string' ? l.configured : '', oldPath: l.oldPath, newPath: l.newPath }
+    }
+  }
+  return { path, exists, custom: custom === true, valid: !pe, parseError: pe, legacyMocksPath: legacy }
 }
 
 /**
@@ -92,3 +107,13 @@ export function useMocksFileStatus(refreshKey?: unknown) {
 
   return { status, refresh }
 }
+
+/** True when the typed mocks path is relative (not empty, not absolute, not ~). */
+export function isRelativeMocksPathInput(value: string): boolean {
+  const v = value.trim()
+  if (!v) return false
+  if (v.startsWith('/') || v.startsWith('\\') || /^[A-Za-z]:[\\/]/.test(v)) return false
+  if (v === '~' || v.startsWith('~/') || v.startsWith('~\\')) return false
+  return true
+}
+
