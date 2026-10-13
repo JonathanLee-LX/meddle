@@ -331,6 +331,26 @@ describe('mocks write through a symlink (issue #123)', () => {
         expect(lstatSync(link).isSymbolicLink()).toBe(true)
     }, 60_000)
 
+    it('symlink retargeted to a new directory: an edit right after the switch is not lost', async () => {
+        const home = makeHome()
+        mkdirSync(join(home, 'd0'))
+        writeMocks(join(home, 'd0', 'mocks.json'), 2, [rule(1, 'r0')])
+        const link = join(home, 'mocks.json')
+        symlinkSync(join(home, 'd0', 'mocks.json'), link)
+        const { base } = await startProxy(home)
+        for (let round = 1; round <= 5; round++) {
+            const dir = join(home, `d${round}`)
+            mkdirSync(dir)
+            const file = join(dir, 'mocks.json')
+            writeMocks(file, 2, [rule(1, `r${round}`)])
+            unlinkSync(link)
+            symlinkSync(file, link)
+            await waitFor(async () => names(await list(base)).includes(`r${round}`), 3_000)
+            writeMocks(file, 3, [rule(1, `r${round}`), rule(2, `edit${round}`)]) // immediately
+            await waitFor(async () => names(await list(base)).includes(`edit${round}`), 3_000)
+        }
+    }, 60_000)
+
     it('write that lands while the watcher is still starting is not lost (CI flake root cause)', async () => {
         const home = makeHome()
         const { base } = await startProxy(home)

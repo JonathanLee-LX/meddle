@@ -576,13 +576,26 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
             followSymlinks: false,
             awaitWriteFinish: { stabilityThreshold: 50, pollInterval: 25 },
         })
+        // Catch up on a write chokidar did not report because it landed while a
+        // directory watch was still being set up (ignoreInitial).
+        const catchUp = (why: string) => {
+            if (closed || !watcherState || watcherState.file !== mockFile) return
+            if (fileSig(mockFile) !== loadedSig) reload(why)
+        }
         const watchTargetDir = () => {
             const want = path.dirname(target)
             const next = path.resolve(want) === path.resolve(dir) ? null : want
             if (next === targetDir) return
             if (targetDir) watcher.unwatch(targetDir)
             targetDir = next
-            if (targetDir && fs.existsSync(targetDir)) watcher.add(targetDir)
+            if (targetDir && fs.existsSync(targetDir)) {
+                watcher.add(targetDir)
+                // chokidar emits no 'ready' for add(); re-check a few times
+                // while the new directory watch comes up.
+                for (const ms of [100, 300, 1000]) {
+                    setTimeout(() => catchUp('changed while target watch was starting'), ms).unref?.()
+                }
+            }
             dbg(`target ${target}; extra dir ${targetDir ?? '(none)'}`)
         }
         watchTargetDir()
@@ -607,10 +620,7 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
         }
         watcher.on('ready', () => {
             dbg('ready')
-            // Catch up on a write that happened before the watcher was ready.
-            if (closed || !watcherState || watcherState.file !== mockFile) return
-            const sig = fileSig(mockFile)
-            if (sig !== loadedSig) reload('changed before watcher ready')
+            catchUp('changed before watcher ready')
         })
         watcher.on('change', (p: string) => reload('changed', p))
         watcher.on('add', (p: string) => reload('added', p))
