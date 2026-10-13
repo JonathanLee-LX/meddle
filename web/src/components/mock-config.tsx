@@ -53,7 +53,6 @@ export function MockConfig({
   onInitialEditConsumed,
 }: MockConfigProps) {
   const [editor, setEditor] = useState<EditorMode>({ kind: 'idle' })
-  const editorScroll = useEditorScrolled()
   const [actionsHost, setActionsHost] = useState<HTMLDivElement | null>(null)
   // Re-check when the rule count changes (e.g. the first save creates the file).
   const { status: mocksFile } = useMocksFileStatus(mockRules.length)
@@ -174,6 +173,7 @@ export function MockConfig({
       : editor.kind === 'edit'
         ? `edit-${editor.ruleId}`
         : 'idle'
+  const editorScroll = useEditorScrolled(editorKey)
 
   return (
     <SplitPane
@@ -332,7 +332,7 @@ export function MockConfig({
           }
         />
           <EditorPaneActionsProvider host={actionsHost}>
-          <div className="min-h-0 flex-1 overflow-y-auto" onScrollCapture={editorScroll.onScrollCapture}>
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {editor.kind === 'idle' ? (
               <div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
                 <p>选择左侧规则进行编辑，或点击「新增规则」</p>
@@ -341,6 +341,7 @@ export function MockConfig({
             ) : editor.kind === 'create' ? (
               <MockEditorPanel
                 key={editorKey}
+                onBodyScroll={editorScroll.onScroll}
                 initialData={editor.initialData}
                 createMock={createMock}
                 updateMock={updateMock}
@@ -350,6 +351,7 @@ export function MockConfig({
             ) : editingRule ? (
               <MockEditorPanel
                 key={editorKey}
+                onBodyScroll={editorScroll.onScroll}
                 rule={editingRule}
                 createMock={createMock}
                 updateMock={updateMock}

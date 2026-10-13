@@ -81,7 +81,6 @@ export function PluginConfig({
   const [customPlugins, setCustomPlugins] = useState<CustomPluginFile[]>([])
   const [hotReloading, setHotReloading] = useState(false)
   const [editor, setEditor] = useState<EditorMode>({ kind: 'idle' })
-  const editorScroll = useEditorScrolled()
   const [actionsHost, setActionsHost] = useState<HTMLDivElement | null>(null)
   const dismissRef = useRef<(() => void) | null>(null)
   const registerDismiss = useCallback((dismiss: (() => void) | null) => {
@@ -274,6 +273,7 @@ export function PluginConfig({
                 : '编辑插件'
 
   const editorFillsPane = editor.kind === 'code' || editor.kind === 'generate' || editor.kind === 'test'
+  const editorScroll = useEditorScrolled(editorTitle)
 
   return (
     <SplitPane
@@ -485,7 +485,7 @@ export function PluginConfig({
         }
       />
       <EditorPaneActionsProvider host={actionsHost} registerDismiss={registerDismiss}>
-      <div className={editorFillsPane ? 'min-h-0 flex-1 overflow-hidden' : 'min-h-0 flex-1 overflow-y-auto'} onScrollCapture={editorScroll.onScrollCapture}>
+      <div className={editorFillsPane ? 'min-h-0 flex-1 overflow-hidden' : 'min-h-0 flex-1 overflow-y-auto'} onScroll={editorScroll.onScroll} data-slot="plugin-editor-scroll">
         {editor.kind === 'idle' ? (
           <div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
             <p>选择左侧插件进行编辑，或点击「AI 生成」</p>

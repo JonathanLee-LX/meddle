@@ -13,7 +13,7 @@ export function PaneBar({ className, ...props }: ComponentProps<'div'>) {
     <div
       data-slot="pane-bar"
       className={cn(
-        'app-pane-bar relative z-10 flex min-h-12 shrink-0 items-center justify-between gap-2 border-b bg-card',
+        'app-pane-bar relative z-10 flex min-h-[50px] shrink-0 items-center justify-between gap-2 border-b bg-card',
         className,
       )}
       {...props}
@@ -21,8 +21,9 @@ export function PaneBar({ className, ...props }: ComponentProps<'div'>) {
   )
 }
 
-export function PaneTitle({ className, ...props }: ComponentProps<'div'>) {
-  return <div data-slot="pane-title" className={cn('min-w-0 truncate text-xs font-medium text-muted-foreground', className)} {...props} />
+/** Pane heading. An h2 for the document outline; browser heading defaults are reset. */
+export function PaneTitle({ className, ...props }: ComponentProps<'h2'>) {
+  return <h2 data-slot="pane-title" className={cn('m-0 min-w-0 truncate text-xs font-medium text-muted-foreground', className)} {...props} />
 }
 
 /**

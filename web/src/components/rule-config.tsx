@@ -487,7 +487,6 @@ export function RuleConfig(props: RuleConfigProps) {
   } = props
 
   const [saving, setSaving] = useState(false)
-  const editorScroll = useEditorScrolled()
 
   const openRuleOverview = useCallback(() => {
     window.dispatchEvent(
@@ -984,6 +983,8 @@ export function RuleConfig(props: RuleConfigProps) {
   }, [rules, filteredRules])
 
   const displayedTextDraft = activeFileName ? textDraft : ''
+  // Issue #111: reset when the file / view changes (the scroll container may unmount).
+  const editorScroll = useEditorScrolled(`${activeFileName}|${viewMode}`)
   const textLoading = Boolean(activeFileName && loadedTextFileName !== activeFileName)
   const textDiagnostics = useMemo(() => getEprcTextDiagnostics(displayedTextDraft), [displayedTextDraft])
   const textHasErrors = viewMode === 'text' && textDiagnostics.length > 0
@@ -1156,7 +1157,7 @@ export function RuleConfig(props: RuleConfigProps) {
             hint="规则文件按从上到下的顺序生效"
           />
         ) : (
-        <div className="flex min-h-0 flex-1 flex-col" onScrollCapture={editorScroll.onScrollCapture}>
+        <div className="flex min-h-0 flex-1 flex-col">
         <div
           data-slot="rule-config-sticky-controls"
           className="shrink-0 bg-card"
@@ -1364,7 +1365,7 @@ export function RuleConfig(props: RuleConfigProps) {
                   </TableHeader>
                 </Table>
               </div>
-              <ScrollArea className="min-h-0 flex-1">
+              <ScrollArea className="min-h-0 flex-1" viewportProps={{ onScroll: editorScroll.onScroll }}>
                 <Table className="table-fixed">
                   <RuleTableColGroup showDragColumn={showDragColumn} />
                   <TableBody>
@@ -1439,7 +1440,7 @@ export function RuleConfig(props: RuleConfigProps) {
             </ScrollArea>
             </div>
           ) : (
-            <ScrollArea className="min-h-0 flex-1">
+            <ScrollArea className="min-h-0 flex-1" viewportProps={{ onScroll: editorScroll.onScroll }}>
               <div className="flex flex-col gap-[var(--ui-section-gap)] p-[var(--ui-section-gap)]">
               {!activeFileName ? (
                 <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useId, useMemo, useState, type MouseEvent as ReactMouseEvent, type UIEvent } from 'react'
 import { Code, GripVertical, Loader2, Save, TriangleAlert, Wand2 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { consumeMocksWriteRefusedInvalid } from '@/hooks/use-mocks'
@@ -34,6 +34,8 @@ interface MockEditorPanelProps {
    * stays open and editable; only 「保存」 is disabled until the file is fixed.
    */
   fileInvalidLocation?: string | null
+  /** Issue #111: scroll handler of the form's own scroll container (lifts the title bar). */
+  onBodyScroll?: (event: UIEvent<HTMLElement>) => void
 }
 
 const MOCK_METHOD_OPTIONS = [
@@ -67,8 +69,10 @@ export function MockEditorPanel({
   updateMock,
   onSaved,
   fileInvalidLocation = null,
+  onBodyScroll,
 }: MockEditorPanelProps) {
   const fileInvalid = fileInvalidLocation != null
+  const methodId = useId()
   const initialForm = useMemo<Omit<MockRule, 'id'>>(() => {
     if (rule) {
       return {
@@ -231,7 +235,7 @@ export function MockEditorPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="app-panel-content">
+      <div className="app-panel-content" onScroll={onBodyScroll} data-slot="mock-editor-scroll">
         {fileInvalidLocation != null && (
           <p data-testid="mock-editor-file-invalid" role="alert" className="flex items-start gap-1 text-xs text-destructive">
             <TriangleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" />
@@ -254,10 +258,10 @@ export function MockEditorPanel({
             />
           </div>
           <div className="app-field-group">
-            <Label>HTTP 方法</Label>
+            <Label htmlFor={methodId}>HTTP 方法</Label>
             {/* Issue #111: same dropdown as the rest of the app, not a native <select>. */}
             <Select value={form.method || '*'} onValueChange={(value) => updateField('method', value)}>
-              <SelectTrigger className="w-full" aria-label="HTTP 方法" data-testid="mock-editor-method">
+              <SelectTrigger id={methodId} className="w-full" data-testid="mock-editor-method">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
