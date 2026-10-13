@@ -208,7 +208,11 @@ describe('SettingsPanel legacy relative mocks path notice (#121)', () => {
     const newEl = screen.getByTestId('settings-mocks-file-legacy-new')
     expect(newEl.textContent).toBe(`现在读取：${newPath}（文件不存在）`)
     expect(newEl.querySelectorAll('wbr')).toHaveLength(newPath.split('/').length - 1)
-    expect(wrap).toHaveClass('duration-150')
+    expect(wrap).toHaveClass('duration-150', 'ease-out', 'motion-reduce:transition-none', 'grid-rows-[1fr]', 'opacity-100')
+    // the parent's gap lives inside the collapsing wrapper, so a collapsed notice leaves none
+    expect(wrap).toHaveClass('-mt-[var(--ui-field-gap)]')
+    expect(screen.getByTestId('settings-mocks-file-legacy-gap')).toHaveClass('pt-[var(--ui-field-gap)]')
+    expect(wrap.contains(screen.getByTestId('settings-mocks-file-legacy-gap'))).toBe(true)
     // notice sits between the input and the help text
     const help = screen.getByText(/必须是 JSON 格式的 Mock 规则文件/)
     expect(input.compareDocumentPosition(wrap) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -222,6 +226,7 @@ describe('SettingsPanel legacy relative mocks path notice (#121)', () => {
     expect(vi.mocked(updateSettings).mock.calls.filter(([u]) => 'mocksFilePath' in (u as object))).toEqual([])
     expect(wrap).toHaveAttribute('data-visible', 'false')
     expect(wrap).toHaveAttribute('aria-hidden', 'true')
+    expect(wrap).toHaveClass('grid-rows-[0fr]', 'opacity-0')
   })
 
   it('hides for an empty input and shows again for a relative one', async () => {

@@ -129,12 +129,15 @@ export function MocksFileLegacyPathNote({ oldPath, newPath, visible, onUseOldPat
       data-visible={visible ? 'true' : 'false'}
       aria-hidden={!visible}
       className={cn(
-        'grid transition-[grid-template-rows,opacity] duration-150 ease-out motion-reduce:transition-none',
+        // The parent's flex gap is pulled into the collapsing wrapper (negative
+        // margin + matching padding inside), so a collapsed notice leaves no gap.
+        '-mt-[var(--ui-field-gap)] grid transition-[grid-template-rows,opacity] duration-150 ease-out motion-reduce:transition-none',
         visible ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
       )}
     >
       {/* Content stays mounted so the collapse animates instead of jumping. */}
       <div className="min-h-0 overflow-hidden" inert={!visible || undefined}>
+        <div data-testid="settings-mocks-file-legacy-gap" className="pt-[var(--ui-field-gap)]">
           <div
             data-testid="settings-mocks-file-legacy"
             role={visible ? 'status' : undefined}
@@ -161,6 +164,7 @@ export function MocksFileLegacyPathNote({ oldPath, newPath, visible, onUseOldPat
               </p>
             </div>
           </div>
+        </div>
       </div>
     </div>
   )
