@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dedupeMockRules, upsertMockRule } from './use-mocks'
+import { dedupeMockRules, rollbackMockRule, upsertMockRule } from './use-mocks'
 import type { MockRule } from '@/types'
 
 const baseRule = (id: number, name: string): MockRule => ({
@@ -48,5 +48,15 @@ describe('use-mocks helpers', () => {
     rules = upsertMockRule(rules, baseRule(3, 'third'))
 
     expect(rules.map((rule) => rule.name)).toEqual(['first', 'second', 'third'])
+  })
+})
+
+describe('rollbackMockRule (issue #123)', () => {
+  const r = (id: number, name: string) => ({ id, name, urlPattern: `/${name}`, method: '*', statusCode: 200, delay: 0, bodyType: 'inline', headers: {}, body: '', enabled: true }) as MockRule
+  it('restores a rule that is still listed', () => {
+    expect(rollbackMockRule([r(1, 'optimistic')], r(1, 'orig'))).toEqual([r(1, 'orig')])
+  })
+  it('does not re-insert a rule a broadcast removed meanwhile (file broke → list emptied)', () => {
+    expect(rollbackMockRule([], r(1, 'orig'))).toEqual([])
   })
 })

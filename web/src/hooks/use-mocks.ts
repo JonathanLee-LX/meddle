@@ -33,6 +33,15 @@ function reportInvalidMocksFile(data: unknown, opts: { silent?: boolean } = {}):
   window.dispatchEvent(new CustomEvent(MOCKS_FILE_STATUS_CHANGED_EVENT))
 }
 
+/**
+ * Undo an optimistic update. Only replaces the rule if it is still listed: a
+ * server broadcast that arrived meanwhile (e.g. the file broke and the list is
+ * now empty, issue #123) must not be undone by re-inserting a stale copy.
+ */
+export function rollbackMockRule(prev: MockRule[], rule: MockRule): MockRule[] {
+  return prev.some((r) => r.id === rule.id) ? upsertMockRule(prev, rule) : prev
+}
+
 export function dedupeMockRules(rules: MockRule[]): MockRule[] {
   const byId = new Map<number, MockRule>()
   for (const rule of rules) {
@@ -118,14 +127,14 @@ export function useMocks() {
       reportInvalidMocksFile(data, { silent: opts?.silentInvalid })
       if (previous) {
         const rollback = previous
-        setMockRules((prev) => upsertMockRule(prev, rollback))
+        setMockRules((prev) => rollbackMockRule(prev, rollback))
       }
       return false
     } catch (err) {
       console.error('Failed to update mock:', err)
       if (previous) {
         const rollback = previous
-        setMockRules((prev) => upsertMockRule(prev, rollback))
+        setMockRules((prev) => rollbackMockRule(prev, rollback))
       }
       return false
     }
