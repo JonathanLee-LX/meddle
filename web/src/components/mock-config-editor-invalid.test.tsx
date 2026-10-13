@@ -115,8 +115,10 @@ describe('Mock editor while the mocks file is broken (issue #123)', () => {
     const wrap = screen.getByTestId('mock-editor-file-invalid-wrap')
     expect(wrap).toHaveAttribute('data-visible', 'false')
     expect(wrap).toHaveClass('grid-rows-[0fr]', 'opacity-0', 'duration-150', 'ease-out', 'motion-reduce:transition-none', '-mb-[var(--ui-content-gap)]')
-    expect(wrap).toHaveAttribute('aria-hidden', 'true')
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    // the live region is always mounted (so the change is announced) but empty for AT
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveAttribute('aria-live', 'assertive')
+    expect(wrap).toContainElement(alert)
 
     state.invalid = true
     act(() => { window.dispatchEvent(new CustomEvent('mocksUpdated', { detail: [rule] })) })
@@ -124,6 +126,9 @@ describe('Mock editor while the mocks file is broken (issue #123)', () => {
     expect(screen.getByTestId('mock-editor-file-invalid-wrap')).toBe(wrap) // same node, not remounted
     expect(wrap).toHaveClass('grid-rows-[1fr]', 'opacity-100')
     expect(wrap).toHaveAttribute('data-visible', 'true')
+    expect(screen.getByRole('alert')).toBe(alert) // same live region node, only its text changed
+    expect(alert).toHaveTextContent('Mock 文件格式错误，修复后才能保存')
+    expect(alert.firstElementChild).not.toHaveAttribute('aria-hidden')
     expect(screen.getByDisplayValue('cart')).toBe(nameInput) // form not remounted
 
     state.invalid = false
@@ -132,7 +137,8 @@ describe('Mock editor while the mocks file is broken (issue #123)', () => {
     expect(wrap).toHaveClass('grid-rows-[0fr]', 'opacity-0')
     // text stays while collapsing (no empty flash), but is hidden from AT
     expect(wrap).toHaveTextContent('第 5 行第 3 列')
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('alert')).toBe(alert)
+    expect(alert.firstElementChild).toHaveAttribute('aria-hidden', 'true')
   })
 
   it('rule deleted elsewhere while the file is valid: editor closes', async () => {

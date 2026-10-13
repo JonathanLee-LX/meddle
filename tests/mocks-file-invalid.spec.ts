@@ -377,6 +377,46 @@ describe('mocks write through a symlink (issue #123)', () => {
         await waitFor(async () => names(await list(base)).includes('edited'))
     }, 60_000)
 
+    it('target directory created later: edits well after the switch (beyond the catch-up re-checks) still refresh (issue #125)', async () => {
+        const home = makeHome()
+        const realDir = join(home, 'later', 'dotfiles')
+        const target = join(realDir, 'mocks.json')
+        mkdirSync(join(home, 'links'))
+        const link = join(home, 'links', 'mocks.json')
+        symlinkSync(target, link)
+        setMocksPathOnDisk(home, link)
+        const { base } = await startProxy(home)
+        await delay(300)
+        mkdirSync(realDir, { recursive: true })
+        await delay(2_500) // past the 100/300/1000ms re-checks: only real events can help now
+        writeMocks(target, 2, [rule(1, 'late-1')])
+        await waitFor(async () => names(await list(base)).includes('late-1'), 4_000)
+        await delay(2_500)
+        writeMocks(target, 3, [rule(1, 'late-1'), rule(2, 'late-2')])
+        await waitFor(async () => names(await list(base)).includes('late-2'), 4_000)
+    }, 60_000)
+
+    it('target directory removed and recreated: watching resumes (issue #125)', async () => {
+        const home = makeHome()
+        const realDir = join(home, 'repo', 'dotfiles')
+        const target = join(realDir, 'mocks.json')
+        mkdirSync(realDir, { recursive: true })
+        writeMocks(target, 2, [rule(1, 'v1')])
+        mkdirSync(join(home, 'links'))
+        const link = join(home, 'links', 'mocks.json')
+        symlinkSync(target, link)
+        setMocksPathOnDisk(home, link)
+        const { base } = await startProxy(home)
+        expect(names(await list(base))).toEqual(['v1'])
+        rmSync(join(home, 'repo'), { recursive: true, force: true }) // e.g. repo re-cloned
+        await waitFor(async () => names(await list(base)).length === 0, 4_000)
+        await delay(1_500)
+        mkdirSync(realDir, { recursive: true })
+        await delay(2_500)
+        writeMocks(target, 3, [rule(1, 'v2')])
+        await waitFor(async () => names(await list(base)).includes('v2'), 4_000)
+    }, 60_000)
+
     it('symlink retargeted to a new directory: an edit right after the switch is not lost', async () => {
         const home = makeHome()
         mkdirSync(join(home, 'd0'))

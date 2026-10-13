@@ -232,21 +232,26 @@ export function MockEditorPanel({
         <div
           data-testid="mock-editor-file-invalid-wrap"
           data-visible={fileInvalid ? 'true' : 'false'}
-          aria-hidden={!fileInvalid}
           className={cn(
             '-mb-[var(--ui-content-gap)] grid shrink-0 transition-[grid-template-rows,opacity] duration-150 ease-out motion-reduce:transition-none',
             fileInvalid ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
           )}
         >
-          <div className="min-h-0 overflow-hidden" inert={!fileInvalid || undefined}>
+          <div className="min-h-0 overflow-hidden">
             <div className="pb-[var(--ui-content-gap)]">
+              {/* The live region stays mounted so screen readers pick up the
+                  text change; while collapsing, the last text is kept for the
+                  animation but hidden from assistive tech. */}
               <p
                 data-testid={fileInvalid ? 'mock-editor-file-invalid' : undefined}
-                role={fileInvalid ? 'alert' : undefined}
+                role="alert"
+                aria-live="assertive"
                 className="flex items-start gap-1 text-xs text-destructive"
               >
-                <TriangleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" />
-                <span className="min-w-0">{INVALID_FILE_SAVE_HINT}：<span className="font-mono">{shownInvalidLocation}</span></span>
+                <span aria-hidden={!fileInvalid || undefined} className="flex min-w-0 items-start gap-1">
+                  <TriangleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+                  <span className="min-w-0">{INVALID_FILE_SAVE_HINT}：<span className="font-mono">{shownInvalidLocation}</span></span>
+                </span>
               </p>
             </div>
           </div>
