@@ -236,6 +236,17 @@ describe('MockConfig missing mocks file notice (#118)', () => {
       expect(screen.getByTestId('mock-config-create-wrapper')).toHaveAttribute('aria-label', 'Mock 文件格式错误，修复后才能新增')
     })
 
+    it('the error block row has no hover / selected fill (issue #133)', async () => {
+      stubMocksFile([invalid])
+      renderMock({ mockRules: [] })
+      const block = await screen.findByTestId('mock-config-file-invalid')
+      const row = block.closest('tr')!
+      expect(row).toHaveAttribute('data-testid', 'mock-config-empty-row')
+      expect(row).not.toHaveAttribute('data-state')
+      expect(row).toHaveClass('hover:bg-transparent')
+      expect(row).not.toHaveClass('cursor-pointer')
+    })
+
     it('blocks one-click create from traffic while invalid', async () => {
       stubMocksFile([invalid])
       renderMock({ mockRules: [] })
