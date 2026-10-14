@@ -221,11 +221,11 @@ function HeaderDiffPreview({
       {expanded && (
         <div className="grid gap-2 md:grid-cols-2">
           <div className="rounded-lg bg-muted/50 p-2 text-xs font-mono">
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">变更前</div>
+            <div className="text-[11px] text-muted-foreground mb-1">变更前</div>
             <CopyableHeaders headers={before} />
           </div>
           <div className="rounded-lg bg-muted/50 p-2 text-xs font-mono">
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">变更后</div>
+            <div className="text-[11px] text-muted-foreground mb-1">变更后</div>
             <CopyableHeaders headers={after} />
           </div>
         </div>
@@ -300,7 +300,7 @@ function StageDiffSections({ stage }: { stage: InspectionStage }) {
     <div className="space-y-2">
       {(changes.targetBefore || changes.targetAfter) && (
         <div className="rounded-lg bg-muted/50 p-2">
-          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Request URL Diff</div>
+          <div className="text-[11px] text-muted-foreground mb-2">Request URL diff</div>
           <DiffLinePreview
             lines={buildKeyValueDiffLines('Request URL', changes.targetBefore, changes.targetAfter || changes.target)}
           />
@@ -309,14 +309,14 @@ function StageDiffSections({ stage }: { stage: InspectionStage }) {
 
       {(changes.requestHeadersBefore || changes.requestHeadersAfter) && (
         <div className="rounded-lg bg-muted/50 p-2">
-          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Request Header Diff</div>
+          <div className="text-[11px] text-muted-foreground mb-2">Request header diff</div>
           <HeaderDiffPreview before={changes.requestHeadersBefore || {}} after={changes.requestHeadersAfter || {}} />
         </div>
       )}
 
       {(changes.responseStatusCodeBefore !== undefined || changes.responseStatusCodeAfter !== undefined) && (
         <div className="rounded-lg bg-muted/50 p-2">
-          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Response Status Diff</div>
+          <div className="text-[11px] text-muted-foreground mb-2">Response status diff</div>
           <DiffLinePreview
             lines={buildKeyValueDiffLines(
               'Response Status',
@@ -329,14 +329,14 @@ function StageDiffSections({ stage }: { stage: InspectionStage }) {
 
       {(changes.responseHeadersBefore || changes.responseHeadersAfter) && (
         <div className="rounded-lg bg-muted/50 p-2">
-          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Response Header Diff</div>
+          <div className="text-[11px] text-muted-foreground mb-2">Response header diff</div>
           <HeaderDiffPreview before={changes.responseHeadersBefore || {}} after={changes.responseHeadersAfter || {}} />
         </div>
       )}
 
       {(changes.responseBodyBefore !== undefined || changes.responseBodyAfter !== undefined) && (
         <div className="rounded-lg bg-muted/50 p-2">
-          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Response Body Diff</div>
+          <div className="text-[11px] text-muted-foreground mb-2">Response body diff</div>
           <CompactBodyDiff before={changes.responseBodyBefore || ''} after={changes.responseBodyAfter || changes.responseBody || ''} />
         </div>
       )}
@@ -402,8 +402,8 @@ function StageCard({
         <>
           {stage.target && (
             <div className="rounded-lg bg-muted/50 p-2">
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">
-                当前 Target
+              <div className="text-[11px] text-muted-foreground mb-1">
+                当前 target
               </div>
               <div className="font-mono text-xs break-all">
                 {stage.target}
@@ -656,7 +656,7 @@ function OverviewHitPane({ record, detail }: { record: ProxyRecord; detail: Reco
       </div>
 
       <div>
-        <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <h4 className="mb-1.5 text-xs font-semibold text-muted-foreground">
           命中规则 / Mock
         </h4>
         <div className="mb-1 text-sm font-semibold">{hit.title}</div>
@@ -673,8 +673,8 @@ function OverviewHitPane({ record, detail }: { record: ProxyRecord; detail: Reco
 
       {headerEntries.length > 0 && (
         <div>
-          <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            请求 Headers（节选）
+          <h4 className="mb-1.5 text-xs font-semibold text-muted-foreground">
+            请求 headers（节选）
           </h4>
           <div className="grid grid-cols-[minmax(72px,90px)_1fr] gap-x-3 gap-y-1 text-xs">
             {headerEntries.map(([key, value]) => (
@@ -869,12 +869,12 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
               <ScrollArea className="h-full px-4 pb-4">
                 <div className="space-y-3 pt-3">
                   <div>
-                    <h4 className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">Request Headers</h4>
+                    <h4 className="text-xs font-semibold text-muted-foreground mb-1.5">Request headers</h4>
                     <CopyableHeaders headers={detail.requestHeaders} />
                   </div>
                   <Separator />
                   <div>
-                    <h4 className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">Request Body</h4>
+                    <h4 className="text-xs font-semibold text-muted-foreground mb-1.5">Request body</h4>
                     <CopyableJsonBody body={detail.requestBody} />
                   </div>
                 </div>
@@ -884,12 +884,12 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
               <ScrollArea className="h-full px-4 pb-4">
                 <div className="space-y-3 pt-3">
                   <div>
-                    <h4 className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">Response Headers</h4>
+                    <h4 className="text-xs font-semibold text-muted-foreground mb-1.5">Response headers</h4>
                     <CopyableHeaders headers={detail.responseHeaders} />
                   </div>
                   <Separator />
                   <div>
-                    <h4 className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">Response Body</h4>
+                    <h4 className="text-xs font-semibold text-muted-foreground mb-1.5">Response body</h4>
                     <CopyableJsonBody body={detail.responseBody} />
                   </div>
                 </div>

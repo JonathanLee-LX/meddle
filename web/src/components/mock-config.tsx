@@ -14,6 +14,8 @@ import { MockEditorPanel } from '@/components/mock-editor-panel'
 import { toast } from '@/components/ui/toast'
 import { MOCK_OPEN_CREATE_EVENT, type MockOpenCreateDetail } from '@/lib/mock-config-events'
 import { SplitPane } from '@/components/split-pane'
+import { EditorTitleBar, PaneBar, PaneTitle } from '@/components/pane-bar'
+import { useEditorScrolled } from '@/hooks/use-editor-scrolled'
 import { EditorPaneActionsProvider } from '@/components/editor-pane-actions'
 import { mockPaneSplit } from '@/lib/mock-pane-split'
 import { MocksFileInvalidEmptyState, MocksFileMissingEmptyState } from '@/components/mocks-file-missing-note'
@@ -171,6 +173,7 @@ export function MockConfig({
       : editor.kind === 'edit'
         ? `edit-${editor.ruleId}`
         : 'idle'
+  const editorScroll = useEditorScrolled(editorKey)
 
   return (
     <SplitPane
@@ -184,8 +187,8 @@ export function MockConfig({
       separatorLabel="调整 Mock 列表宽度"
       list={
       <>
-        <div className="app-pane-bar flex shrink-0 items-center justify-between gap-2 border-b">
-          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Mock 规则</div>
+        <PaneBar>
+          <PaneTitle>Mock 规则</PaneTitle>
           {fileInvalid ? (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -205,7 +208,7 @@ export function MockConfig({
               新增规则
             </Button>
           )}
-        </div>
+        </PaneBar>
         <div className="meddle-thin-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
             <Table>
               <TableHeader>
@@ -309,23 +312,27 @@ export function MockConfig({
       </>
       }
     >
-        <div className="app-pane-bar flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b">
-            <div className="min-w-0 truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              {editor.kind === 'create'
-                ? '编辑 Mock · 新建'
-                : editor.kind === 'edit'
-                  ? `编辑 Mock · ${editingRule?.name || editingRule?.urlPattern || editor.ruleId}`
-                  : '编辑 Mock'}
-            </div>
-            <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
+        <EditorTitleBar
+          data-testid="mock-editor-title-bar"
+          scrolled={editorScroll.scrolled}
+          title={
+            editor.kind === 'create'
+              ? '编辑 Mock · 新建'
+              : editor.kind === 'edit'
+                ? `编辑 Mock · ${editingRule?.name || editingRule?.urlPattern || editor.ruleId}`
+                : '编辑 Mock'
+          }
+          actions={
+            <>
               {editor.kind !== 'idle' ? (
                 <Button variant="ghost" size="sm" onClick={closeEditor}>
                   取消
                 </Button>
               ) : null}
               <div ref={setActionsHost} data-testid="editor-pane-actions" className="contents" />
-            </div>
-          </div>
+            </>
+          }
+        />
           <EditorPaneActionsProvider host={actionsHost}>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {editor.kind === 'idle' ? (
@@ -336,6 +343,7 @@ export function MockConfig({
             ) : editor.kind === 'create' ? (
               <MockEditorPanel
                 key={editorKey}
+                onBodyScroll={editorScroll.onScroll}
                 initialData={editor.initialData}
                 createMock={createMock}
                 updateMock={updateMock}
@@ -345,6 +353,7 @@ export function MockConfig({
             ) : editingRule ? (
               <MockEditorPanel
                 key={editorKey}
+                onBodyScroll={editorScroll.onScroll}
                 rule={editingRule}
                 createMock={createMock}
                 updateMock={updateMock}

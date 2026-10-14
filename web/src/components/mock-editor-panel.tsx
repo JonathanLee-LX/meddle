@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useId, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type UIEvent } from 'react'
 import { Code, GripVertical, Loader2, Save, TriangleAlert, Wand2 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { consumeMocksWriteRefusedInvalid } from '@/hooks/use-mocks'
@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { fixCode } from '@/lib/code-fixer'
@@ -18,6 +19,7 @@ import { MonacoEditor } from './monaco-editor'
 import { MockHeadersEditor } from './mock-headers-editor'
 import { EditorPaneActions, useInEditorPane } from '@/components/editor-pane-actions'
 import { SaveButton } from '@/components/save-shortcut/save-button'
+import { EditorSaveButton } from '@/components/pane-bar'
 import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
 import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
 import { toast } from '@/components/ui/toast'
@@ -33,7 +35,18 @@ interface MockEditorPanelProps {
    * stays open and editable; only 「保存」 is disabled until the file is fixed.
    */
   fileInvalidLocation?: string | null
+  /** Issue #111: scroll handler of the form's own scroll container (lifts the title bar). */
+  onBodyScroll?: (event: UIEvent<HTMLElement>) => void
 }
+
+const MOCK_METHOD_OPTIONS = [
+  { value: '*', label: '全部' },
+  { value: 'GET', label: 'GET' },
+  { value: 'POST', label: 'POST' },
+  { value: 'PUT', label: 'PUT' },
+  { value: 'DELETE', label: 'DELETE' },
+  { value: 'PATCH', label: 'PATCH' },
+]
 
 export const INVALID_FILE_SAVE_HINT = 'Mock 文件格式错误，修复后才能保存'
 
@@ -57,8 +70,10 @@ export function MockEditorPanel({
   updateMock,
   onSaved,
   fileInvalidLocation = null,
+  onBodyScroll,
 }: MockEditorPanelProps) {
   const fileInvalid = fileInvalidLocation != null
+  const methodId = useId()
   // Keep the last location while the notice collapses so its text does not vanish mid-animation.
   const lastInvalidLocation = useRef<string | null>(null)
   if (fileInvalidLocation != null) lastInvalidLocation.current = fileInvalidLocation
@@ -225,7 +240,7 @@ export function MockEditorPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="app-panel-content">
+      <div className="app-panel-content" onScroll={onBodyScroll} data-slot="mock-editor-scroll">
         {/* Issue #125: collapse instead of mount/unmount so the form below
             does not jump ~26px. The parent's flex gap is pulled into the
             collapsing wrapper so a hidden notice leaves no gap. */}
@@ -271,19 +286,20 @@ export function MockEditorPanel({
             />
           </div>
           <div className="app-field-group">
-            <Label>HTTP 方法</Label>
-            <select
-              value={form.method}
-              onChange={(event) => updateField('method', event.target.value)}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-            >
-              <option value="*">全部</option>
-              <option value="GET">GET</option>
-              <option value="POST">POST</option>
-              <option value="PUT">PUT</option>
-              <option value="DELETE">DELETE</option>
-              <option value="PATCH">PATCH</option>
-            </select>
+            <Label htmlFor={methodId}>HTTP 方法</Label>
+            {/* Issue #111: same dropdown as the rest of the app, not a native <select>. */}
+            <Select value={form.method || '*'} onValueChange={(value) => updateField('method', value)}>
+              <SelectTrigger id={methodId} className="w-full" data-testid="mock-editor-method">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {MOCK_METHOD_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
@@ -408,10 +424,7 @@ export function MockEditorPanel({
             <TooltipContent data-testid="mock-editor-save-tooltip">{INVALID_FILE_SAVE_HINT}</TooltipContent>
           </Tooltip>
         ) : (
-          <SaveButton size="sm" onClick={handleSave} disabled={saving || !form.urlPattern.trim()}>
-            {saving ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <Save data-icon="inline-start" />}
-            {saving ? '保存中...' : '保存'}
-            </SaveButton>
+          <EditorSaveButton onClick={handleSave} saving={saving} disabled={!form.urlPattern.trim()} />
         )}
       </EditorPaneActions>
     </div>

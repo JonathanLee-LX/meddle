@@ -13,7 +13,6 @@ import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { 
   Wand2, 
-  Save, 
   CheckCircle2, 
   XCircle, 
   Loader2,
@@ -23,7 +22,7 @@ import {
   Check
 } from 'lucide-react'
 import { getAIConfig, isAIConfigValid } from '@/lib/ai-config-store'
-import { SaveButton } from '@/components/save-shortcut/save-button'
+import { EditorSaveButton } from '@/components/pane-bar'
 import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
 import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
 import { toast } from '@/components/ui/toast'
@@ -574,30 +573,15 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
                 >
                   重新生成
                 </Button>
-                <SaveButton
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={saving}
-                >
-                  {saving ? (
-                    <>
-                      <Loader2 data-icon="inline-start" className="animate-spin" />
-                      保存中...
-                    </>
-                  ) : (
-                    <>
-                      <Save data-icon="inline-start" />
-                      保存插件
-                    </>
-                  )}
-                </SaveButton>
+                <EditorSaveButton onClick={handleSave} saving={saving} label="保存插件" />
               </>
             ) : (
               <Button
+                variant="outline"
                 size="sm"
                 onClick={handleHotReload}
                 disabled={reloading}
-                className="bg-green-600 hover:bg-green-700"
+                data-testid="plugin-generator-hot-reload"
               >
                 {reloading ? (
                   <>

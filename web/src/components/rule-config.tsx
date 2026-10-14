@@ -2,7 +2,6 @@ import { useEffect, useCallback, useMemo, useRef, useState, memo, useTransition,
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 import { Spinner } from '@/components/ui/spinner'
-import { SaveButton } from '@/components/save-shortcut/save-button'
 import { getSaveShortcutLabel } from '@/components/save-shortcut/save-shortcut-label'
 import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
 import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
@@ -22,7 +21,6 @@ import {
   GripVertical,
   ListChecks,
   Plus,
-  Save,
   Table2,
   ToggleLeft,
   ToggleRight,
@@ -43,6 +41,8 @@ import { supportsOpenFilePicker } from '@/types/file-system-access'
 import { FEATURE_FLAGS } from '@/lib/feature-flags'
 import { ruleFilePaneSplit } from '@/lib/rule-file-split'
 import { SplitPane } from '@/components/split-pane'
+import { EditorEmptyState, EditorSaveButton, EditorTitleBar, PaneBar, PaneTitle } from '@/components/pane-bar'
+import { useEditorScrolled } from '@/hooks/use-editor-scrolled'
 import { getEprcTextDiagnostics, normalizeImportedRuleText, parseEprcRules, rulesToEprc } from '@/utils/eprc-parser'
 import { EprcTextarea } from '@/components/eprc-textarea'
 import {
@@ -983,6 +983,8 @@ export function RuleConfig(props: RuleConfigProps) {
   }, [rules, filteredRules])
 
   const displayedTextDraft = activeFileName ? textDraft : ''
+  // Issue #111: reset when the file / view changes (the scroll container may unmount).
+  const editorScroll = useEditorScrolled(`${activeFileName}|${viewMode}`)
   const textLoading = Boolean(activeFileName && loadedTextFileName !== activeFileName)
   const textDiagnostics = useMemo(() => getEprcTextDiagnostics(displayedTextDraft), [displayedTextDraft])
   const textHasErrors = viewMode === 'text' && textDiagnostics.length > 0
@@ -1019,8 +1021,8 @@ export function RuleConfig(props: RuleConfigProps) {
       separatorLabel="调整规则文件列表宽度"
       list={
       <>
-        <div className="app-pane-bar flex shrink-0 items-center justify-between gap-2 border-b">
-          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">规则文件</div>
+        <PaneBar>
+          <PaneTitle>规则文件</PaneTitle>
           <div data-slot="rule-file-actions" className="flex shrink-0 items-center">
             {isCreating ? (
               <div
@@ -1082,7 +1084,7 @@ export function RuleConfig(props: RuleConfigProps) {
               </>
             )}
           </div>
-        </div>
+        </PaneBar>
         <div
           data-slot="rule-file-tabs-scroll"
           className="meddle-thin-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
@@ -1129,6 +1131,33 @@ export function RuleConfig(props: RuleConfigProps) {
       </>
       }
     >
+        <EditorTitleBar
+          data-testid="rule-editor-title-bar"
+          scrolled={editorScroll.scrolled}
+          title={activeFileName ? `编辑规则 · ${activeFileName}` : '编辑规则'}
+          actions={
+            activeFileName ? (
+              <EditorSaveButton
+                onClick={handleSave}
+                saving={saving}
+                disabled={textLoading || textHasErrors}
+                title={
+                  textHasErrors
+                    ? `${textDiagnostics.length} 行内容无法识别，请先修正`
+                    : `保存 (${getSaveShortcutLabel()})`
+                }
+              />
+            ) : null
+          }
+        />
+        {!activeFileName ? (
+          <EditorEmptyState
+            data-testid="rule-editor-empty"
+            title="选择左侧规则文件进行编辑，或点击「+」新建规则文件"
+            hint="规则文件按从上到下的顺序生效"
+          />
+        ) : (
+        <div className="flex min-h-0 flex-1 flex-col">
         <div
           data-slot="rule-config-sticky-controls"
           className="shrink-0 bg-card"
@@ -1205,25 +1234,6 @@ export function RuleConfig(props: RuleConfigProps) {
                     文本导入
                   </Button>
                 </>
-              )}
-              {activeFileName && (
-                <SaveButton
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={saving || textLoading || textHasErrors}
-                  title={
-                    textHasErrors
-                      ? `${textDiagnostics.length} 行内容无法识别，请先修正`
-                      : `保存 (${getSaveShortcutLabel()})`
-                  }
-                >
-                  {saving ? (
-                    <Spinner data-icon="inline-start" />
-                  ) : (
-                    <Save data-icon="inline-start" />
-                  )}
-                  保存
-                </SaveButton>
               )}
             </div>
           </div>
@@ -1355,7 +1365,7 @@ export function RuleConfig(props: RuleConfigProps) {
                   </TableHeader>
                 </Table>
               </div>
-              <ScrollArea className="min-h-0 flex-1">
+              <ScrollArea className="min-h-0 flex-1" viewportProps={{ onScroll: editorScroll.onScroll }}>
                 <Table className="table-fixed">
                   <RuleTableColGroup showDragColumn={showDragColumn} />
                   <TableBody>
@@ -1430,7 +1440,7 @@ export function RuleConfig(props: RuleConfigProps) {
             </ScrollArea>
             </div>
           ) : (
-            <ScrollArea className="min-h-0 flex-1">
+            <ScrollArea className="min-h-0 flex-1" viewportProps={{ onScroll: editorScroll.onScroll }}>
               <div className="flex flex-col gap-[var(--ui-section-gap)] p-[var(--ui-section-gap)]">
               {!activeFileName ? (
                 <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
@@ -1456,6 +1466,8 @@ export function RuleConfig(props: RuleConfigProps) {
           <div className="app-pane-bar shrink-0 border-t text-sm text-muted-foreground">
             显示 {filteredRules.length} / {rules.length} 条规则
           </div>
+        )}
+        </div>
         )}
     </SplitPane>
 

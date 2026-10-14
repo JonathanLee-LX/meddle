@@ -144,7 +144,7 @@ export function RoutePreview({ rules, activeFileName, embedded = false, onReveal
           </div>
 
           <div className="space-y-1">
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">真实 URL</div>
+            <div className="text-[11px] text-muted-foreground">真实 URL</div>
             <div className="rounded-md border bg-background px-3 py-2 font-mono text-xs break-all">
               {result.resolvedUrl}
             </div>
@@ -152,7 +152,7 @@ export function RoutePreview({ rules, activeFileName, embedded = false, onReveal
 
           {result.matchedRule && (
             <div className="space-y-1">
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">命中规则</div>
+              <div className="text-[11px] text-muted-foreground">命中规则</div>
               <div className="flex items-stretch gap-2">
                 <div className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 font-mono text-xs break-all">
                   {result.matchedRule.pattern}
@@ -177,7 +177,7 @@ export function RoutePreview({ rules, activeFileName, embedded = false, onReveal
           )}
 
           <div className="space-y-1">
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">说明</div>
+            <div className="text-[11px] text-muted-foreground">说明</div>
             <div className="space-y-1 rounded-md border bg-background px-3 py-2 text-xs">
               {result.notes.length > 0 ? (
                 result.notes.map((note) => (
