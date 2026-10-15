@@ -1,5 +1,6 @@
 import { previewRouteTarget } from '../../core/route-preview'
-import { parseEprcWithExclusions, ruleMapToEprcText } from '../../helpers'
+import { parseEprcWithExclusions } from '../../helpers'
+import { addRouteRule, deleteRouteRule, updateRouteRule } from '../../core/rule-file-edit'
 import {
     createRuleFile,
     getActiveRuleFileNames,
@@ -88,7 +89,8 @@ function normalizeRouteRuleAddInput(input: Record<string, unknown>): RouteRuleRe
         ruleFile: asString(input.ruleFile, 'ruleFile'),
         pattern: asString(input.pattern, 'pattern'),
         target: asString(input.target, 'target'),
-        exclusions: asStringArray(input.exclusions),
+        // Issue #145: omitted exclusions keep an existing rule's own exclusions.
+        exclusions: input.exclusions === undefined ? undefined : asStringArray(input.exclusions),
     }
 }
 
@@ -124,16 +126,17 @@ function buildRouteRuleAddContent(input: RouteRuleRequiredTargetInput, ctx: Agen
     const { ruleMap, excludeMap } = parseEprcWithExclusions(content)
     const { internalPattern, markerSuffix } = normalizeRoutePattern(input.pattern)
     const previousTarget = ruleMap[internalPattern]
-    ruleMap[internalPattern] = `${input.target}${markerSuffix}`
-    excludeMap[internalPattern] = input.exclusions || []
+    const previousExclusions = previousTarget ? excludeMap[internalPattern] || [] : []
+    const exclusions = input.exclusions === undefined ? previousExclusions : input.exclusions
     return {
         content,
-        newContent: ruleMapToEprcText(ruleMap, excludeMap),
+        // Issue #145: edit only this rule's line(s); other lines keep their exact bytes.
+        newContent: addRouteRule(content, { pattern: input.pattern, target: input.target, exclusions: input.exclusions }).content,
         internalPattern,
         previousTarget,
-        previousExclusions: previousTarget ? excludeMap[internalPattern] || [] : [],
-        newTarget: ruleMap[internalPattern],
-        exclusions: excludeMap[internalPattern] || [],
+        previousExclusions,
+        newTarget: `${input.target}${markerSuffix}`,
+        exclusions,
     }
 }
 
@@ -149,12 +152,11 @@ function buildRouteRuleUpdateContent(input: RouteRuleWriteInput, ctx: AgentToolC
     const previousExclusions = excludeMap[internalPattern] || []
     const nextTarget = input.target ? `${input.target}${markerSuffix}` : previousTarget
     const nextExclusions = input.exclusions === undefined ? previousExclusions : input.exclusions
-    ruleMap[internalPattern] = nextTarget
-    excludeMap[internalPattern] = nextExclusions
 
     return {
         content,
-        newContent: ruleMapToEprcText(ruleMap, excludeMap),
+        // Issue #145: edit only this rule's line(s); other lines keep their exact bytes.
+        newContent: updateRouteRule(content, { pattern: input.pattern, target: input.target || undefined, exclusions: input.exclusions }).content,
         internalPattern,
         previousTarget,
         previousExclusions,
@@ -173,12 +175,11 @@ function buildRouteRuleDeleteContent(input: RouteRuleWriteInput, ctx: AgentToolC
     }
 
     const previousExclusions = excludeMap[internalPattern] || []
-    delete ruleMap[internalPattern]
-    delete excludeMap[internalPattern]
 
     return {
         content,
-        newContent: ruleMapToEprcText(ruleMap, excludeMap),
+        // Issue #145: remove only this rule; other lines keep their exact bytes.
+        newContent: deleteRouteRule(content, { pattern: input.pattern }).content,
         internalPattern,
         previousTarget,
         previousExclusions,
@@ -504,7 +505,7 @@ function createRouteRuleAddTool(): AgentTool {
                     ruleFile: normalized.ruleFile,
                     pattern: normalized.pattern,
                     target: normalized.target,
-                    exclusions: normalized.exclusions || [],
+                    exclusions: next.exclusions,
                     overwritesExistingRule: Boolean(next.previousTarget),
                 },
                 input: normalized,
@@ -520,7 +521,7 @@ function createRouteRuleAddTool(): AgentTool {
                 ruleFile: normalized.ruleFile,
                 pattern: normalized.pattern,
                 target: normalized.target,
-                exclusions: normalized.exclusions || [],
+                exclusions: next.exclusions,
             }
         },
     }

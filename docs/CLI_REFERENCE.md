@@ -333,6 +333,8 @@ meddle route add dev "^https://app.example.com[/api/v2]" "https://localhost:1300
 - Supports exclusion patterns: `pattern !exclusion target`
 - Supports marker syntax: `pattern[marker] target`
 - Read-only route files reject the write: `RULESET_READONLY`, exit code `3` (also for `route update` / `route delete`).
+- `route add`, `route update` and `route delete` edit only the line(s) that hold the pattern. Comments, blank lines, disabled (`//`) rules and every other rule, with its exclusions, keep their exact bytes. A new rule is appended at the end of the file.
+- If the pattern already exists, `route add` overwrites its target in place. The rule keeps its own exclusions unless the pattern argument gives new ones (`"app.example.com !/api"`).
 
 ### meddle route update
 
@@ -346,6 +348,8 @@ meddle route update <file> <pattern> <new-target>
 ```bash
 meddle route update default "api.example.com" "localhost:4000"
 ```
+
+**Note:** The rule keeps its own exclusions unless the pattern argument gives new ones (`"api.example.com !/health"`). If one line holds several patterns, the updated pattern moves to its own line next to the others.
 
 ### meddle route delete
 

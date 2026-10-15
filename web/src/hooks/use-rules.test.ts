@@ -84,3 +84,30 @@ describe('useRules reorderRuleFiles', () => {
     expect(result.current.ruleFiles.map((file) => file.name)).toEqual(['b', 'a'])
   })
 })
+
+// Issue #145: a table-view save keeps comments, blank lines and other rules' exclusions.
+describe('useRules saveFileContent', () => {
+  it('writes back only the edited line of the loaded file', async () => {
+    const original = '# 联调\napi.example.com !/api http://localhost:5173\n\nedit.example.com !/keep 127.0.0.1:3000\n'
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(original))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'success' }), {
+        headers: { 'Content-Type': 'application/json' },
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() => useRules())
+    await act(async () => {
+      await result.current.fetchFileContent('dev')
+    })
+    const edited = result.current.rules.map((r) => (r.rule === 'edit.example.com' ? { ...r, target: '127.0.0.1:3001' } : r))
+    let ok = false
+    await act(async () => {
+      ok = await result.current.saveFileContent('dev', edited)
+    })
+
+    expect(ok).toBe(true)
+    const [, init] = fetchMock.mock.calls[1]
+    expect(JSON.parse(init.body).content).toBe('# 联调\napi.example.com !/api http://localhost:5173\n\nedit.example.com !/keep 127.0.0.1:3001\n')
+  })
+})

@@ -5,6 +5,7 @@ import {
   normalizeImportedRuleText,
   parseEprcRules,
   rulesToEprc,
+  rulesToEprcPreserving,
 } from './eprc-parser'
 
 describe('eprc-parser', () => {
@@ -253,5 +254,83 @@ describe('eprc-parser', () => {
 
       expect(converted).toBe(original)
     })
+  })
+})
+
+// Issue #145: a table-view save must not drop comments, blank lines or other
+// rules' exclusions, and untouched rule lines stay byte-identical.
+describe('rulesToEprcPreserving', () => {
+  const ORIGINAL = [
+    '# 联调',
+    'api.example.com !/api http://localhost:5173',
+    '',
+    '  # 缩进的注释',
+    '// disabled.example.com 127.0.0.1:9000',
+    'multi-a.example.com multi-b.example.com !/health 127.0.0.1:4000',
+    '   indented.example.com    !/skip   127.0.0.1:4100   ',
+    '',
+    '# edit 的注释',
+    'edit.example.com !/keep 127.0.0.1:3000',
+    '# 末尾注释',
+    '',
+  ].join('\n')
+  const lines = ORIGINAL.split('\n')
+  const withLines = (index: number, replacement: string[]) => {
+    const next = lines.slice()
+    next.splice(index, 1, ...replacement)
+    return next.join('\n')
+  }
+  const parsed = () => parseEprcRules(ORIGINAL)
+
+  it('round-trips unchanged rules byte for byte', () => {
+    expect(rulesToEprcPreserving(parsed(), ORIGINAL)).toBe(ORIGINAL)
+    const crlf = ORIGINAL.replace(/\n/g, '\r\n')
+    expect(rulesToEprcPreserving(parseEprcRules(crlf), crlf)).toBe(crlf)
+  })
+
+  it('editing one rule rewrites only that line and keeps its comment above it', () => {
+    const rules = parsed().map((r) => (r.rule === 'edit.example.com' ? { ...r, target: '127.0.0.1:3001' } : r))
+    expect(rulesToEprcPreserving(rules, ORIGINAL)).toBe(withLines(9, ['edit.example.com !/keep 127.0.0.1:3001']))
+  })
+
+  it('toggling a rule off writes it as a // line in place', () => {
+    const rules = parsed().map((r) => (r.rule === 'api.example.com' ? { ...r, enabled: false } : r))
+    expect(rulesToEprcPreserving(rules, ORIGINAL)).toBe(withLines(1, ['//api.example.com !/api http://localhost:5173']))
+  })
+
+  it('editing one pattern of a shared line splits only that line', () => {
+    const rules = parsed().map((r) => (r.rule === 'multi-b.example.com' ? { ...r, target: '127.0.0.1:4001' } : r))
+    expect(rulesToEprcPreserving(rules, ORIGINAL)).toBe(
+      withLines(5, ['multi-a.example.com !/health 127.0.0.1:4000', 'multi-b.example.com !/health 127.0.0.1:4001']),
+    )
+  })
+
+  it('deleting a rule removes only its line; comments stay', () => {
+    const rules = parsed().filter((r) => r.rule !== 'api.example.com')
+    expect(rulesToEprcPreserving(rules, ORIGINAL)).toBe(withLines(1, []))
+  })
+
+  it('a rule added at the top (table "add") goes first; everything else is unchanged', () => {
+    const rules = [{ enabled: true, rule: 'new.example.com', target: '127.0.0.1:5000', exclusions: [] }, ...parsed()]
+    expect(rulesToEprcPreserving(rules, ORIGINAL)).toBe(`new.example.com 127.0.0.1:5000\n${ORIGINAL}`)
+  })
+
+  it('a rule appended at the end lands before the trailing newline', () => {
+    const rules = [...parsed(), { enabled: true, rule: 'new.example.com', target: '127.0.0.1:5000', exclusions: ['/x'] }]
+    expect(rulesToEprcPreserving(rules, ORIGINAL)).toBe(`${ORIGINAL}new.example.com !/x 127.0.0.1:5000\n`)
+  })
+
+  it('never loses a comment or blank line, even after reordering', () => {
+    const rules = parsed().reverse()
+    const out = rulesToEprcPreserving(rules, ORIGINAL)
+    for (const line of lines.filter((l) => !l.trim() || l.trim().startsWith('#'))) {
+      expect(out.split('\n')).toContain(line)
+    }
+    expect(rulesToEprc(parseEprcRules(out))).toBe(rulesToEprc(rules))
+  })
+
+  it('falls back to rulesToEprc without original text', () => {
+    const rules = parsed()
+    expect(rulesToEprcPreserving(rules, '')).toBe(rulesToEprc(rules))
   })
 })

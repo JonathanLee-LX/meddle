@@ -48,7 +48,7 @@ import { ruleFilePaneSplit } from '@/lib/rule-file-split'
 import { SplitPane } from '@/components/split-pane'
 import { EditorEmptyState, EditorSaveButton, EditorTitleBar, PaneBar, PaneTitle } from '@/components/pane-bar'
 import { useEditorScrolled } from '@/hooks/use-editor-scrolled'
-import { getEprcTextDiagnostics, normalizeImportedRuleText, parseEprcRules, rulesToEprc } from '@/utils/eprc-parser'
+import { getEprcTextDiagnostics, normalizeImportedRuleText, parseEprcRules, rulesToEprc, rulesToEprcPreserving } from '@/utils/eprc-parser'
 import { EprcTextarea } from '@/components/eprc-textarea'
 import {
   Dialog,
@@ -865,8 +865,10 @@ export function RuleConfig(props: RuleConfigProps) {
     const serializedDraftRules = rulesToEprc(parseEprcRules(textDraftRef.current))
     if (serializedDraftRules === serializedRules) return
 
-    textDraftRef.current = serializedRules
-    setTextDraft(serializedRules)
+    // Issue #145: keep the draft's comments, blank lines and untouched rule lines.
+    const nextDraft = rulesToEprcPreserving(rules, textDraftRef.current)
+    textDraftRef.current = nextDraft
+    setTextDraft(nextDraft)
   }, [activeFileName, rules, viewMode])
 
   useEffect(() => {

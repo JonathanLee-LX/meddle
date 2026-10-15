@@ -5,7 +5,8 @@
 const output = require('../../lib/output')
 const { isProxyRunning } = require('../../lib/proxy-detect')
 const { apiGet, apiPut } = require('../../lib/api-client')
-const { getRuleFileContent, saveRuleFileContent, parseEprc, ruleMapToEprcText } = require('../../lib/file-access')
+const { getRuleFileContent, saveRuleFileContent } = require('../../lib/file-access')
+const { addRouteRule, splitPatternArg } = require('../../lib/rule-file-edit')
 const { isRulesetReadonlyError, exitRulesetReadonly } = require('../../lib/ruleset-readonly')
 
 // Parse arguments (skip 'route' and 'add' from argv)
@@ -18,6 +19,24 @@ const positionalArgs = args.filter(a => !a.startsWith('--'))
 const fileName = positionalArgs[0]
 const pattern = positionalArgs[1]
 const target = positionalArgs[2]
+
+/**
+ * Issue #145: edit only the line(s) holding this pattern; comments, blank
+ * lines and other rules (with their `!exclusions`) keep their exact bytes.
+ * Exclusions may be given inside the pattern argument ("app.example.com !/api").
+ */
+function applyAdd(text) {
+  const { patterns, exclusions } = splitPatternArg(pattern)
+  if (patterns.length === 0) {
+    output.error('Missing required argument: <pattern>')
+    process.exit(1)
+  }
+  let next = text
+  for (const p of patterns) {
+    next = addRouteRule(next, { pattern: p, target: target.trim(), exclusions: exclusions.length ? exclusions : undefined }).content
+  }
+  return next
+}
 
 async function run() {
   if (!fileName) {
@@ -43,17 +62,7 @@ async function run() {
       // Get current content
       let content = await apiGet(`/api/rule-files/${encodeURIComponent(fileName)}/content`)
       const text = typeof content === 'string' ? content : String(content)
-      const ruleMap = parseEprc(text)
-
-      // Handle [marker] syntax
-      const bm = pat.match(/\[([^\]]+)\]/)
-      if (bm) {
-        ruleMap[pat.replace(bm[0], bm[1])] = tgt + bm[0]
-      } else {
-        ruleMap[pat] = tgt
-      }
-
-      const newContent = ruleMapToEprcText(ruleMap)
+      const newContent = applyAdd(text)
       await apiPut(`/api/rule-files/${encodeURIComponent(fileName)}/content`, { content: newContent })
 
       if (jsonFlag) {
@@ -74,15 +83,7 @@ async function run() {
         process.exit(1)
       }
 
-      const ruleMap = parseEprc(content)
-      const bm = pat.match(/\[([^\]]+)\]/)
-      if (bm) {
-        ruleMap[pat.replace(bm[0], bm[1])] = tgt + bm[0]
-      } else {
-        ruleMap[pat] = tgt
-      }
-
-      const newContent = ruleMapToEprcText(ruleMap)
+      const newContent = applyAdd(content)
       saveRuleFileContent(fileName, newContent)
       output.warnFileOnlyMode()
 
@@ -107,15 +108,7 @@ async function run() {
       process.exit(1)
     }
 
-    const ruleMap = parseEprc(content)
-    const bm = pat.match(/\[([^\]]+)\]/)
-    if (bm) {
-      ruleMap[pat.replace(bm[0], bm[1])] = tgt + bm[0]
-    } else {
-      ruleMap[pat] = tgt
-    }
-
-    const newContent = ruleMapToEprcText(ruleMap)
+    const newContent = applyAdd(content)
     saveRuleFileContent(fileName, newContent)
     output.warnFileOnlyMode()
 

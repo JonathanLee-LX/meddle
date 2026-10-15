@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Read-only rulesets (#137). Lock a rule file in the web UI and every CLI, MCP and API write to it is rejected with `RULESET_READONLY` (HTTP 423, CLI exit code 3). The file is left unchanged. The lock is stored in `settings.json` under `readonlyRuleFiles`. A locked ruleset cannot be renamed; unlock it first, then rename (the web UI disables rename while locked). Lock and unlock are web-UI only (page token plus a same-origin check). This guards against accidents; it is not access control.
 - `readonly` field on rule-file list and detail responses, `meddle route list/show --json` and `route_rule_list`.
 
+### Fixed
+
+- Rule writes no longer drop other lines (#145). `meddle route add/update/delete`, the MCP `route_rule_add/update/delete` tools and the built-in Agent's route tools used to rebuild the whole rule file. That dropped comments, blank lines and disabled (`//`) rules, and the CLI also dropped every other rule's exclusions (`!path`). They now edit only the line(s) that hold the pattern. Every other line keeps its exact bytes, and the edited rule keeps its own exclusions unless new ones are given. Saving from the web UI's table view also keeps comments, blank lines and untouched rule lines. The HTTP `PUT /api/rule-files/:name/content` endpoint and the web text editor already wrote the text exactly as given.
+
 ## [0.5.0-beta.18] - 2026-10-08
 
 ### Added
