@@ -315,3 +315,43 @@ describe('SettingsPanel legacy relative mocks path notice (#121)', () => {
     expect(screen.queryByTestId('settings-mocks-file-legacy-wrap')).not.toBeInTheDocument()
   })
 })
+
+describe('SettingsPanel config 「应用」 button (#138)', () => {
+  it('is the solid primary save button and reads 「应用中…」 while saving (no spinner); secondary buttons stay outline', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('[]', {
+      headers: { 'Content-Type': 'application/json' },
+    })))
+    let finish!: () => void
+    vi.mocked(updateSettings).mockImplementation((updates) => (
+      'mocksFilePath' in (updates as object)
+        ? new Promise<void>((resolve) => { finish = resolve })
+        : Promise.resolve()
+    ) as ReturnType<typeof updateSettings>)
+
+    const user = userEvent.setup()
+    render(<SettingsPanel embedded />)
+    await user.click(within(screen.getByRole('tablist', { name: '设置分类' })).getByRole('tab', { name: '配置文件' }))
+    await screen.findByText('Mock 规则文件')
+
+    const apply = screen.getByTestId('settings-mocks-file-apply')
+    expect(apply).toHaveAccessibleName('应用')
+    expect(apply).toHaveAttribute('data-variant', 'default')
+    expect(apply).toBeEnabled()
+    expect(screen.getByRole('button', { name: /重新加载配置/ })).toHaveAttribute('data-variant', 'outline')
+    expect(screen.getByRole('button', { name: /诊断配置/ })).toHaveAttribute('data-variant', 'outline')
+
+    await user.click(apply)
+    await vi.waitFor(() => expect(apply).toHaveAccessibleName('应用中…'))
+    expect(apply).toBeDisabled()
+    expect(apply).toHaveAttribute('aria-busy', 'true')
+    expect(apply).toHaveAttribute('data-variant', 'default')
+    expect(apply.querySelector('.animate-spin')).toBeNull()
+
+    finish()
+    await vi.waitFor(() => expect(apply).toHaveAccessibleName('应用'))
+    expect(apply).toBeEnabled()
+    expect(apply).not.toHaveAttribute('aria-busy')
+    vi.mocked(updateSettings).mockReset()
+    vi.mocked(updateSettings).mockResolvedValue(undefined)
+  })
+})

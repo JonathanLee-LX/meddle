@@ -58,17 +58,28 @@ export function EditorTitleBar({
 /**
  * Issue #111: the one primary action of an editor. Always the solid primary
  * button; while saving it reads 「保存中…」 (no spinner over the form).
+ * Issue #138: other verbs reuse it via `label` / `savingLabel` (e.g. 「应用」/「应用中…」);
+ * its width is the same in both states (see the sizing copy below).
  */
 export function EditorSaveButton({
   saving = false,
   label = '保存',
+  savingLabel = '保存中…',
   disabled,
   ...props
-}: Omit<ComponentProps<typeof SaveButton>, 'variant' | 'children'> & { saving?: boolean; label?: string }) {
+}: Omit<ComponentProps<typeof SaveButton>, 'variant' | 'children'> & { saving?: boolean; label?: string; savingLabel?: string }) {
   return (
     <SaveButton size="sm" {...props} disabled={disabled || saving} aria-busy={saving || undefined} data-slot="editor-save">
       <Save data-icon="inline-start" />
-      {saving ? '保存中…' : label}
+      {/* #138: the visible label and an invisible, aria-hidden copy of the other
+          label share one grid cell, so the button is always as wide as the wider
+          label and pressing it never shifts neighbouring fields. No min-width. */}
+      <span data-slot="editor-save-label" className="inline-grid">
+        <span className="[grid-area:1/1]">{saving ? savingLabel : label}</span>
+        <span data-slot="editor-save-sizer" aria-hidden="true" className="invisible [grid-area:1/1]">
+          {saving ? label : savingLabel}
+        </span>
+      </span>
     </SaveButton>
   )
 }

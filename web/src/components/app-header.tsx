@@ -146,9 +146,24 @@ export function ShellNav({ activeTab, onTabChange, mockEnabledCount = 0 }: Shell
     const active = activeTab === item.tab
     const showBadge = item.tab === 'mock' && mockEnabledCount > 0
     // Issue #133: fixed-width digits (2ch, tabular) and a 99+ cap keep the badge width stable.
-    const badgeText = mockEnabledCount > 99 ? '99+' : String(mockEnabledCount)
+    const badgeCapped = mockEnabledCount > 99
+    const badgeText = badgeCapped ? '99+' : String(mockEnabledCount)
+    // #135 follow-up: "99+" hides the real count from screen readers. When capped,
+    // the visual digits are aria-hidden and an sr-only span carries the exact
+    // number (absolutely positioned, so the badge layout is unchanged).
     const badgeNum = (text: string | null) => (
-      <span data-slot="shell-nav-mock-count" className="inline-block min-w-[2ch] text-center tabular-nums">{text}</span>
+      <>
+        <span
+          data-slot="shell-nav-mock-count"
+          aria-hidden={text && badgeCapped ? true : undefined}
+          className="inline-block min-w-[2ch] text-center tabular-nums"
+        >
+          {text}
+        </span>
+        {text && badgeCapped ? (
+          <span data-slot="shell-nav-mock-count-sr" className="sr-only">{mockEnabledCount}</span>
+        ) : null}
+      </>
     )
     // Tabs owns the button (TabsTrigger asChild → TooltipTrigger) so its
     // data-state="active" wins over the tooltip's open/closed data-state.
