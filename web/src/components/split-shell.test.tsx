@@ -271,4 +271,31 @@ describe('EditorSaveButton (issue #111)', () => {
     expect(button).toHaveAttribute('aria-busy', 'true')
     expect(button.querySelector('.animate-spin')).toBeNull()
   })
+
+  it.each([
+    [{}, '保存', '保存中…'],
+    [{ label: '应用', savingLabel: '应用中…' }, '应用', '应用中…'],
+  ])('keeps an aria-hidden sizing copy of the other label so the width never jumps (#138) %#', (labels, idle, busy) => {
+    const { rerender } = render(<EditorSaveButton onClick={vi.fn()} {...labels} />)
+    const button = screen.getByRole('button', { name: idle })
+    const cell = button.querySelector('[data-slot="editor-save-label"]')!
+    expect(cell).toHaveClass('inline-grid')
+    let sizer = button.querySelector('[data-slot="editor-save-sizer"]')!
+    expect(sizer).toHaveAttribute('aria-hidden', 'true')
+    expect(sizer).toHaveClass('invisible', '[grid-area:1/1]')
+    expect(sizer.textContent).toBe(busy)
+    // visible label and sizer share the same grid cell
+    expect(cell.children).toHaveLength(2)
+    expect(cell.children[0]).toHaveClass('[grid-area:1/1]')
+    expect(cell.children[0]).not.toHaveAttribute('aria-hidden')
+    expect(button).toHaveAccessibleName(idle)
+    expect(button.getAttribute('style') ?? '').not.toMatch(/min-width/)
+    expect(button.className).not.toMatch(/min-w-/)
+
+    rerender(<EditorSaveButton onClick={vi.fn()} {...labels} saving />)
+    expect(button).toHaveAccessibleName(busy)
+    sizer = button.querySelector('[data-slot="editor-save-sizer"]')!
+    expect(sizer).toHaveAttribute('aria-hidden', 'true')
+    expect(sizer.textContent).toBe(idle)
+  })
 })
