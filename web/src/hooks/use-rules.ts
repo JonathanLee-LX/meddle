@@ -1,12 +1,15 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import type { RuleItem, RuleFile } from '@/types'
-import { parseEprcRules, rulesToEprc } from '@/utils/eprc-parser'
+import { parseEprcRules, rulesToEprcPreserving } from '@/utils/eprc-parser'
 import { putRuleFileReadonly, type ReadonlyToggleResult } from '@/lib/ui-token'
 
 export function useRules() {
   const [rules, setRules] = useState<RuleItem[]>([])
   const [ruleFiles, setRuleFiles] = useState<RuleFile[]>([])
   const [activeFileName, setActiveFileName] = useState<string | null>(null)
+  // Issue #145: last known on-disk text per file, so a table-view save keeps
+  // comments, blank lines and untouched rule lines byte for byte.
+  const savedTextRef = useRef<Map<string, string>>(new Map())
 
   const fetchRuleFiles = useCallback(async () => {
     try {
@@ -23,12 +26,15 @@ export function useRules() {
 
   const fetchRuleFileRawContent = useCallback(async (name: string): Promise<string> => {
     const res = await fetch(`/api/rule-files/${encodeURIComponent(name)}/content`)
-    return res.text()
+    // Issue #145: `res.text()` strips a leading UTF-8 BOM; keep it so saving
+    // writes the file back byte for byte.
+    return new TextDecoder('utf-8', { ignoreBOM: true }).decode(await res.arrayBuffer())
   }, [])
 
   const fetchFileContent = useCallback(async (name: string) => {
     try {
       const text = await fetchRuleFileRawContent(name)
+      savedTextRef.current.set(name, text)
       setRules(parseEprcRules(text))
       setActiveFileName(name)
     } catch (err) {
@@ -44,6 +50,7 @@ export function useRules() {
         body: JSON.stringify({ content }),
       })
       const data = await res.json()
+      if (data.status === 'success') savedTextRef.current.set(name, content)
       return data.status === 'success'
     } catch (err) {
       console.error('Failed to save file content:', err)
@@ -51,8 +58,12 @@ export function useRules() {
     }
   }, [])
 
+  /**
+   * Throws `RuleLineSplitError` (before any request) when a rule would turn into
+   * a comment or disabled line; callers show its message.
+   */
   const saveFileContent = useCallback(async (name: string, items: RuleItem[]): Promise<boolean> => {
-    return saveRuleFileRawContent(name, rulesToEprc(items))
+    return saveRuleFileRawContent(name, rulesToEprcPreserving(items, savedTextRef.current.get(name) ?? ''))
   }, [saveRuleFileRawContent])
 
   const createRuleFile = useCallback(async (name: string, content = ''): Promise<{ success: boolean; error?: string }> => {

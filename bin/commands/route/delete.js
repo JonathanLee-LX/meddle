@@ -5,7 +5,8 @@
 const output = require('../../lib/output')
 const { isProxyRunning } = require('../../lib/proxy-detect')
 const { apiGet, apiPut } = require('../../lib/api-client')
-const { getRuleFileContent, saveRuleFileContent, parseEprc, ruleMapToEprcText } = require('../../lib/file-access')
+const { getRuleFileContent, saveRuleFileContent } = require('../../lib/file-access')
+const { deleteRouteRule, splitPatternArg } = require('../../lib/rule-file-edit')
 const { isRulesetReadonlyError, exitRulesetReadonly } = require('../../lib/ruleset-readonly')
 
 // Parse arguments (skip 'route' and 'delete' from argv)
@@ -17,6 +18,28 @@ output.setJsonMode(jsonFlag)
 const positionalArgs = args.filter(a => !a.startsWith('--'))
 const fileName = positionalArgs[0]
 const pattern = positionalArgs[1]
+
+/**
+ * Issue #145: remove only this pattern; every other line (comments, blank
+ * lines, other rules and their `!exclusions`) keeps its exact bytes.
+ */
+function applyDelete(text) {
+  const { patterns } = splitPatternArg(pattern)
+  if (patterns.length === 0) {
+    output.error('Missing required argument: <pattern>')
+    process.exit(1)
+  }
+  let next = text
+  for (const p of patterns) {
+    const result = deleteRouteRule(next, { pattern: p })
+    if (!result.found) {
+      output.error(`Pattern not found: ${pattern.trim()}`)
+      process.exit(1)
+    }
+    next = result.content
+  }
+  return next
+}
 
 async function run() {
   if (!fileName) {
@@ -32,23 +55,11 @@ async function run() {
 
   const pat = pattern.trim()
 
-  // Handle [marker] syntax for lookup
-  const bm = pat.match(/\[([^\]]+)\]/)
-  const internalKey = bm ? pat.replace(bm[0], bm[1]) : pat
-
   if (running) {
     try {
       let content = await apiGet(`/api/rule-files/${encodeURIComponent(fileName)}/content`)
       const text = typeof content === 'string' ? content : String(content)
-      const ruleMap = parseEprc(text)
-
-      if (!Object.prototype.hasOwnProperty.call(ruleMap, internalKey)) {
-        output.error(`Pattern not found: ${pat}`)
-        process.exit(1)
-      }
-
-      delete ruleMap[internalKey]
-      const newContent = ruleMapToEprcText(ruleMap)
+      const newContent = applyDelete(text)
       await apiPut(`/api/rule-files/${encodeURIComponent(fileName)}/content`, { content: newContent })
 
       if (jsonFlag) {
@@ -69,14 +80,7 @@ async function run() {
         process.exit(1)
       }
 
-      const ruleMap = parseEprc(content)
-      if (!Object.prototype.hasOwnProperty.call(ruleMap, internalKey)) {
-        output.error(`Pattern not found: ${pat}`)
-        process.exit(1)
-      }
-
-      delete ruleMap[internalKey]
-      const newContent = ruleMapToEprcText(ruleMap)
+      const newContent = applyDelete(content)
       saveRuleFileContent(fileName, newContent)
       output.warnFileOnlyMode()
 
@@ -101,14 +105,7 @@ async function run() {
       process.exit(1)
     }
 
-    const ruleMap = parseEprc(content)
-    if (!Object.prototype.hasOwnProperty.call(ruleMap, internalKey)) {
-      output.error(`Pattern not found: ${pat}`)
-      process.exit(1)
-    }
-
-    delete ruleMap[internalKey]
-    const newContent = ruleMapToEprcText(ruleMap)
+    const newContent = applyDelete(content)
     saveRuleFileContent(fileName, newContent)
     output.warnFileOnlyMode()
 

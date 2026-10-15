@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { toast } from '@/components/ui/toast'
 import type { RuleItem } from '@/types'
 import { RuleConfig } from './rule-config'
+import { rulesToEprcPreserving } from '@/utils/eprc-parser'
 
 vi.mock('@/components/ui/toast', () => ({
   toast: {
@@ -163,5 +164,48 @@ describe('RuleConfig text view', () => {
     await waitFor(() =>
       expect(saveRuleFileRawContent).toHaveBeenCalledWith('default', validText),
     )
+  })
+
+  it('table save shows the new-rule error when a new rule starts with # (issue #145)', async () => {
+    const message = '规则不能以 // 或 # 开头，否则会被当成禁用行或注释。要写注释或禁用规则，请用文本编辑器。'
+    // Same serializer the real hook uses: an empty file plus a new #… rule is refused before any write.
+    const saveFileContent = vi.fn(async (_file: string, next: RuleItem[]) => {
+      rulesToEprcPreserving(next, '')
+      return true
+    })
+    const saveRuleFileRawContent = vi.fn().mockResolvedValue(true)
+
+    function Harness() {
+      const [rules, setRules] = useState<RuleItem[]>([{ enabled: true, rule: '#tag.example.com', target: '127.0.0.1:1', exclusions: [] }])
+      return (
+        <RuleConfig
+          rules={rules}
+          setRules={setRules}
+          ruleFiles={[]}
+          activeFileName="default"
+          fetchRuleFiles={vi.fn().mockResolvedValue([])}
+          fetchFileContent={vi.fn().mockResolvedValue(undefined)}
+          fetchRuleFileRawContent={vi.fn().mockResolvedValue('')}
+          saveRuleFileRawContent={saveRuleFileRawContent}
+          saveFileContent={saveFileContent}
+          createRuleFile={vi.fn().mockResolvedValue({ success: true })}
+          toggleRuleFile={vi.fn().mockResolvedValue(true)}
+          renameRuleFile={vi.fn().mockResolvedValue({ success: true })}
+          deleteRuleFile={vi.fn().mockResolvedValue(true)}
+          reorderRuleFiles={vi.fn().mockResolvedValue(true)}
+        />
+      )
+    }
+
+    vi.mocked(toast.error).mockClear()
+    render(<Harness />)
+    const saveButton = screen.getByRole('button', { name: '保存' })
+    await waitFor(() => expect(saveButton).toBeEnabled())
+    fireEvent.click(saveButton)
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message))
+    expect(saveFileContent).toHaveBeenCalledTimes(1)
+    expect(saveRuleFileRawContent).not.toHaveBeenCalled()
+    expect(saveButton).toHaveAccessibleName('保存')
   })
 })

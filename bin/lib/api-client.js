@@ -42,7 +42,9 @@ async function apiRequest(method, pathname, body, timeoutMs = DEFAULT_TIMEOUT) {
   if (contentType && contentType.includes('application/json')) {
     return response.json()
   }
-  return response.text()
+  // Issue #145: `Response.text()` strips a leading UTF-8 BOM, so a rule file
+  // read and written back through the API would silently lose it.
+  return new TextDecoder('utf-8', { ignoreBOM: true }).decode(await response.arrayBuffer())
 }
 
 /**

@@ -18,6 +18,7 @@ const {
 } = require('./bin/lib/sessions')
 const { GLOBAL_DEFAULT_PORT } = require('./bin/lib/session-args')
 const { buildProxySpawn, getReentryArgv } = require('./bin/lib/spawn-proxy')
+const { addRouteRule, updateRouteRule, deleteRouteRule } = require('./bin/lib/rule-file-edit')
 
 const meddleDir = resolveMeddleHome()
 const mcpFile = path.join(meddleDir, 'mcp-proxy-url.json')
@@ -54,8 +55,16 @@ function proxyApiForSession(sessionId, method, pathname, body) {
     if (body !== undefined) opts.body = typeof body === 'string' ? body : JSON.stringify(body)
     return fetch(url, opts).then((res) => {
         if (!res.ok) return res.text().then((t) => { throw apiError(res, t) })
-        return res.headers.get('content-type')?.includes('application/json') ? res.json() : res.text()
+        return res.headers.get('content-type')?.includes('application/json') ? res.json() : readTextKeepBom(res)
     })
+}
+
+/**
+ * Issue #145: `Response.text()` strips a leading UTF-8 BOM, so a rule file read
+ * and written back through the API would silently lose it. Decode keeping it.
+ */
+function readTextKeepBom(res) {
+    return res.arrayBuffer().then((buf) => new TextDecoder('utf-8', { ignoreBOM: true }).decode(buf))
 }
 
 // ---------- Issue #137: 只读规则集 ----------
@@ -145,37 +154,6 @@ function parseEprc(content) {
     return parseEprcWithExclusions(content).ruleMap
 }
 
-/** 将 pattern -> target 对象转回规则文件文本（与 helpers.ruleMapToEprcText 一致，保留 exclusions） */
-function ruleMapToEprcText(ruleMap, excludeMap) {
-    const entries = Object.entries(ruleMap)
-    if (entries.length === 0) return ''
-    const byTargetAndExclusions = {}
-    entries.forEach(([rule, target]) => {
-        const bm = target.match(/\[([^\]]+)\]/)
-        const groupKey = bm ? target.replace(bm[0], '') : target
-        const displayRule = bm ? rule.replace(bm[1], bm[0]) : rule
-        const exclusions = excludeMap?.[rule] || []
-        const exclusionsKey = exclusions.join(',')
-        // Create a compound key that includes both target and exclusions
-        const compoundKey = `${groupKey}|||${exclusionsKey}`
-        if (!byTargetAndExclusions[compoundKey]) {
-            byTargetAndExclusions[compoundKey] = { target: groupKey, rules: [], exclusions }
-        }
-        byTargetAndExclusions[compoundKey].rules.push(displayRule)
-    })
-    return Object.entries(byTargetAndExclusions)
-        .map(([, { target, rules, exclusions }]) => {
-            let displayTarget = target
-            if (FILE_PATTERN.test(target)) {
-                displayTarget = target.replace(/^file:\/\//, '').replace(/\//g, path.sep)
-            }
-            const exclusionStr = exclusions.map(e => `!${e}`).join(' ')
-            const rulesStr = rules.join(' ')
-            return exclusionStr ? `${rulesStr} ${exclusionStr} ${displayTarget}` : `${rulesStr} ${displayTarget}`
-        })
-        .join('\n')
-}
-
 /** 请求代理 API */
 function proxyApi(method, pathname, body) {
     const base = getProxyBaseUrl()
@@ -183,9 +161,8 @@ function proxyApi(method, pathname, body) {
     const opts = { method, headers: { 'Content-Type': 'application/json' } }
     if (body !== undefined) opts.body = typeof body === 'string' ? body : JSON.stringify(body)
     return fetch(url, opts).then((res) => {
-        const text = () => res.text()
-        if (!res.ok) return text().then((t) => { throw new Error(t || res.statusText) })
-        return res.headers.get('content-type')?.includes('application/json') ? res.json() : text()
+        if (!res.ok) return res.text().then((t) => { throw new Error(t || res.statusText) })
+        return res.headers.get('content-type')?.includes('application/json') ? res.json() : readTextKeepBom(res)
     })
 }
 
@@ -656,13 +633,13 @@ mcpServer.registerTool('route_rule_create_file', {
 })
 
 mcpServer.registerTool('route_rule_add', {
-    description: '在指定规则文件中添加一条路由规则（pattern -> target）。若 pattern 已存在则覆盖。' + READONLY_NOTE + '可选 session 参数指定操作的 session（不传则操作默认 session）。',
+    description: '在指定规则文件中添加一条路由规则（pattern -> target）。若 pattern 已存在则覆盖其 target。exclusions 不传时保留该规则原有的排除规则（新规则无排除规则），传 [] 清空。只改这一行，文件中的注释、空行和其他规则保持原样。' + READONLY_NOTE + '可选 session 参数指定操作的 session（不传则操作默认 session）。',
     inputSchema: {
         session: z.string().optional().describe('目标 session id，不传则操作默认 session'),
         ruleFile: z.string().describe('规则文件名（不含 .txt）'),
         pattern: z.string().describe('匹配完整请求 URL。支持：(1) 正则表达式，如 ^https://a\\.com/api； (2) 通配符，如 *.wps.cn 匹配 wps.cn、plus.wps.cn、deep.plus.wps.cn；(3) [marker] 路径重写，如 ^https://cdn.com/[assets] 将 assets 后的路径拼接到 target'),
         target: z.string().describe('转发目标。若仅 host:port 则继承原请求的协议、pathname、query；若完整 URL 则直接使用；若原请求是 websocket 而 target 是 http(s)，自动转为 ws(s)'),
-        exclusions: z.array(z.string()).optional().describe('排除规则列表，匹配完整 URL。若任一 exclusion 命中则跳过此规则继续匹配下一条。如 ["api/health", "^https://a\\.com/internal"]')
+        exclusions: z.array(z.string()).optional().describe('排除规则列表，匹配完整 URL。若任一 exclusion 命中则跳过此规则继续匹配下一条。如 ["api/health", "^https://a\\.com/internal"]。不传时保留该规则原有的排除规则（新规则无排除规则）；传 [] 清空')
     }
 }, async ({ session, ruleFile, pattern, target, exclusions }) => {
     try {
@@ -674,18 +651,9 @@ mcpServer.registerTool('route_rule_add', {
             return { content: [{ type: 'text', text: `规则文件不存在或代理未启动: ${err.message}` }], isError: true }
         }
         const text = typeof content === 'string' ? content : String(content)
-        const { ruleMap, excludeMap } = parseEprcWithExclusions(text)
-        const pat = pattern.trim()
-        const tgt = target.trim()
-        const bm = pat.match(/\[([^\]]+)\]/)
-        if (bm) {
-            ruleMap[pat.replace(bm[0], bm[1])] = tgt + bm[0]
-            excludeMap[pat.replace(bm[0], bm[1])] = exclusions || []
-        } else {
-            ruleMap[pat] = tgt
-            excludeMap[pat] = exclusions || []
-        }
-        const newContent = ruleMapToEprcText(ruleMap, excludeMap)
+        // Issue #145: edit only this rule's line(s); other lines keep their exact bytes.
+        // Without `exclusions` an existing rule keeps its own exclusions.
+        const { content: newContent } = addRouteRule(text, { pattern: pattern.trim(), target: target.trim(), exclusions })
         await proxyApiForSession(session, 'PUT', `/api/rule-files/${name}/content`, { content: newContent })
         const exclusionInfo = exclusions && exclusions.length > 0 ? `，排除规则: ${exclusions.join(', ')}` : ''
         return { content: [{ type: 'text', text: `已添加规则: ${pattern} -> ${target}${exclusionInfo}` }] }
@@ -695,13 +663,13 @@ mcpServer.registerTool('route_rule_add', {
 })
 
 mcpServer.registerTool('route_rule_update', {
-    description: '修改指定规则文件中某条规则的 target 和 exclusions（按 pattern 查找）。' + READONLY_NOTE + '可选 session 参数指定操作的 session（不传则操作默认 session）。',
+    description: '修改指定规则文件中某条规则的 target 和 exclusions（按 pattern 查找）。exclusions 不传时保留该规则原有的排除规则，传 [] 清空。只改这一行，文件中的注释、空行和其他规则保持原样。' + READONLY_NOTE + '可选 session 参数指定操作的 session（不传则操作默认 session）。',
     inputSchema: {
         session: z.string().optional().describe('目标 session id，不传则操作默认 session'),
         ruleFile: z.string().describe('规则文件名（不含 .txt）'),
         pattern: z.string().describe('要修改的 pattern（需与现有规则一致，支持带 [marker] 的写法）'),
         newTarget: z.string().optional().describe('新的转发目标。若仅 host:port 则继承原请求的协议、pathname、query；若完整 URL 则直接使用'),
-        exclusions: z.array(z.string()).optional().describe('新的排除规则列表，匹配完整 URL。设为空数组 [] 可清除所有排除规则')
+        exclusions: z.array(z.string()).optional().describe('新的排除规则列表，匹配完整 URL。不传时保留该规则原有的排除规则；传 [] 清空')
     }
 }, async ({ session, ruleFile, pattern, newTarget, exclusions }) => {
     try {
@@ -714,20 +682,12 @@ mcpServer.registerTool('route_rule_update', {
             return { content: [{ type: 'text', text: `规则文件不存在或代理未启动: ${err.message}` }], isError: true }
         }
         const text = typeof content === 'string' ? content : String(content)
-        const { ruleMap, excludeMap } = parseEprcWithExclusions(text)
-        const bm = pat.match(/\[([^\]]+)\]/)
-        const internalKey = bm ? pat.replace(bm[0], bm[1]) : pat
-        if (!Object.prototype.hasOwnProperty.call(ruleMap, internalKey)) {
+        // Issue #145: edit only this rule's line(s); other lines keep their exact bytes.
+        const result = updateRouteRule(text, { pattern: pat, target: newTarget ? newTarget.trim() : undefined, exclusions })
+        if (!result.found) {
             return { content: [{ type: 'text', text: `未找到 pattern: ${pat}` }], isError: true }
         }
-        if (newTarget) {
-            const tgt = newTarget.trim()
-            ruleMap[internalKey] = bm ? tgt + bm[0] : tgt
-        }
-        if (exclusions !== undefined) {
-            excludeMap[internalKey] = exclusions
-        }
-        const newContent = ruleMapToEprcText(ruleMap, excludeMap)
+        const newContent = result.content
         await proxyApiForSession(session, 'PUT', `/api/rule-files/${name}/content`, { content: newContent })
         const targetInfo = newTarget ? `目标: ${newTarget}` : ''
         const exclusionInfo = exclusions !== undefined ? (exclusions.length > 0 ? `排除规则: ${exclusions.join(', ')}` : '已清除排除规则') : ''
@@ -756,15 +716,12 @@ mcpServer.registerTool('route_rule_delete', {
             return { content: [{ type: 'text', text: `规则文件不存在或代理未启动: ${err.message}` }], isError: true }
         }
         const text = typeof content === 'string' ? content : String(content)
-        const { ruleMap, excludeMap } = parseEprcWithExclusions(text)
-        const bm = pat.match(/\[([^\]]+)\]/)
-        const internalKey = bm ? pat.replace(bm[0], bm[1]) : pat
-        if (!Object.prototype.hasOwnProperty.call(ruleMap, internalKey)) {
+        // Issue #145: remove only this rule; other lines keep their exact bytes.
+        const result = deleteRouteRule(text, { pattern: pat })
+        if (!result.found) {
             return { content: [{ type: 'text', text: `未找到 pattern: ${pat}` }], isError: true }
         }
-        delete ruleMap[internalKey]
-        delete excludeMap[internalKey]
-        const newContent = ruleMapToEprcText(ruleMap, excludeMap)
+        const newContent = result.content
         await proxyApiForSession(session, 'PUT', `/api/rule-files/${name}/content`, { content: newContent })
         return { content: [{ type: 'text', text: `已删除规则: ${pat}` }] }
     } catch (e) {
