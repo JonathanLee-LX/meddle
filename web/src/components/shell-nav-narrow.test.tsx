@@ -200,7 +200,40 @@ describe('ShellNav narrow viewport (#109)', () => {
   it('collapsed badge also caps at 99+', () => {
     installViewport(900)
     renderNav({ mockEnabledCount: 250 })
-    expect(screen.getByTestId('shell-nav-mock-badge')).toHaveTextContent(/^99\+$/)
+    const num = screen.getByTestId('shell-nav-mock-badge').querySelector('[data-slot="shell-nav-mock-count"]')!
+    expect(num.textContent).toBe('99+')
+  })
+
+  it.each([
+    ['expanded', 1280, '0'],
+    ['collapsed', 900, null],
+  ])('%s badge exposes the true count (not 99+) to assistive tech (#135 follow-up)', (_mode, width, stored) => {
+    if (stored !== null) localStorage.setItem(SHELL_NAV_COLLAPSED_KEY, stored)
+    installViewport(width)
+    renderNav({ mockEnabledCount: 1234 })
+    const badge = screen.getByTestId('shell-nav-mock-badge')
+    const num = badge.querySelector('[data-slot="shell-nav-mock-count"]')!
+    // visual stays the capped 2ch 99+, hidden from AT
+    expect(num.textContent).toBe('99+')
+    expect(num).toHaveClass('min-w-[2ch]', 'tabular-nums')
+    expect(num).toHaveAttribute('aria-hidden', 'true')
+    // the exact count is visually hidden but announced
+    const sr = badge.querySelector('[data-slot="shell-nav-mock-count-sr"]')!
+    expect(sr).toHaveClass('sr-only')
+    expect(sr.textContent).toBe('1234')
+    const item = screen.getByTestId('shell-nav-mock')
+    expect(item).toHaveAccessibleName(expect.stringContaining('1234'))
+    expect(item).not.toHaveAccessibleName(expect.stringContaining('99+'))
+  })
+
+  it('uncapped counts need no sr-only copy; the visible digits are announced', () => {
+    localStorage.setItem(SHELL_NAV_COLLAPSED_KEY, '0')
+    installViewport(1280)
+    renderNav({ mockEnabledCount: 99 })
+    const badge = screen.getByTestId('shell-nav-mock-badge')
+    expect(badge.querySelector('[data-slot="shell-nav-mock-count-sr"]')).toBeNull()
+    expect(badge.querySelector('[data-slot="shell-nav-mock-count"]')).not.toHaveAttribute('aria-hidden')
+    expect(screen.getByTestId('shell-nav-mock')).toHaveAccessibleName(expect.stringContaining('99'))
   })
 
   it('uses the expanded inline badge when the rail is open', () => {

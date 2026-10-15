@@ -58,17 +58,19 @@ export function EditorTitleBar({
 /**
  * Issue #111: the one primary action of an editor. Always the solid primary
  * button; while saving it reads 「保存中…」 (no spinner over the form).
+ * Issue #138: other verbs reuse it via `label` / `savingLabel` (e.g. 「应用」/「应用中…」).
  */
 export function EditorSaveButton({
   saving = false,
   label = '保存',
+  savingLabel = '保存中…',
   disabled,
   ...props
-}: Omit<ComponentProps<typeof SaveButton>, 'variant' | 'children'> & { saving?: boolean; label?: string }) {
+}: Omit<ComponentProps<typeof SaveButton>, 'variant' | 'children'> & { saving?: boolean; label?: string; savingLabel?: string }) {
   return (
     <SaveButton size="sm" {...props} disabled={disabled || saving} aria-busy={saving || undefined} data-slot="editor-save">
       <Save data-icon="inline-start" />
-      {saving ? '保存中…' : label}
+      {saving ? savingLabel : label}
     </SaveButton>
   )
 }

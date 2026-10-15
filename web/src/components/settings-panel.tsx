@@ -46,6 +46,7 @@ import {
 import { useTheme } from '@/components/theme-provider'
 import { getCachedSettings, loadSettings, updateSettings, type AccentColor } from '@/lib/settings-store'
 import { SaveButton } from '@/components/save-shortcut/save-button'
+import { EditorSaveButton } from '@/components/pane-bar'
 import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
 import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
 import { fetchAppVersion } from '@/lib/app-version'
@@ -631,16 +632,15 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                     placeholder="如: /path/to/my-mocks.json"
                     className="flex-1 h-8 text-sm font-mono"
                   />
-                  <SaveButton
-                    variant="outline"
-                    size="sm"
+                  {/* Issue #138: solid primary like the editors' 保存 (#111); 「应用中…」 while saving, no spinner. */}
+                  <EditorSaveButton
                     onClick={handleSaveMocksFilePath}
-                    disabled={saving}
+                    saving={saving}
+                    label="应用"
+                    savingLabel="应用中…"
+                    data-testid="settings-mocks-file-apply"
                     className="h-8"
-                  >
-                    <Save data-icon="inline-start" className="h-3 w-3" />
-                    应用
-                  </SaveButton>
+                  />
                 </div>
                 {mocksFile?.legacyMocksPath ? (
                   <MocksFileLegacyPathNote
