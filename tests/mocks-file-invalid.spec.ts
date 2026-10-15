@@ -46,11 +46,11 @@ async function stopProcess(child: ChildProcessWithoutNullStreams): Promise<void>
     if (child.exitCode === null) child.kill('SIGKILL')
 }
 
-async function startProxy(home: string): Promise<{ base: string; output: string[] }> {
+async function startProxy(home: string, extraEnv: Record<string, string> = {}): Promise<{ base: string; output: string[] }> {
     const port = await reservePort()
     const child = spawn(process.execPath, [join(repoRoot, 'index.js')], {
         cwd: repoRoot,
-        env: { ...process.env, MEDDLE_HOME: home, MEDDLE_HEADLESS: '1', PORT: String(port) },
+        env: { ...process.env, MEDDLE_HOME: home, MEDDLE_HEADLESS: '1', PORT: String(port), ...extraEnv },
         stdio: ['ignore', 'pipe', 'pipe'],
     })
     children.push(child)
@@ -415,6 +415,40 @@ describe('mocks write through a symlink (issue #123)', () => {
         await delay(2_500)
         writeMocks(target, 3, [rule(1, 'v2')])
         await waitFor(async () => names(await list(base)).includes('v2'), 4_000)
+    }, 60_000)
+
+    it('target directory removed before its parent (rm -rf of the repo): watching resumes (issue #141)', async () => {
+        // `rm -rf repo` deletes repo/dotfiles first and repo a moment later. If
+        // the proxy handles the unlinkDir in between, it starts waiting in
+        // `repo`, which then disappears too; that watch never fires again.
+        // Delete in two steps, and only remove `repo` once the proxy reports
+        // (MEDDLE_DEBUG_WATCH) that it is waiting there, so this ordering is
+        // deterministic (before the fix the second wait below never ends and
+        // the recreated file is never picked up).
+        const home = makeHome()
+        const realDir = join(home, 'repo', 'dotfiles')
+        const target = join(realDir, 'mocks.json')
+        mkdirSync(realDir, { recursive: true })
+        writeMocks(target, 2, [rule(1, 'v1')])
+        mkdirSync(join(home, 'links'))
+        const link = join(home, 'links', 'mocks.json')
+        symlinkSync(target, link)
+        setMocksPathOnDisk(home, link)
+        const { base, output } = await startProxy(home, { MEDDLE_DEBUG_WATCH: '1' })
+        expect(names(await list(base))).toEqual(['v1'])
+        rmSync(realDir, { recursive: true, force: true })
+        await waitFor(async () => names(await list(base)).length === 0, 4_000)
+        await waitFor(async () => output.join('').includes(`ancestor watch ready: ${join(home, 'repo')}\n`), 4_000)
+        rmSync(join(home, 'repo'), { recursive: true, force: true })
+        // The proxy must notice that `repo` is gone and wait one level up.
+        // (Recreating before that would hide the bug: the dead watch's last
+        // event would then happen to see the new directory.)
+        await waitFor(async () => output.join('').includes(`(missing; waiting in ${home})`), 4_000)
+        mkdirSync(realDir, { recursive: true })
+        writeMocks(target, 3, [rule(1, 'v2')])
+        await waitFor(async () => names(await list(base)).includes('v2'), 4_000)
+        writeMocks(target, 4, [rule(1, 'v2'), rule(2, 'v3')])
+        await waitFor(async () => names(await list(base)).includes('v3'), 4_000)
     }, 60_000)
 
     it('symlink retargeted to a new directory: an edit right after the switch is not lost', async () => {
