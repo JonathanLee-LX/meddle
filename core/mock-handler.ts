@@ -630,6 +630,7 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
         // directory watch was still being set up (ignoreInitial).
         const catchUp = (why: string) => {
             if (closed || !watcherState || watcherState.file !== mockFile) return
+            recheckTargetDir(why)
             if (fileSig(mockFile) !== loadedSig) reload(why)
         }
         // Issue #125: the target directory may not exist yet (dangling link to a
@@ -679,13 +680,37 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
                     if (closed || ancestorWatcher !== aw || !targetDir) return
                     if (isWithin(p, targetDir)) watchTargetDir(true)
                 })
-                // The directory may have appeared while this watch was starting.
-                aw.on('ready', () => {
-                    if (!closed && ancestorWatcher === aw && targetDir && fs.existsSync(targetDir)) watchTargetDir(true)
-                })
+                // Issue #141: the ancestor itself can vanish too — `rm -rf repo`
+                // removes repo/dotfiles first, and if that unlinkDir is handled
+                // before repo is gone, the ancestor picked here is repo, which a
+                // moment later no longer exists: a watch on a deleted directory
+                // never fires again. The directory may also have appeared while
+                // this watch was starting. Re-validate on ready and on any raw
+                // event (inotify reports the watched directory's own removal).
+                const recheck = (why: string) => { if (!closed && ancestorWatcher === aw) recheckTargetDir(why) }
+                aw.on('ready', () => { dbg(`ancestor watch ready: ${ancestor}`); recheck('ancestor watch ready') })
+                aw.on('unlinkDir', () => recheck('ancestor directory removed'))
+                aw.on('raw', () => recheck('ancestor raw event'))
+                aw.on('error', () => recheck('ancestor watch error'))
                 ancestorWatcher = aw
             }
             dbg(`target ${target}; extra dir ${targetDir ?? '(none)'}${pendingAncestor ? ` (missing; waiting in ${pendingAncestor})` : ''}`)
+        }
+        /**
+         * Issue #141: make sure the watch plan still matches the disk. chokidar
+         * does not report every directory removal: a target directory removed
+         * while the watch is still starting yields no unlinkDir, and an
+         * ancestor removed right after it was picked leaves a dead watch.
+         * Either way the recreated directory would never be noticed again.
+         */
+        const recheckTargetDir = (why: string) => {
+            if (closed || !targetDir) return
+            const stale = pendingAncestor
+                ? fs.existsSync(targetDir) || nearestExistingAncestor(targetDir) !== pendingAncestor
+                : !fs.existsSync(targetDir)
+            if (!stale) return
+            dbg(`re-planning target watch (${why})`)
+            watchTargetDir(true)
         }
         watchTargetDir()
         let closed = false
@@ -700,7 +725,7 @@ export function createMockHandler(ctx: ProxyContext): MockHandler {
             }
             // The link itself may have been retargeted: follow the new target.
             const nextTarget = resolveTarget()
-            if (nextTarget !== target) { target = nextTarget; watchTargetDir() }
+            if (nextTarget !== target) { target = nextTarget; watchTargetDir() } else recheckTargetDir(event)
             proxyDebug(`mocks file ${event}: ${base}`)
             loadMockRules()
             if (watcherOnReload) watcherOnReload()
