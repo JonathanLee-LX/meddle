@@ -12,6 +12,37 @@
  */
 
 const MARKER = /\[([^\]]+)\]/
+const BOM = '\uFEFF'
+export const SPLIT_UNSAFE_MESSAGE = '该行剩余的 pattern 以 // 或 # 开头，拆开后会被当成注释，请用文本编辑器手动修改'
+
+/**
+ * Thrown when splitting a line or removing a pattern would put a pattern that
+ * starts with `//` or `#` at the start of a line, turning it into a disabled
+ * rule or a comment. The rule file is left untouched.
+ */
+export class RuleLineSplitError extends Error {
+    readonly code = 'RULE_LINE_SPLIT_UNSAFE'
+
+    constructor() {
+        super(SPLIT_UNSAFE_MESSAGE)
+        this.name = 'RuleLineSplitError'
+    }
+}
+
+function startsAsComment(pattern: string): boolean {
+    return pattern.startsWith('//') || pattern.startsWith('#')
+}
+
+/**
+ * A leading UTF-8 BOM is not part of the first line: strip it before editing
+ * and put it back afterwards, so it stays byte-identical even when the first
+ * line is split or deleted (JS `trim()` / `\s` treat U+FEFF as whitespace).
+ */
+function withBom<T extends { content: string }>(content: string, edit: (text: string) => T): T {
+    if (!content.startsWith(BOM)) return edit(content)
+    const result = edit(content.slice(BOM.length))
+    return { ...result, content: BOM + result.content }
+}
 
 export interface RouteRuleEdit {
     pattern: string
@@ -104,6 +135,10 @@ function removePatternTokens(line: string, keys: Set<string>): string {
  * Lines that do not contain the pattern are left untouched.
  */
 export function updateRouteRule(content: string, edit: RouteRuleEdit): { content: string; found: boolean } {
+    return withBom(content, (text) => updateLines(text, edit))
+}
+
+function updateLines(content: string, edit: RouteRuleEdit): { content: string; found: boolean } {
     const { pattern, target, exclusions } = edit
     const key = patternKey(pattern)
     const userHasMarker = MARKER.test(pattern)
@@ -137,6 +172,7 @@ export function updateRouteRule(content: string, edit: RouteRuleEdit): { content
             if (last && last.match === match) last.patterns.push(p)
             else groups.push({ match, patterns: [p] })
         }
+        if (groups.some((g) => startsAsComment(g.match && userHasMarker ? pattern : g.patterns[0]))) throw new RuleLineSplitError()
         const lines = groups.map((g) => g.match
             ? formatLine(parsed.leading, g.patterns.map((p) => (userHasMarker ? pattern : p)), nextExclusions, nextTarget)
             : formatLine(parsed.leading, g.patterns, parsed.exclusions, parsed.target))
@@ -156,7 +192,7 @@ export function addRouteRule(content: string, edit: RouteRuleEdit & { target: st
     if (updated.found) return { content: updated.content, existed: true }
 
     const line = formatLine('', [edit.pattern], edit.exclusions || [], edit.target)
-    if (content === '') return { content: line, existed: false }
+    if (content === '' || content === BOM) return { content: content + line, existed: false }
     const eol = content.includes('\r\n') ? '\r\n' : '\n'
     if (/\r?\n$/.test(content)) return { content: `${content}${line}${eol}`, existed: false }
     return { content: `${content}${eol}${line}`, existed: false }
@@ -167,6 +203,10 @@ export function addRouteRule(content: string, edit: RouteRuleEdit & { target: st
  * stay; a line left without patterns is removed with its line ending.
  */
 export function deleteRouteRule(content: string, edit: { pattern: string }): { content: string; found: boolean } {
+    return withBom(content, (text) => deleteLines(text, edit))
+}
+
+function deleteLines(content: string, edit: { pattern: string }): { content: string; found: boolean } {
     const key = patternKey(edit.pattern)
     const segments = splitLines(content)
     const out: string[] = []
@@ -188,6 +228,7 @@ export function deleteRouteRule(content: string, edit: { pattern: string }): { c
             if (eol === undefined && out.length > 0) out.pop()
             continue
         }
+        if (startsAsComment(parsed.patterns.find((p) => patternKey(p) !== key) as string)) throw new RuleLineSplitError()
         out.push(removePatternTokens(line, new Set([key])))
         if (eol !== undefined) out.push(eol)
     }

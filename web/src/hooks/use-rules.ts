@@ -26,7 +26,9 @@ export function useRules() {
 
   const fetchRuleFileRawContent = useCallback(async (name: string): Promise<string> => {
     const res = await fetch(`/api/rule-files/${encodeURIComponent(name)}/content`)
-    return res.text()
+    // Issue #145: `res.text()` strips a leading UTF-8 BOM; keep it so saving
+    // writes the file back byte for byte.
+    return new TextDecoder('utf-8', { ignoreBOM: true }).decode(await res.arrayBuffer())
   }, [])
 
   const fetchFileContent = useCallback(async (name: string) => {
@@ -56,6 +58,10 @@ export function useRules() {
     }
   }, [])
 
+  /**
+   * Throws `RuleLineSplitError` (before any request) when a rule would turn into
+   * a comment or disabled line; callers show its message.
+   */
   const saveFileContent = useCallback(async (name: string, items: RuleItem[]): Promise<boolean> => {
     return saveRuleFileRawContent(name, rulesToEprcPreserving(items, savedTextRef.current.get(name) ?? ''))
   }, [saveRuleFileRawContent])

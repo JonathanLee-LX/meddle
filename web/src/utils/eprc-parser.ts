@@ -142,6 +142,28 @@ export function rulesToEprc(rules: RuleItem[]): string {
     .join('\n')
 }
 
+export const SPLIT_UNSAFE_MESSAGE = '该行剩余的 pattern 以 // 或 # 开头，拆开后会被当成注释，请用文本编辑器手动修改'
+
+/**
+ * Issue #145: a rule whose pattern starts with `//` or `#` cannot be written on
+ * a line of its own (it would read back as a disabled rule or a comment). Thrown
+ * by `rulesToEprcPreserving` instead of silently changing the rule; same message
+ * as the CLI / MCP / Agent write paths.
+ */
+export class RuleLineSplitError extends Error {
+  readonly code = 'RULE_LINE_SPLIT_UNSAFE'
+
+  constructor() {
+    super(SPLIT_UNSAFE_MESSAGE)
+    this.name = 'RuleLineSplitError'
+  }
+}
+
+function canonicalRuleLine(rule: RuleItem): string {
+  if (rule.enabled && (rule.rule.startsWith('//') || rule.rule.startsWith('#'))) throw new RuleLineSplitError()
+  return rulesToEprc([rule])
+}
+
 function sameRuleItem(a: RuleItem, b: RuleItem): boolean {
   const ae = a.exclusions || []
   const be = b.exclusions || []
@@ -211,6 +233,8 @@ function alignRuleItems(a: RuleItem[], b: RuleItem[]): { matchA: number[]; match
  * form. Falls back to `rulesToEprc` when there is no original text.
  */
 export function rulesToEprcPreserving(rules: RuleItem[], originalText: string): string {
+  // A leading UTF-8 BOM belongs to the file, not to the first line.
+  if (originalText.startsWith('\uFEFF')) return '\uFEFF' + rulesToEprcPreserving(rules, originalText.slice(1))
   if (!originalText) return rulesToEprc(rules)
 
   const eol = originalText.includes('\r\n') ? '\r\n' : '\n'
@@ -273,7 +297,7 @@ export function rulesToEprcPreserving(rules: RuleItem[], originalText: string): 
         ptr = entry + 1
         continue
       }
-      out.push(rulesToEprc([rules[j]]))
+      out.push(canonicalRuleLine(rules[j]))
       j++
       continue
     }
@@ -293,7 +317,7 @@ export function rulesToEprcPreserving(rules: RuleItem[], originalText: string): 
     // A rule added after every existing rule goes to the end of the file
     // (before trailing blank lines), like the CLI / MCP add.
     if (!replaced && limit === entries.length) flushUntil(tailStart)
-    out.push(rulesToEprc([rules[j]]))
+    out.push(canonicalRuleLine(rules[j]))
     j++
   }
   flushUntil(entries.length)

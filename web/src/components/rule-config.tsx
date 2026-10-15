@@ -866,7 +866,13 @@ export function RuleConfig(props: RuleConfigProps) {
     if (serializedDraftRules === serializedRules) return
 
     // Issue #145: keep the draft's comments, blank lines and untouched rule lines.
-    const nextDraft = rulesToEprcPreserving(rules, textDraftRef.current)
+    let nextDraft: string
+    try {
+      nextDraft = rulesToEprcPreserving(rules, textDraftRef.current)
+    } catch {
+      // Not representable without turning a rule into a comment; saving reports it.
+      return
+    }
     textDraftRef.current = nextDraft
     setTextDraft(nextDraft)
   }, [activeFileName, rules, viewMode])
@@ -996,7 +1002,15 @@ export function RuleConfig(props: RuleConfigProps) {
     // 文本模式下若有未识别行，阻止保存（按钮已禁用，此处为防御性兜底）
     if (viewMode === 'text' && getEprcTextDiagnostics(textDraft).length > 0) return
     setSaving(true)
-    const ok = viewMode === 'text' ? await saveRuleFileRawContent(activeFileName, textDraft) : await saveFileContent(activeFileName, rules)
+    let ok = false
+    try {
+      ok = viewMode === 'text' ? await saveRuleFileRawContent(activeFileName, textDraft) : await saveFileContent(activeFileName, rules)
+    } catch (err) {
+      // Issue #145: e.g. a pattern that would turn into a comment line; nothing was written.
+      setSaving(false)
+      toast.error(err instanceof Error ? err.message : '规则保存失败')
+      return
+    }
     setSaving(false)
     if (ok) {
       fetchRuleFiles()

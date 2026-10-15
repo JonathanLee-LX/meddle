@@ -488,7 +488,7 @@ function createRouteRuleAddTool(): AgentTool {
                 exclusions: {
                     type: 'array',
                     items: { type: 'string' },
-                    description: '可选排除规则列表。',
+                    description: '可选排除规则列表。不传时保留该规则原有的排除规则（新规则无排除规则）；传 [] 清空。',
                 },
             },
             required: ['ruleFile', 'pattern', 'target'],
@@ -555,7 +555,7 @@ function createRouteRuleUpdateTool(): AgentTool {
                 exclusions: {
                     type: 'array',
                     items: { type: 'string' },
-                    description: '新的排除规则列表；传空数组表示清空。',
+                    description: '新的排除规则列表。不传时保留该规则原有的排除规则；传 [] 清空。',
                 },
             },
             required: ['ruleFile', 'pattern'],

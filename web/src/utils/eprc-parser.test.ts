@@ -6,6 +6,7 @@ import {
   parseEprcRules,
   rulesToEprc,
   rulesToEprcPreserving,
+  SPLIT_UNSAFE_MESSAGE,
 } from './eprc-parser'
 
 describe('eprc-parser', () => {
@@ -327,6 +328,29 @@ describe('rulesToEprcPreserving', () => {
       expect(out.split('\n')).toContain(line)
     }
     expect(rulesToEprc(parseEprcRules(out))).toBe(rulesToEprc(rules))
+  })
+
+  it('keeps a leading UTF-8 BOM byte-identical, even when the first rule is edited or deleted', () => {
+    const bom = '\uFEFF'
+    const text = `${bom}first.example.com !/f 127.0.0.1:1000\n${ORIGINAL}`
+    const rules = parseEprcRules(text)
+    expect(rules[0].rule).toBe('first.example.com')
+    expect(rulesToEprcPreserving(rules, text)).toBe(text)
+    const edited = rules.map((r, i) => (i === 0 ? { ...r, target: '127.0.0.1:1001' } : r))
+    expect(rulesToEprcPreserving(edited, text)).toBe(`${bom}first.example.com !/f 127.0.0.1:1001\n${ORIGINAL}`)
+    expect(rulesToEprcPreserving(rules.slice(1), text)).toBe(`${bom}${ORIGINAL}`)
+  })
+
+  it('refuses to write a rule whose pattern would start a line with // or #', () => {
+    const text = '\uFEFFa.example.com //cdn.example.com 127.0.0.1:1\r\nx.com 2\r\n'
+    const rules = parseEprcRules(text)
+    expect(rules.map((r) => r.rule)).toEqual(['a.example.com', '//cdn.example.com', 'x.com'])
+    // Unchanged: written back as is.
+    expect(rulesToEprcPreserving(rules, text)).toBe(text)
+    // Editing a.example.com (or deleting it) would leave //cdn.example.com at a line start.
+    const edited = rules.map((r, i) => (i === 0 ? { ...r, target: '127.0.0.1:9' } : r))
+    expect(() => rulesToEprcPreserving(edited, text)).toThrow(SPLIT_UNSAFE_MESSAGE)
+    expect(() => rulesToEprcPreserving(rules.slice(1), text)).toThrow(SPLIT_UNSAFE_MESSAGE)
   })
 
   it('falls back to rulesToEprc without original text', () => {

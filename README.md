@@ -181,6 +181,14 @@ meddle --remote --no-intercept-https
 
 所有 `mock_rule_*`、`route_rule_*`、`route_preview` 工具均支持可选 `session` 参数，指定后可操作对应 session 的规则，不传则操作默认 session。
 
+**路由规则写入**（`route_rule_add` / `route_rule_update` / `route_rule_delete`）只改包含该 pattern 的那一行，规则文件里的注释、空行、`//` 禁用规则和其他规则（连同排除项）都按原样保留：
+
+- **不传 `exclusions`**：保留该规则原有的排除规则（`route_rule_add` 覆盖已有规则时也一样；新规则则没有排除规则）。
+- **传 `exclusions: []`**：清空该规则的排除规则。
+- 传非空数组：用它替换原有的排除规则。
+- 如果一行写了多个 pattern，修改或删除其中一个时，若剩下的 pattern 以 `//` 或 `#` 开头（拆开后会被当成注释），写入会被拒绝并提示「该行剩余的 pattern 以 // 或 # 开头，拆开后会被当成注释，请用文本编辑器手动修改」，规则文件不变。
+- CLI 没有单独的排除规则参数：`meddle route add/update` 的 pattern 参数里写了 `!path`（如 `"api.example.com !/health"`）就替换，不写就保留原有的；CLI 无法清空排除规则，需要清空时用 MCP 传 `[]`，或在 Web 界面里编辑。
+
 **只读规则集**（[详细说明](./docs/RULESET_READONLY.md)）：规则集（规则文件）可以在 Meddle Web 界面中加只读锁，防止 Agent 误改。
 
 - `route_rule_list` 的结果带 `readonly: true|false`。

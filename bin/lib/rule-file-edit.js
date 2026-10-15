@@ -12,6 +12,36 @@
  */
 
 const MARKER = /\[([^\]]+)\]/
+const BOM = '\uFEFF'
+const SPLIT_UNSAFE_MESSAGE = '该行剩余的 pattern 以 // 或 # 开头，拆开后会被当成注释，请用文本编辑器手动修改'
+
+/**
+ * Thrown when splitting a line or removing a pattern would put a pattern that
+ * starts with `//` or `#` at the start of a line, turning it into a disabled
+ * rule or a comment. The rule file is left untouched.
+ */
+class RuleLineSplitError extends Error {
+  constructor() {
+    super(SPLIT_UNSAFE_MESSAGE)
+    this.name = 'RuleLineSplitError'
+    this.code = 'RULE_LINE_SPLIT_UNSAFE'
+  }
+}
+
+function startsAsComment(pattern) {
+  return pattern.startsWith('//') || pattern.startsWith('#')
+}
+
+/**
+ * A leading UTF-8 BOM is not part of the first line: strip it before editing
+ * and put it back afterwards, so it stays byte-identical even when the first
+ * line is split or deleted (JS `trim()` / `\s` treat U+FEFF as whitespace).
+ */
+function withBom(content, edit) {
+  if (!content.startsWith(BOM)) return edit(content)
+  const result = edit(content.slice(BOM.length))
+  return { ...result, content: BOM + result.content }
+}
 
 /** Internal key of a pattern token: `[marker]` brackets removed (same as the parser). */
 function patternKey(token) {
@@ -102,6 +132,10 @@ function splitPatternArg(raw) {
  * @returns {{ content: string, found: boolean }}
  */
 function updateRouteRule(content, { pattern, target, exclusions }) {
+  return withBom(content, (text) => updateLines(text, { pattern, target, exclusions }))
+}
+
+function updateLines(content, { pattern, target, exclusions }) {
   const key = patternKey(pattern)
   const userHasMarker = MARKER.test(pattern)
   const segments = splitLines(content)
@@ -134,6 +168,7 @@ function updateRouteRule(content, { pattern, target, exclusions }) {
       if (last && last.match === match) last.patterns.push(p)
       else groups.push({ match, patterns: [p] })
     }
+    if (groups.some((g) => startsAsComment(g.match && userHasMarker ? pattern : g.patterns[0]))) throw new RuleLineSplitError()
     const lines = groups.map((g) => g.match
       ? formatLine(parsed.leading, g.patterns.map((p) => (userHasMarker ? pattern : p)), nextExclusions, nextTarget)
       : formatLine(parsed.leading, g.patterns, parsed.exclusions, parsed.target))
@@ -154,7 +189,7 @@ function addRouteRule(content, { pattern, target, exclusions }) {
   if (updated.found) return { content: updated.content, existed: true }
 
   const line = formatLine('', [pattern], exclusions || [], target)
-  if (content === '') return { content: line, existed: false }
+  if (content === '' || content === BOM) return { content: content + line, existed: false }
   const eol = content.includes('\r\n') ? '\r\n' : '\n'
   if (/\r?\n$/.test(content)) return { content: `${content}${line}${eol}`, existed: false }
   return { content: `${content}${eol}${line}`, existed: false }
@@ -166,6 +201,10 @@ function addRouteRule(content, { pattern, target, exclusions }) {
  * @returns {{ content: string, found: boolean }}
  */
 function deleteRouteRule(content, { pattern }) {
+  return withBom(content, (text) => deleteLines(text, { pattern }))
+}
+
+function deleteLines(content, { pattern }) {
   const key = patternKey(pattern)
   const segments = splitLines(content)
   const out = []
@@ -187,6 +226,7 @@ function deleteRouteRule(content, { pattern }) {
       if (eol === undefined && out.length > 0) out.pop()
       continue
     }
+    if (startsAsComment(parsed.patterns.find((p) => patternKey(p) !== key))) throw new RuleLineSplitError()
     out.push(removePatternTokens(line, new Set([key])))
     if (eol !== undefined) out.push(eol)
   }
@@ -195,6 +235,8 @@ function deleteRouteRule(content, { pattern }) {
 }
 
 module.exports = {
+  SPLIT_UNSAFE_MESSAGE,
+  RuleLineSplitError,
   patternKey,
   parseRuleLine,
   splitPatternArg,

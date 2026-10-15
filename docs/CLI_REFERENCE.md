@@ -334,7 +334,8 @@ meddle route add dev "^https://app.example.com[/api/v2]" "https://localhost:1300
 - Supports marker syntax: `pattern[marker] target`
 - Read-only route files reject the write: `RULESET_READONLY`, exit code `3` (also for `route update` / `route delete`).
 - `route add`, `route update` and `route delete` edit only the line(s) that hold the pattern. Comments, blank lines, disabled (`//`) rules and every other rule, with its exclusions, keep their exact bytes. A new rule is appended at the end of the file.
-- If the pattern already exists, `route add` overwrites its target in place. The rule keeps its own exclusions unless the pattern argument gives new ones (`"app.example.com !/api"`).
+- If the pattern already exists, `route add` overwrites its target in place.
+- Exclusions: if the pattern argument has no `!path`, the rule keeps its existing exclusions. If it has `!path` tokens (`"app.example.com !/api"`), they replace the existing ones. The CLI has no option to clear a rule's exclusions. To clear them, call the MCP tool `route_rule_update` with `exclusions: []`, or edit the rule in the web UI.
 
 ### meddle route update
 
@@ -349,7 +350,11 @@ meddle route update <file> <pattern> <new-target>
 meddle route update default "api.example.com" "localhost:4000"
 ```
 
-**Note:** The rule keeps its own exclusions unless the pattern argument gives new ones (`"api.example.com !/health"`). If one line holds several patterns, the updated pattern moves to its own line next to the others.
+**Note:**
+- If the pattern argument has no `!path`, the rule keeps its existing exclusions. `!path` tokens (`"api.example.com !/health"`) replace them. There is no CLI option to clear them (see `route add`).
+- If one line holds several patterns, the updated pattern moves to its own line next to the others. If that would leave a pattern starting with `//` or `#` at the start of a line, the write is refused (exit code `1`, message 「该行剩余的 pattern 以 // 或 # 开头，拆开后会被当成注释，请用文本编辑器手动修改」) and the file is left unchanged. The same applies to `route add` over an existing rule and to `route delete`.
+
+**MCP equivalents** (`route_rule_add` / `route_rule_update`): if you omit `exclusions`, the rule keeps its existing exclusions. `exclusions: []` clears them. A non-empty array replaces them.
 
 ### meddle route delete
 
