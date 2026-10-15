@@ -208,7 +208,10 @@ export function ShellNav({ activeTab, onTabChange, mockEnabledCount = 0 }: Shell
             collapsed && 'justify-center px-2.5',
           )}
         >
-          <TooltipTrigger>{content}</TooltipTrigger>
+          {/* The tooltip only repeats item.label, which the name (text or
+              aria-label) already contains; skip Radix's aria-describedby so
+              collapsed items don't read 「Mock，1234 条启用」 then 「Mock」. */}
+          <TooltipTrigger describe={false}>{content}</TooltipTrigger>
         </TabsTrigger>
         <TooltipContent side="right" sideOffset={8} data-testid={`shell-nav-tooltip-${item.tab}`}>
           {item.label}

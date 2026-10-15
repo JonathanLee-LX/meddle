@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { act, render, screen, fireEvent } from '@testing-library/react'
 import { AppHeader, SHELL_NAV_COLLAPSED_KEY, ShellNav } from './app-header'
 import { MemoryRouter } from 'react-router-dom'
 
@@ -146,6 +146,34 @@ describe('ShellNav (07-shell)', () => {
     renderNav({ mockEnabledCount: 3 })
     expect(screen.getByTestId('shell-nav-mock-badge')).toHaveTextContent(/^3$/)
     expect(screen.getByTestId('shell-nav-mock')).toHaveAccessibleName('Mock，3 条启用')
+  })
+
+  it('collapsed tooltips do not repeat the page name as a description', async () => {
+    localStorage.setItem(SHELL_NAV_COLLAPSED_KEY, '1')
+    renderNav({ mockEnabledCount: 1234 })
+    expect(screen.getByTestId('app-shell-nav-rail')).toHaveAttribute('data-collapsed', 'true')
+
+    for (const [tab, name] of [
+      ['mock', 'Mock，1234 条启用'],
+      ['config', '路由规则'],
+    ] as const) {
+      const item = screen.getByTestId(`shell-nav-${tab}`)
+      act(() => item.focus())
+      // The visual tooltip still opens with the page name…
+      expect(await screen.findByTestId(`shell-nav-tooltip-${tab}`)).toHaveTextContent(name.split('，')[0])
+      // …but the trigger is not described by its hidden role=tooltip copy.
+      expect(item).toHaveAccessibleName(name)
+      expect(item).not.toHaveAttribute('aria-describedby')
+      expect(item).toHaveAccessibleDescription('')
+      act(() => item.blur())
+    }
+  })
+
+  it('expanded items keep their longer title as the description', () => {
+    renderNav({ mockEnabledCount: 1234 })
+    const mock = screen.getByTestId('shell-nav-mock')
+    expect(mock).toHaveAccessibleName('Mock，1234 条启用')
+    expect(mock).toHaveAccessibleDescription('匹配请求后返回本地响应，用于联调和异常场景测试')
   })
 
   it('collapses to icons, persists, and expands again', () => {
