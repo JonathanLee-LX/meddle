@@ -257,24 +257,22 @@ describe('ruleset read-only lock — HTTP API (issue #137)', () => {
         expect((await list(proxy.base)).find((f) => f.name === 'locked')?.readonly).toBe(true)
     })
 
-    it('rename inside Meddle (unlock → rename → lock, as the UI does) keeps the lock on the new name', async () => {
+    it('rename of a locked ruleset is refused; after unlocking it renames and the new name is read-write', async () => {
         await setLock(proxy, 'locked', true)
-        // A rename while locked is refused …
+        // A rename while locked is refused (the web UI also disables rename while locked, #143) …
         expectReadonlyRejection(await call(proxy.base, 'PUT', '/api/rule-files/locked', { newName: 'locked-2' }))
-        // … so the UI unlocks, renames, and locks the new name.
+        expect((await list(proxy.base)).some((f) => f.name === 'locked-2')).toBe(false)
+        // … so the user unlocks it first, then renames.
         await setLock(proxy, 'locked', false)
         const renamed = await call(proxy.base, 'PUT', '/api/rule-files/locked', { newName: 'locked-2' })
         expect(renamed.json).toMatchObject({ status: 'success', name: 'locked-2' })
-        await setLock(proxy, 'locked-2', true)
 
         const files = await list(proxy.base)
-        expect(files.find((f) => f.name === 'locked-2')).toMatchObject({ readonly: true, enabled: true })
+        expect(files.find((f) => f.name === 'locked-2')).toMatchObject({ readonly: false, enabled: true })
         expect(files.some((f) => f.name === 'locked')).toBe(false)
-        expect(readSettings(home).readonlyRuleFiles).toEqual(['locked-2'])
-        expectReadonlyRejection(await call(proxy.base, 'PUT', '/api/rule-files/locked-2/content', { content: '' }), 'locked-2')
+        expect(readSettings(home).readonlyRuleFiles ?? []).toEqual([])
 
         // restore
-        await setLock(proxy, 'locked-2', false)
         expect((await call(proxy.base, 'PUT', '/api/rule-files/locked-2', { newName: 'locked' })).status).toBe(200)
     })
 

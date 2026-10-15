@@ -186,7 +186,7 @@ meddle --remote --no-intercept-https
 - `route_rule_list` 的结果带 `readonly: true|false`。
 - 锁住后 `route_rule_add` / `route_rule_update` / `route_rule_delete` / `route_rule_active_set`（会改变锁住规则集的启用状态时）全部被拒绝，规则文件不变，工具返回 `isError: true` 与 `{"error":{"code":"RULESET_READONLY","message":"该规则集已设为只读，只能在 Meddle 界面中解锁","ruleFile":"…"}}`。CLI 同样拒绝，退出码为 `3`。
 - **CLI 和 MCP 都没有加锁 / 解锁的命令或工具**，只能由人在 Meddle 界面中操作。界面使用页面令牌 + 同源校验；这只是防误改，不是安全隔离（可被 `curl` 取页面令牌并伪造 `Origin` 绕过，有 shell 的 Agent 也能直接改磁盘文件）。
-- 在 Meddle 内重命名时锁跟随；在 Meddle 之外直接改文件名视为新规则集（可读写），旧锁记录自动清除。
+- 锁住的规则集不能重命名，需先在 Meddle 界面中解锁再改名；在 Meddle 之外直接改文件名视为新规则集（可读写），旧锁记录自动清除。
 
 ### 多 Session 隔离（预览功能）
 

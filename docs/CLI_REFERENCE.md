@@ -256,7 +256,7 @@ A route file can be locked as **read-only** in the Meddle web UI (issue #137). F
   - **exit code `3`** (dedicated to this case; other failures still exit `1`);
   - with `--json`, stdout gets `{"success":false,"error":{"code":"RULESET_READONLY","message":"…","ruleFile":"<file>"}}`.
   - A `RULESET_READONLY` rejection from the proxy is final (the CLI does not fall back to writing the file directly); in file mode (proxy not running) the CLI reads the same lock from `settings.json`.
-- Renaming inside Meddle keeps the lock; renaming the `.txt` file outside Meddle creates a new, read-write route file and the stale lock entry is removed silently.
+- A locked route file cannot be renamed: unlock it in the Meddle web UI first, then rename. Renaming the `.txt` file outside Meddle creates a new, read-write route file and the stale lock entry is removed silently.
 
 ### meddle route list
 

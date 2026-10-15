@@ -35,6 +35,7 @@ function renderRules({
   files = FILES,
   setRuleFileReadonly = vi.fn<(name: string, readonly: boolean) => Promise<ReadonlyToggleResult>>().mockResolvedValue({ success: true }),
   renameRuleFile = vi.fn().mockResolvedValue({ success: true, name: 'renamed' }),
+  reorderRuleFiles = vi.fn().mockResolvedValue(true),
 } = {}) {
   const setRulesSpy = vi.fn()
   const toggleRuleFile = vi.fn().mockResolvedValue(true)
@@ -62,7 +63,7 @@ function renderRules({
         toggleRuleFile={toggleRuleFile}
         renameRuleFile={renameRuleFile}
         deleteRuleFile={deleteRuleFile}
-        reorderRuleFiles={vi.fn().mockResolvedValue(true)}
+        reorderRuleFiles={reorderRuleFiles}
         setRuleFileReadonly={setRuleFileReadonly}
       />
     )
@@ -228,22 +229,99 @@ describe('rule file list — lock button (issue #137)', () => {
     expect(setRuleFileReadonly).toHaveBeenLastCalledWith('locked', false)
   })
 
-  it('renaming a locked ruleset unlocks, renames and locks the new name', async () => {
-    const setRuleFileReadonly = vi.fn<(name: string, readonly: boolean) => Promise<ReadonlyToggleResult>>().mockResolvedValue({ success: true })
-    const renameRuleFile = vi.fn().mockResolvedValue({ success: true, name: 'renamed' })
-    renderRules({ setRuleFileReadonly, renameRuleFile })
+})
+
+describe('rule file list — rename while locked (issue #143)', () => {
+  it('double-clicking a locked name is disabled: aria-disabled, hint, no edit mode, no rename / unlock call', async () => {
+    const { setRuleFileReadonly, renameRuleFile } = renderRules()
+    const user = userEvent.setup()
+    const name = within(fileRow('locked')).getByText('locked')
+    expect(name).toHaveAttribute('data-slot', 'rule-file-name')
+    expect(name).toHaveAttribute('aria-disabled', 'true')
+    expect(name).not.toHaveAttribute('disabled')
+    expect(name).toHaveAttribute('title', LOCKED_HINT)
+    expect(name).toHaveClass('cursor-not-allowed')
+
+    await user.dblClick(name)
+    expect(screen.queryByRole('textbox', { name: '重命名规则文件 locked' })).toBeNull()
+    // Disabled-and-locked row behaves the same.
+    await user.dblClick(within(fileRow('off')).getByText('off'))
+    expect(screen.queryByRole('textbox', { name: /重命名规则文件/ })).toBeNull()
+
+    expect(renameRuleFile).not.toHaveBeenCalled()
+    expect(setRuleFileReadonly).not.toHaveBeenCalled()
+  })
+
+  it('has no other rename entry point (no 重命名 menu item or button) on a locked row', async () => {
+    renderRules()
+    const row = fileRow('locked')
+    fireEvent.contextMenu(within(row).getByText('locked'))
+    expect(screen.queryByRole('menuitem', { name: /重命名/ })).toBeNull()
+    expect(within(row).queryByRole('button', { name: /重命名|更多/ })).toBeNull()
+  })
+
+  it('locking a ruleset mid-rename blocks the commit without calling rename or unlock', async () => {
+    const pending = deferred<ReadonlyToggleResult>()
+    const setRuleFileReadonly = vi.fn(() => pending.promise)
+    const { renameRuleFile } = renderRules({ activeFileName: 'open', setRuleFileReadonly })
     const user = userEvent.setup()
 
-    await user.dblClick(within(fileRow('locked')).getByText('locked'))
-    const input = screen.getByRole('textbox', { name: '重命名规则文件 locked' })
+    await user.dblClick(within(fileRow('open')).getByText('open'))
+    const input = screen.getByRole('textbox', { name: '重命名规则文件 open' })
+    // Lock it while the inline editor is open (optimistic lock state applies at once).
+    fireEvent.click(lockButton('open'))
+    expect(setRuleFileReadonly).toHaveBeenCalledTimes(1)
+    expect(setRuleFileReadonly).toHaveBeenLastCalledWith('open', true)
     await user.clear(input)
     await user.type(input, 'renamed{Enter}')
 
-    await waitFor(() => expect(setRuleFileReadonly).toHaveBeenCalledTimes(2))
-    expect(setRuleFileReadonly.mock.calls).toEqual([['locked', false], ['renamed', true]])
-    expect(renameRuleFile).toHaveBeenCalledWith('locked', 'renamed')
-    expect(setRuleFileReadonly.mock.invocationCallOrder[0]).toBeLessThan(renameRuleFile.mock.invocationCallOrder[0])
-    expect(renameRuleFile.mock.invocationCallOrder[0]).toBeLessThan(setRuleFileReadonly.mock.invocationCallOrder[1])
+    expect(renameRuleFile).not.toHaveBeenCalled()
+    expect(setRuleFileReadonly).toHaveBeenCalledTimes(1)
+    expect(await screen.findAllByText(LOCKED_HINT)).not.toHaveLength(0)
+    await act(async () => pending.resolve({ success: true }))
+  })
+
+  it('an unlocked ruleset still renames by double-click, without touching the lock', async () => {
+    const renameRuleFile = vi.fn().mockResolvedValue({ success: true, name: 'renamed' })
+    const { setRuleFileReadonly } = renderRules({ activeFileName: 'open', renameRuleFile })
+    const user = userEvent.setup()
+
+    const name = within(fileRow('open')).getByText('open')
+    expect(name).not.toHaveAttribute('aria-disabled')
+    expect(name).toHaveAttribute('title', '双击重命名')
+    await user.dblClick(name)
+    const input = screen.getByRole('textbox', { name: '重命名规则文件 open' })
+    await user.clear(input)
+    await user.type(input, 'renamed{Enter}')
+
+    await waitFor(() => expect(renameRuleFile).toHaveBeenCalledWith('open', 'renamed'))
+    expect(renameRuleFile).toHaveBeenCalledTimes(1)
+    expect(setRuleFileReadonly).not.toHaveBeenCalled()
+  })
+
+  it('reordering rulesets stays allowed while locked (keyboard drag of a locked tab)', async () => {
+    const reorderRuleFiles = vi.fn().mockResolvedValue(true)
+    renderRules({ reorderRuleFiles })
+    // jsdom has no layout: give each tab a stacked rect so dnd-kit can find neighbours.
+    const tabs = screen.getAllByRole('tab')
+    tabs.forEach((tab, index) => {
+      tab.getBoundingClientRect = () => ({
+        x: 0, y: index * 40, top: index * 40, left: 0, right: 200, bottom: index * 40 + 40, width: 200, height: 40,
+        toJSON: () => ({}),
+      }) as DOMRect
+    })
+
+    const handle = screen.getByRole('button', { name: '拖拽排序 locked' })
+    expect(fileRow('locked')).toHaveAttribute('data-readonly', 'true')
+    handle.focus()
+    fireEvent.keyDown(handle, { key: ' ', code: 'Space' })
+    await act(async () => {})
+    fireEvent.keyDown(document.activeElement ?? handle, { key: 'ArrowDown', code: 'ArrowDown' })
+    await act(async () => {})
+    fireEvent.keyDown(document.activeElement ?? handle, { key: ' ', code: 'Space' })
+    await act(async () => {})
+
+    await waitFor(() => expect(reorderRuleFiles).toHaveBeenCalledWith(['open', 'locked', 'off', 'idle']))
   })
 })
 
@@ -303,7 +381,8 @@ describe('editor pane of a read-only ruleset (issue #137)', () => {
     expect(ruleInput.className).not.toMatch(/(^|\s)opacity-/)
     // Flat, arrow cursor: doesn't look like an editable field.
     for (const input of [ruleInput, screen.getByDisplayValue('127.0.0.1:3001')]) {
-      expect(input).toHaveClass('bg-muted', 'dark:bg-muted', 'cursor-default', 'shadow-none')
+      expect(input).toHaveClass('bg-muted', 'cursor-default', 'shadow-none')
+      expect(input).not.toHaveClass('dark:bg-muted')
     }
     await user.type(ruleInput, 'x')
     expect(ruleInput).toHaveValue('locked.example.com')

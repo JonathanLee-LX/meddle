@@ -82,7 +82,7 @@ interface RuleConfigProps {
 export const RULESET_LOCKED_HINT = '规则集已锁定，解锁后可编辑'
 const LOCKED_CONTROL_CLASS = 'cursor-not-allowed opacity-50'
 /** Read-only rule inputs: flat --muted fill, default arrow, so they don't read as editable. */
-const LOCKED_INPUT_CLASS = 'h-8 cursor-default bg-muted shadow-none dark:bg-muted'
+const LOCKED_INPUT_CLASS = 'h-8 cursor-default bg-muted shadow-none'
 /**
  * Locked ruleset switch: still shows its real state (no opacity). On = primary
  * desaturated toward the muted grey; off = the grey track. Both keep >= 3:1
@@ -590,13 +590,17 @@ function SortableRuleFileTab({
             'min-w-0 flex-1 truncate text-left',
             // Grey name marks a locked row; once selected it goes back to full
             // foreground so it keeps >= 4.5:1 on the accent highlight.
-            readonly && 'text-muted-foreground group-data-[state=active]:text-foreground',
+            readonly && 'text-muted-foreground group-data-[state=active]:text-foreground cursor-not-allowed',
           )}
+          data-slot="rule-file-name"
+          // Issue #143: renaming a locked ruleset is not allowed; unlock it first.
+          aria-disabled={readonly || undefined}
           onDoubleClick={(event) => {
             event.stopPropagation()
+            if (readonly) return
             beginRename(file.name)
           }}
-          title="双击重命名"
+          title={readonly ? RULESET_LOCKED_HINT : '双击重命名'}
         >
           {file.name}
         </span>
@@ -1010,10 +1014,11 @@ export function RuleConfig(props: RuleConfigProps) {
   )
 
   const beginRename = useCallback((name: string) => {
+    if (isFileReadonly(name)) return
     setRenamingFileName(name)
     setRenameDraft(name)
     setRenameError(null)
-  }, [])
+  }, [isFileReadonly])
 
   const cancelRename = useCallback(() => {
     setRenamingFileName(null)
@@ -1033,41 +1038,28 @@ export function RuleConfig(props: RuleConfigProps) {
       return
     }
 
+    // Issue #143: a locked ruleset cannot be renamed from the UI; unlock it first.
+    if (isFileReadonly(renamingFileName)) {
+      setRenameError(RULESET_LOCKED_HINT)
+      return
+    }
+
     renameInFlightRef.current = true
     try {
-      // Issue #137: the server refuses to rename a locked ruleset, so the UI
-      // unlocks it, renames, and locks the new name — the lock follows the rename.
-      const wasLocked = isFileReadonly(renamingFileName)
-      if (wasLocked) {
-        if (!setRuleFileReadonly) {
-          setRenameError(RULESET_LOCKED_HINT)
-          return
-        }
-        const unlocked = await setRuleFileReadonly(renamingFileName, false)
-        if (!unlocked.success) {
-          setRenameError(unlocked.error || '重命名失败')
-          return
-        }
-      }
       const result = await renameRuleFile(renamingFileName, nextName)
       if (result.success) {
         const finalName = result.name || nextName
-        if (wasLocked && setRuleFileReadonly) {
-          const relocked = await setRuleFileReadonly(finalName, true)
-          if (!relocked.success) toast.error(`已重命名，但重新锁定失败：${relocked.error || '请手动锁定'}`)
-        }
         setRenamingFileName(null)
         setRenameDraft('')
         setRenameError(null)
         await fetchFileContent(finalName)
       } else {
-        if (wasLocked && setRuleFileReadonly) await setRuleFileReadonly(renamingFileName, true)
         setRenameError(result.error || '重命名失败')
       }
     } finally {
       renameInFlightRef.current = false
     }
-  }, [cancelRename, fetchFileContent, isFileReadonly, renameDraft, renameRuleFile, renamingFileName, setRuleFileReadonly])
+  }, [cancelRename, fetchFileContent, isFileReadonly, renameDraft, renameRuleFile, renamingFileName])
 
   // 规则编辑操作
   const toggleRule = useCallback(
