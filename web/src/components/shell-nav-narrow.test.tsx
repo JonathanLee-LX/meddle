@@ -205,35 +205,25 @@ describe('ShellNav narrow viewport (#109)', () => {
   })
 
   it.each([
-    ['expanded', 1280, '0'],
-    ['collapsed', 900, null],
-  ])('%s badge exposes the true count (not 99+) to assistive tech (#135 follow-up)', (_mode, width, stored) => {
-    if (stored !== null) localStorage.setItem(SHELL_NAV_COLLAPSED_KEY, stored)
-    installViewport(width)
-    renderNav({ mockEnabledCount: 1234 })
-    const badge = screen.getByTestId('shell-nav-mock-badge')
-    const num = badge.querySelector('[data-slot="shell-nav-mock-count"]')!
-    // visual stays the capped 2ch 99+, hidden from AT
-    expect(num.textContent).toBe('99+')
-    expect(num).toHaveClass('min-w-[2ch]', 'tabular-nums')
-    expect(num).toHaveAttribute('aria-hidden', 'true')
-    // the exact count is visually hidden but announced
-    const sr = badge.querySelector('[data-slot="shell-nav-mock-count-sr"]')!
-    expect(sr).toHaveClass('sr-only')
-    expect(sr.textContent).toBe('1234')
-    const item = screen.getByTestId('shell-nav-mock')
-    expect(item).toHaveAccessibleName(expect.stringContaining('1234'))
-    expect(item).not.toHaveAccessibleName(expect.stringContaining('99+'))
-  })
-
-  it('uncapped counts need no sr-only copy; the visible digits are announced', () => {
-    localStorage.setItem(SHELL_NAV_COLLAPSED_KEY, '0')
-    installViewport(1280)
-    renderNav({ mockEnabledCount: 99 })
-    const badge = screen.getByTestId('shell-nav-mock-badge')
-    expect(badge.querySelector('[data-slot="shell-nav-mock-count-sr"]')).toBeNull()
-    expect(badge.querySelector('[data-slot="shell-nav-mock-count"]')).not.toHaveAttribute('aria-hidden')
-    expect(screen.getByTestId('shell-nav-mock')).toHaveAccessibleName(expect.stringContaining('99'))
+    [1234, '99+'], [99, '99'], [1, '1'],
+  ])('expanded and collapsed rails announce 「Mock，%i 条启用」 identically; visual stays %s (#140 follow-up)', (count, visual) => {
+    for (const [width, stored] of [[1280, '0'], [900, null]] as const) {
+      localStorage.removeItem(SHELL_NAV_COLLAPSED_KEY)
+      if (stored !== null) localStorage.setItem(SHELL_NAV_COLLAPSED_KEY, stored)
+      installViewport(width)
+      const { unmount } = renderNav({ mockEnabledCount: count })
+      expect(rail()).toHaveAttribute('data-collapsed', width === 900 ? 'true' : 'false')
+      const badge = screen.getByTestId('shell-nav-mock-badge')
+      // the visual badge is unchanged (capped, 2ch tabular box) and hidden from AT
+      const num = badge.querySelector('[data-slot="shell-nav-mock-count"]')!
+      expect(num.textContent).toBe(visual)
+      expect(num).toHaveClass('min-w-[2ch]', 'tabular-nums')
+      expect(badge).toHaveAttribute('aria-hidden', 'true')
+      // name first, then the exact count with its unit (never "99+")
+      const item = screen.getByTestId('shell-nav-mock')
+      expect(item).toHaveAccessibleName(`Mock，${count} 条启用`)
+      unmount()
+    }
   })
 
   it('uses the expanded inline badge when the rail is open', () => {

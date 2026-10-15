@@ -80,7 +80,7 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
 
     setGenerating(true)
     setStatusType(null)
-    setStatusMessage('正在连接 AI 服务...')
+    setStatusMessage('正在连接 AI 服务…')
     setGeneratedCode('')
     setCodeLength(0)
     setGenerationProgress(0)
@@ -147,7 +147,7 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
               const parsed = JSON.parse(data)
 
               if (parsed.status === 'generating') {
-                setStatusMessage('AI 正在生成代码...')
+                setStatusMessage('AI 正在生成代码…')
                 setGenerationProgress(10)
               } else if (parsed.chunk) {
                 chunkCount++
@@ -160,7 +160,7 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
                 setGenerationProgress(progress)
                 
                 const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
-                setStatusMessage(`生成中... (${accumulated.length} 字符, ${elapsed}s)`)
+                setStatusMessage(`生成中… (${accumulated.length} 字符, ${elapsed}s)`)
               } else if (parsed.status === 'success') {
                 setGeneratedCode(parsed.plugin.code)
                 setGeneratedFilename(parsed.plugin.filename)
@@ -200,7 +200,7 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
 
     setSaving(true)
     setStatusType(null)
-    setStatusMessage('正在保存插件...')
+    setStatusMessage('正在保存插件…')
 
     try {
       const response = await fetch('/api/plugins/save', {
@@ -458,7 +458,7 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
                   </div>
                 )}
                 <pre className="text-xs font-mono whitespace-pre-wrap break-all">
-                  {generatedCode || '等待 AI 响应...'}
+                  {generatedCode || '等待 AI 响应…'}
                 </pre>
               </div>
               
@@ -548,7 +548,7 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
                 {generating ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                    生成中...
+                    生成中…
                   </>
                 ) : (
                   <>
@@ -586,7 +586,7 @@ export function PluginGenerator({ open = false, onOpenChange, embedded = false, 
                 {reloading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                    加载中...
+                    加载中…
                   </>
                 ) : (
                   <>

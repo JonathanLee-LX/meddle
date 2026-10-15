@@ -144,7 +144,8 @@ describe('ShellNav (07-shell)', () => {
 
   it('shows mock enabled count badge when > 0', () => {
     renderNav({ mockEnabledCount: 3 })
-    expect(screen.getByTestId('shell-nav-mock')).toHaveTextContent('3')
+    expect(screen.getByTestId('shell-nav-mock-badge')).toHaveTextContent(/^3$/)
+    expect(screen.getByTestId('shell-nav-mock')).toHaveAccessibleName('Mock，3 条启用')
   })
 
   it('collapses to icons, persists, and expands again', () => {

@@ -175,7 +175,7 @@ export function PluginCodeEditor({
     setAiReviseOpen(true)
     setRevising(true)
     setError(null)
-    setReviseStatus('AI 正在根据补充需求更新代码...')
+    setReviseStatus('AI 正在根据补充需求更新代码…')
 
     try {
       const reviseRes = await fetch('/api/plugins/revise-stream', {
@@ -221,11 +221,11 @@ export function PluginCodeEditor({
           try {
             const parsed = JSON.parse(data)
             if (parsed.status === 'generating') {
-              setReviseStatus('AI 正在根据补充需求更新代码...')
+              setReviseStatus('AI 正在根据补充需求更新代码…')
             } else if (parsed.chunk) {
               revisedCode = parsed.accumulated || `${revisedCode}${parsed.chunk}`
               setCode(revisedCode)
-              setReviseStatus(`生成中... ${revisedCode.length} 字符`)
+              setReviseStatus(`生成中… ${revisedCode.length} 字符`)
             } else if (parsed.status === 'success') {
               revisedCode = parsed.revisedCode || revisedCode
               setCode(revisedCode)
@@ -277,7 +277,7 @@ export function PluginCodeEditor({
           {loading ? (
             <div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <span>加载中...</span>
+              <span>加载中…</span>
             </div>
           ) : error && !code ? (
             <div className="flex flex-1 items-center justify-center text-destructive">
@@ -345,7 +345,7 @@ export function PluginCodeEditor({
                 {revising ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                    更新中...
+                    更新中…
                   </>
                 ) : (
                   <>

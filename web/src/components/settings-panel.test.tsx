@@ -290,3 +290,35 @@ describe('SettingsPanel config 「应用」 button (#138)', () => {
     vi.mocked(updateSettings).mockResolvedValue(undefined)
   })
 })
+
+describe('SettingsPanel config 「应用」 failure (#140 follow-up)', () => {
+  it('re-enables and returns to 「应用」 after a rejected save', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('[]', {
+      headers: { 'Content-Type': 'application/json' },
+    })))
+    let fail!: (error: Error) => void
+    vi.mocked(updateSettings).mockImplementation((updates) => (
+      'mocksFilePath' in (updates as object)
+        ? new Promise<void>((_resolve, reject) => { fail = reject })
+        : Promise.resolve()
+    ) as ReturnType<typeof updateSettings>)
+
+    const user = userEvent.setup()
+    render(<SettingsPanel embedded />)
+    await user.click(within(screen.getByRole('tablist', { name: '设置分类' })).getByRole('tab', { name: '配置文件' }))
+    await screen.findByText('Mock 规则文件')
+
+    const apply = screen.getByTestId('settings-mocks-file-apply')
+    await user.click(apply)
+    await vi.waitFor(() => expect(apply).toHaveAccessibleName('应用中…'))
+    expect(apply).toBeDisabled()
+
+    fail(new Error('磁盘不可写'))
+    await vi.waitFor(() => expect(apply).toHaveAccessibleName('应用'))
+    expect(apply).toBeEnabled()
+    expect(apply).not.toHaveAttribute('aria-busy')
+    expect(apply).toHaveAttribute('data-variant', 'default')
+    vi.mocked(updateSettings).mockReset()
+    vi.mocked(updateSettings).mockResolvedValue(undefined)
+  })
+})

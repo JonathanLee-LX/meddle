@@ -63,7 +63,7 @@ export function LogFilter({
           <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             id="proxy-log-filter"
-            placeholder="过滤 method / url / status..."
+            placeholder="过滤 method / url / status…"
             value={filterText}
             onChange={(e) => setFilterText(e.target.value)}
             className="h-8 pl-8 font-mono text-xs"

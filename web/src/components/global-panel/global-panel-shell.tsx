@@ -446,7 +446,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
               panel.close()
             }
           }}
-          placeholder="搜索命令，或直接描述你想让 AI 完成的操作..."
+          placeholder="搜索命令，或直接描述你想让 AI 完成的操作…"
           className="h-9 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
         />
         <Badge variant="outline" className="hidden shrink-0 text-[11px] font-normal sm:inline-flex">
@@ -509,7 +509,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
                       <div className="mb-3 whitespace-pre-wrap break-words leading-6 text-foreground/90">{streamingUserMessage}</div>
                       <div className="mb-1 text-xs font-medium text-muted-foreground">AI</div>
                       {agentLoading && !agentResponse?.message ? (
-                        <div className="leading-6 text-muted-foreground">正在分析你的请求并调用可用工具...</div>
+                        <div className="leading-6 text-muted-foreground">正在分析你的请求并调用可用工具…</div>
                       ) : agentResponse?.message ? (
                         <MarkdownContent content={agentResponse.message} />
                       ) : null}
@@ -562,7 +562,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
                           void sendFollowup()
                         }
                       }}
-                      placeholder="继续对话..."
+                      placeholder="继续对话…"
                       className="h-8 text-sm"
                     />
                     <Button size="sm" disabled={!followUpQuery.trim() || agentLoading} onClick={() => void sendFollowup()}>
