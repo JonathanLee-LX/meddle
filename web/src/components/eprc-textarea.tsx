@@ -9,6 +9,8 @@ interface EprcTextareaProps {
   /** 应用到外层容器（控制尺寸/布局） */
   className?: string
   disabled?: boolean
+  /** 只读：可选中、复制，文字保持正常颜色（issue #137 只读规则集） */
+  readOnly?: boolean
   /** textarea 的 aria-label */
   ariaLabel?: string
   /** textarea 的 id，供外部 label 关联 */
@@ -27,6 +29,7 @@ export function EprcTextarea({
   placeholder,
   className,
   disabled,
+  readOnly,
   ariaLabel,
   id,
 }: EprcTextareaProps) {
@@ -74,6 +77,8 @@ export function EprcTextarea({
         spellCheck={false}
         id={id}
         disabled={disabled}
+        readOnly={readOnly}
+        aria-readonly={readOnly || undefined}
         aria-label={ariaLabel}
         className={`absolute inset-0 resize-none overflow-auto rounded-none border-0 bg-transparent px-4 py-3 ${sharedTextStyle} shadow-none outline-none ring-0 focus-visible:ring-0 ${
           showHighlight && !disabled ? 'text-transparent caret-foreground' : ''

@@ -88,6 +88,8 @@ export interface Plugin {
 export interface RuleFile {
   name: string
   enabled: boolean
+  /** Issue #137: locked ruleset; only this UI can lock / unlock. Missing = read-write. */
+  readonly?: boolean
   ruleCount: number
 }
 

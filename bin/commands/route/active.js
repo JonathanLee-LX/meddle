@@ -5,7 +5,13 @@
 const output = require('../../lib/output')
 const { isProxyRunning } = require('../../lib/proxy-detect')
 const { apiGet, apiPut } = require('../../lib/api-client')
-const { listRuleFiles, getActiveRuleFileNames, setActiveRuleFileNames, setRuleFileEnabled } = require('../../lib/file-access')
+const { listRuleFiles, getActiveRuleFileNames, setRuleFileEnabled } = require('../../lib/file-access')
+const { isRulesetReadonlyError, exitRulesetReadonly, assertListedFilesWritable } = require('../../lib/ruleset-readonly')
+
+/** Names whose enabled state `active set <file>` would change. */
+function pendingToggles(files, target) {
+  return files.filter((f) => !!f.enabled !== (f.name === target)).map((f) => f.name)
+}
 
 // Parse arguments (skip 'route' and 'active' from argv)
 const args = process.argv.slice(4)
@@ -39,6 +45,9 @@ async function run() {
           process.exit(1)
         }
 
+        // Issue #137: refuse up front so a locked ruleset never leaves a half-applied switch.
+        assertListedFilesWritable(files, pendingToggles(files, targetFile))
+
         for (const f of files) {
           const nextEnabled = f.name === targetFile
           if (!!f.enabled === nextEnabled) continue
@@ -53,6 +62,7 @@ async function run() {
         output.header('Active Route File Set')
         output.success(targetFile)
       } catch (e) {
+        if (isRulesetReadonlyError(e)) exitRulesetReadonly(e, { json: jsonFlag, ruleFile: targetFile })
         // Fallback to file mode
         const files = listRuleFiles()
         const target = files.find(f => f.name === targetFile)
@@ -61,6 +71,7 @@ async function run() {
           process.exit(1)
         }
 
+        assertListedFilesWritable(files, pendingToggles(files, targetFile))
         // Disable all, then enable target
         files.forEach(f => setRuleFileEnabled(f.name, f.name === targetFile))
 
@@ -83,6 +94,7 @@ async function run() {
         process.exit(1)
       }
 
+      assertListedFilesWritable(files, pendingToggles(files, targetFile))
       files.forEach(f => setRuleFileEnabled(f.name, f.name === targetFile))
 
       output.warnFileOnlyMode()
@@ -140,6 +152,7 @@ async function run() {
 }
 
 run().catch(e => {
+  if (isRulesetReadonlyError(e)) exitRulesetReadonly(e, { json: jsonFlag, ruleFile: targetFile })
   output.error(e.message)
   process.exit(1)
 })

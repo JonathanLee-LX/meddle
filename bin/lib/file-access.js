@@ -5,6 +5,7 @@
 const fs = require('fs')
 const path = require('path')
 const { meddleDir } = require('./proxy-detect')
+const { RulesetReadonlyError } = require('./ruleset-readonly')
 
 const routeRulesDir = path.join(meddleDir, 'route-rules')
 const settingsPath = path.join(meddleDir, 'settings.json')
@@ -49,6 +50,33 @@ function setActiveRuleFileNames(names) {
   const settings = loadSettings()
   settings.activeRuleFiles = names
   saveSettings(settings)
+}
+
+/**
+ * Issue #137: locked rule files (settings.json `readonlyRuleFiles`). Entries
+ * whose file no longer exists are dropped silently. A missing field = none locked.
+ */
+function getReadonlyRuleFileNames() {
+  const settings = loadSettings()
+  if (!Object.prototype.hasOwnProperty.call(settings, 'readonlyRuleFiles')) return []
+  const raw = settings.readonlyRuleFiles
+  const names = Array.isArray(raw) ? raw.filter((n, i, arr) => typeof n === 'string' && n && arr.indexOf(n) === i) : []
+  const live = names.filter((name) => fs.existsSync(path.join(routeRulesDir, `${name}.txt`)))
+  if (!Array.isArray(raw) || live.length !== raw.length) {
+    settings.readonlyRuleFiles = live
+    saveSettings(settings)
+  }
+  return live
+}
+
+function isRuleFileReadonly(name) {
+  const fold = (n) => (process.platform === 'darwin' || process.platform === 'win32' ? n.toLowerCase() : n)
+  return getReadonlyRuleFileNames().some((item) => fold(item) === fold(name))
+}
+
+/** Throws RulesetReadonlyError (code RULESET_READONLY) for a locked rule file. */
+function assertRuleFileWritable(name) {
+  if (isRuleFileReadonly(name)) throw new RulesetReadonlyError(name)
 }
 
 // ========== Mocks ==========
@@ -217,6 +245,7 @@ function listRuleFiles() {
     .map(f => f.replace(/\.txt$/, ''))
 
   const ordered = resolveRuleFileOrder(files, getRuleFileOrderNames(), activeNames)
+  const readonlyNames = new Set(getReadonlyRuleFileNames())
 
   return ordered.map(name => {
     const filePath = getRuleFilePath(name)
@@ -234,6 +263,7 @@ function listRuleFiles() {
     return {
       name,
       enabled: activeNames.includes(name),
+      readonly: readonlyNames.has(name),
       ruleCount,
       excludeCount
     }
@@ -258,6 +288,7 @@ function getRuleFileContent(name) {
  */
 function saveRuleFileContent(name, content) {
   ensureRouteRulesDir()
+  assertRuleFileWritable(name)
   const filePath = getRuleFilePath(name)
   fs.writeFileSync(filePath, content, 'utf8')
 }
@@ -274,6 +305,8 @@ function createRuleFile(name, content = '', enabled = true) {
     throw new Error(`规则文件 "${safeName}" 已存在`)
   }
 
+  // Drop stale lock entries so a new file never inherits an old lock.
+  getReadonlyRuleFileNames()
   fs.writeFileSync(filePath, content, 'utf8')
 
   if (enabled) {
@@ -285,7 +318,7 @@ function createRuleFile(name, content = '', enabled = true) {
   }
 
   const ruleCount = content.trim() ? Object.keys(parseEprc(content)).length : 0
-  return { name: safeName, enabled, ruleCount }
+  return { name: safeName, enabled, readonly: false, ruleCount }
 }
 
 /**
@@ -296,6 +329,7 @@ function deleteRuleFile(name) {
   if (!fs.existsSync(filePath)) {
     throw new Error('规则文件不存在')
   }
+  assertRuleFileWritable(name)
   fs.unlinkSync(filePath)
 
   const activeNames = getActiveRuleFileNames()
@@ -317,6 +351,7 @@ function setRuleFileEnabled(name, enabled) {
 
   const activeNames = getActiveRuleFileNames()
   const idx = activeNames.indexOf(name)
+  if ((enabled && idx === -1) || (!enabled && idx !== -1)) assertRuleFileWritable(name)
 
   if (enabled && idx === -1) {
     activeNames.push(name)
@@ -352,6 +387,9 @@ module.exports = {
   saveSettings,
   getActiveRuleFileNames,
   setActiveRuleFileNames,
+  getReadonlyRuleFileNames,
+  isRuleFileReadonly,
+  assertRuleFileWritable,
 
   // Mocks
   getMocksPath,

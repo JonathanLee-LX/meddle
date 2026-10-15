@@ -204,6 +204,7 @@ https://localhost:13001/micro/app?a=1
 | `detailBodySizeKB` | 日志详情保存的请求/响应体截断阈值（KB），默认 `256`；调大可保留更大 body 便于排查，但会增加内存占用（最多 `MAX_DETAIL_SIZE=200` 条同时驻留）。作用范围为单个 session，解析顺序：当前 session 的 `settings.json` → 默认 session（`~/.meddle/settings.json`，仅非默认 session 继承）→ 环境变量 `MEDDLE_MAX_DETAIL_BODY_KB` → 默认 `256`。修改后下次请求即生效（基于 mtime 缓存检测） |
 | `activeRuleFiles` | 当前启用的路由规则文件名称，顺序即合并顺序 |
 | `ruleFileOrder` | Web 规则文件 Tab 的完整显示顺序（含禁用文件）；启用文件的合并顺序与其在该数组中的相对顺序一致 |
+| `readonlyRuleFiles` | 只读（加锁）的规则文件名称。可选，缺省即全部可读写。只能在 Web 界面中修改；锁住的规则文件拒绝 CLI / MCP / API 的一切写入。见 [只读规则集](./docs/RULESET_READONLY.md) |
 | `mocksFilePath` | 自定义 Mock JSON 路径；空值使用默认位置 |
 | `pluginMode` | 插件 Pipeline 模式：`off`、`shadow` 或 `on` |
 | `clientAliases` | 客户端 IP 到设备名称的映射 |

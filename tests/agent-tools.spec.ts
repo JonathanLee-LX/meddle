@@ -405,3 +405,30 @@ describe('agent route tools', () => {
         expect(ctx.onModeGate.setMode).toHaveBeenCalledWith('shadow')
     })
 })
+
+describe('agent route tools — read-only rulesets (issue #137)', () => {
+    it('the in-app assistant cannot write, toggle or switch a locked ruleset', async () => {
+        const { ctx, ruleFilePath, settingsPath } = createTestContext()
+        fs.writeFileSync(ruleFilePath, 'locked.example.com 127.0.0.1:1\n', 'utf8')
+        fs.writeFileSync(settingsPath, JSON.stringify({ activeRuleFiles: ['默认规则'], readonlyRuleFiles: ['默认规则'] }), 'utf8')
+        const before = fs.readFileSync(ruleFilePath)
+        const tools = createAgentTools()
+        // execute() may throw synchronously or reject; treat both as a rejection.
+        const run = (fn: () => unknown) => Promise.resolve().then(fn)
+
+        await expect(run(() => tools.get('route_rule_add')!.execute(
+            { ruleFile: '默认规则', pattern: 'x.example.com', target: '1.1.1.1' }, { serverContext: ctx },
+        ))).rejects.toMatchObject({ code: 'RULESET_READONLY', message: '该规则集已设为只读，只能在 Meddle 界面中解锁' })
+        await expect(run(() => tools.get('route_rule_delete')!.execute(
+            { ruleFile: '默认规则', pattern: 'locked.example.com' }, { serverContext: ctx },
+        ))).rejects.toMatchObject({ code: 'RULESET_READONLY' })
+        // Switching the active set would turn the locked ruleset off.
+        fs.writeFileSync(path.join(path.dirname(ruleFilePath), 'other.txt'), '', 'utf8')
+        await expect(run(() => tools.get('route_rule_active_set')!.execute(
+            { ruleFile: 'other' }, { serverContext: ctx },
+        ))).rejects.toMatchObject({ code: 'RULESET_READONLY' })
+
+        expect(fs.readFileSync(ruleFilePath).equals(before)).toBe(true)
+        expect(JSON.parse(fs.readFileSync(settingsPath, 'utf8')).activeRuleFiles).toEqual(['默认规则'])
+    })
+})

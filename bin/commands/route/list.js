@@ -48,7 +48,7 @@ async function run() {
     output.section('Active Files')
     active.forEach(f => {
       const excludeInfo = f.excludeCount > 0 ? `, ${f.excludeCount} exclusions` : ''
-      output.success(`${f.name} (${f.ruleCount} rules${excludeInfo})`)
+      output.success(`${f.name} (${f.ruleCount} rules${excludeInfo})${f.readonly ? ' [read-only]' : ''}`)
     })
   }
 
@@ -56,7 +56,7 @@ async function run() {
     output.section('Inactive Files')
     inactive.forEach(f => {
       const excludeInfo = f.excludeCount > 0 ? `, ${f.excludeCount} exclusions` : ''
-      output.bullet(`${f.name} (${f.ruleCount} rules${excludeInfo})`, false)
+      output.bullet(`${f.name} (${f.ruleCount} rules${excludeInfo})${f.readonly ? ' [read-only]' : ''}`, false)
     })
   }
 }

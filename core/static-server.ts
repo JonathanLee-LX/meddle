@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import type { ProxyContext } from './types'
+import { getUiToken, injectUiToken } from '../server/ruleset-lock'
 
 const STATIC_MIME: Record<string, string> = {
     '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css',
@@ -25,6 +26,15 @@ export function handleLocalRequest(req: any, res: any, opts: HandleLocalRequestO
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
         res.setHeader('Pragma', 'no-cache')
         res.setHeader('Expires', '0')
+    }
+
+    // Issue #137: the page carries a per-server token that only the web UI uses
+    // to lock / unlock rulesets (anti-accident guard, not a security boundary).
+    function sendHtml(fullPath: string): void {
+        setNoCacheHeaders('text/html')
+        res.writeHead(200)
+        res.write(injectUiToken(fs.readFileSync(fullPath, 'utf8'), getUiToken(serverContext)))
+        res.end()
     }
 
     if (req.url && (req.url as string).startsWith('/api')) {
@@ -53,11 +63,11 @@ export function handleLocalRequest(req: any, res: any, opts: HandleLocalRequestO
             const ext = path.extname(fullPath).toLowerCase()
             const contentType = STATIC_MIME[ext] || 'application/octet-stream'
             if (ext === '.html') {
-                setNoCacheHeaders(contentType)
-            } else {
-                res.setHeader('Content-Type', contentType)
-                res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+                sendHtml(fullPath)
+                return
             }
+            res.setHeader('Content-Type', contentType)
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
             res.writeHead(200)
             const stream = fs.createReadStream(fullPath)
             stream.on('error', (err: Error) => {
@@ -69,19 +79,13 @@ export function handleLocalRequest(req: any, res: any, opts: HandleLocalRequestO
             })
             stream.pipe(res)
         } else {
-            setNoCacheHeaders('text/html')
-            res.writeHead(200)
-            res.write(fs.readFileSync(path.resolve(webDistDir, 'index.html'), 'utf8'))
-            res.end()
+            sendHtml(path.resolve(webDistDir, 'index.html'))
         }
     } else {
         if (req.url === '/' || !(req.url as string).startsWith('/api')) {
             const legacyHtml = path.resolve(__dirname, '../../index.html')
             if (fs.existsSync(legacyHtml)) {
-                setNoCacheHeaders('text/html')
-                res.writeHead(200)
-                res.write(fs.readFileSync(legacyHtml, 'utf8'))
-                res.end()
+                sendHtml(legacyHtml)
             } else { res.writeHead(404); res.end() }
         } else { res.writeHead(404); res.end() }
     }
