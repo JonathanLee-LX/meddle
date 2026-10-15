@@ -28,6 +28,20 @@ class RuleLineSplitError extends Error {
   }
 }
 
+const NEW_RULE_COMMENT_MESSAGE = '规则不能以 // 或 # 开头，否则会被当成禁用行或注释。要写注释或禁用规则，请用文本编辑器。'
+
+/**
+ * Thrown when a NEW rule's pattern starts with `//` or `#`: appended as a line it
+ * would read back as a disabled rule or a comment. Same code as RuleLineSplitError.
+ */
+class RuleNewRuleCommentError extends Error {
+  constructor() {
+    super(NEW_RULE_COMMENT_MESSAGE)
+    this.name = 'RuleNewRuleCommentError'
+    this.code = 'RULE_LINE_SPLIT_UNSAFE'
+  }
+}
+
 function startsAsComment(pattern) {
   return pattern.startsWith('//') || pattern.startsWith('#')
 }
@@ -187,6 +201,7 @@ function updateLines(content, { pattern, target, exclusions }) {
 function addRouteRule(content, { pattern, target, exclusions }) {
   const updated = updateRouteRule(content, { pattern, target, exclusions })
   if (updated.found) return { content: updated.content, existed: true }
+  if (startsAsComment(pattern)) throw new RuleNewRuleCommentError()
 
   const line = formatLine('', [pattern], exclusions || [], target)
   if (content === '' || content === BOM) return { content: content + line, existed: false }
@@ -237,6 +252,8 @@ function deleteLines(content, { pattern }) {
 module.exports = {
   SPLIT_UNSAFE_MESSAGE,
   RuleLineSplitError,
+  NEW_RULE_COMMENT_MESSAGE,
+  RuleNewRuleCommentError,
   patternKey,
   parseRuleLine,
   splitPatternArg,

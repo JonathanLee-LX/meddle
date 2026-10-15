@@ -173,6 +173,18 @@ describe.each(impls)('split / delete safety and disabled duplicates — %s', (_n
         try { run(line) } catch (err: any) { expect(err.code).toBe('RULE_LINE_SPLIT_UNSAFE') }
     })
 
+    it.each(['#foo.com', '//foo.com', '#', '//'])('add of a NEW rule %s → new-rule error, nothing returned to write', (pattern) => {
+        const NEW_MSG = '规则不能以 // 或 # 开头，否则会被当成禁用行或注释。要写注释或禁用规则，请用文本编辑器。'
+        for (const base of ['a.com x\n', '', '\uFEFFa.com x\r\n']) {
+            expect(() => edit.addRouteRule(base, { pattern, target: 'y' })).toThrow(NEW_MSG)
+            try { edit.addRouteRule(base, { pattern, target: 'y' }) } catch (err: any) { expect(err.code).toBe('RULE_LINE_SPLIT_UNSAFE') }
+        }
+    })
+
+    it('add of an existing //… pattern that sits behind another one updates in place (no new line)', () => {
+        expect(edit.addRouteRule('a.com //c x\n', { pattern: '//c', target: 'x' })).toEqual({ existed: true, content: 'a.com //c x\n' })
+    })
+
     it('a // or # pattern that stays behind a normal one is fine', () => {
         expect(edit.deleteRouteRule('a.com b.com //c t', { pattern: 'b.com' }).content).toBe('a.com //c t')
         expect(edit.updateRouteRule('a.com b.com //c t', { pattern: 'a.com', target: 'N' }).content).toBe('a.com N\nb.com //c t')
@@ -203,9 +215,19 @@ describe('bin/lib/rule-file-edit.js and core/rule-file-edit.ts parity', () => {
         empty: '',
         commentsOnly: '# a\n\n// b.com 1\n',
         duplicates: 'dup.example.com 1\nx.com 2\ndup.example.com !/d 3\n',
+        commentPatterns: '\uFEFFa.com //c.com #d.com !/x 1\r\nb.com #e.com 2\r\n',
     }
     const patterns = ['api.example.com', 'edit.example.com', 'multi-a.example.com', 'multi-b.example.com', 'cdn.example.com/[assets]', 'cdn.example.com/assets',
-        'indented.example.com', 'disabled.example.com', 'first.example.com', 'second.example.com', 'dup.example.com', 'missing.example.com']
+        'indented.example.com', 'disabled.example.com', 'first.example.com', 'second.example.com', 'dup.example.com', 'missing.example.com',
+        'a.com', 'b.com', '//c.com', '#d.com', '#foo.com', '//foo.com']
+    /** Result or thrown error (name, code, message), so refusals are compared too. */
+    const outcome = (fn: () => unknown) => {
+        try {
+            return { ok: fn() }
+        } catch (err: any) {
+            return { error: { name: err.name, code: err.code, message: err.message } }
+        }
+    }
     const variants: Array<{ target?: string; exclusions?: string[] }> = [
         { target: '127.0.0.1:7000' },
         { exclusions: [] },
@@ -218,17 +240,21 @@ describe('bin/lib/rule-file-edit.js and core/rule-file-edit.ts parity', () => {
         for (const [baseName, base] of Object.entries(bases)) {
             for (const pattern of patterns) {
                 const where = `${baseName} / ${pattern}`
-                expect(tsEdit.deleteRouteRule(base, { pattern }), `delete ${where}`).toEqual(jsEdit.deleteRouteRule(base, { pattern }))
+                expect(outcome(() => tsEdit.deleteRouteRule(base, { pattern })), `delete ${where}`).toEqual(outcome(() => jsEdit.deleteRouteRule(base, { pattern })))
                 compared++
                 for (const v of variants) {
-                    expect(tsEdit.updateRouteRule(base, { pattern, ...v }), `update ${where} ${JSON.stringify(v)}`).toEqual(jsEdit.updateRouteRule(base, { pattern, ...v }))
+                    expect(outcome(() => tsEdit.updateRouteRule(base, { pattern, ...v })), `update ${where} ${JSON.stringify(v)}`).toEqual(outcome(() => jsEdit.updateRouteRule(base, { pattern, ...v })))
                     const add = { pattern, target: v.target ?? '127.0.0.1:7001', exclusions: v.exclusions }
-                    expect(tsEdit.addRouteRule(base, add), `add ${where} ${JSON.stringify(v)}`).toEqual(jsEdit.addRouteRule(base, add))
+                    expect(outcome(() => tsEdit.addRouteRule(base, add)), `add ${where} ${JSON.stringify(v)}`).toEqual(outcome(() => jsEdit.addRouteRule(base, add)))
                     compared += 2
                 }
             }
         }
         expect(compared).toBe(Object.keys(bases).length * patterns.length * (1 + variants.length * 2))
+        // The matrix does exercise both refusals in both copies.
+        expect(outcome(() => jsEdit.addRouteRule(bases.lf, { pattern: '#foo.com', target: '1' }))).toEqual(outcome(() => tsEdit.addRouteRule(bases.lf, { pattern: '#foo.com', target: '1' })))
+        expect((outcome(() => tsEdit.addRouteRule(bases.lf, { pattern: '#foo.com', target: '1' })) as any).error.name).toBe('RuleNewRuleCommentError')
+        expect((outcome(() => tsEdit.deleteRouteRule(bases.commentPatterns, { pattern: 'b.com' })) as any).error.name).toBe('RuleLineSplitError')
     })
 
     it('patternKey and parseRuleLine agree', () => {
@@ -384,6 +410,26 @@ const UNSAFE_CLI_CASES: string[][] = [
     ['route', 'update', 'dev', 'b.example.com !/new', '127.0.0.1:9'],
 ]
 
+const NEW_RULE_COMMENT_MESSAGE = '规则不能以 // 或 # 开头，否则会被当成禁用行或注释。要写注释或禁用规则，请用文本编辑器。'
+const NEW_COMMENT_CLI_CASES: string[][] = [
+    ['route', 'add', 'dev', '#foo.com', '127.0.0.1:9'],
+    ['route', 'add', 'dev', '//foo.com', '127.0.0.1:9'],
+    ['route', 'add', 'dev', '#foo.com !/x', '127.0.0.1:9'],
+]
+
+/** Raw-byte check: a refused write leaves the BOM + CRLF fixture exactly as it was. */
+async function expectCliRefused(home: string, cases: string[][], message: string) {
+    const original = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(UNSAFE_FIXTURE.slice(1), 'utf8')])
+    for (const args of cases) {
+        resetRules(home, UNSAFE_FIXTURE)
+        expect(ruleBytes(home).equals(original)).toBe(true)
+        const { code, stdout, stderr } = await runCli(args, home)
+        expect(code, args.join(' ')).not.toBe(0)
+        expect(stdout + stderr, args.join(' ')).toContain(message)
+        expect(ruleBytes(home).equals(original), args.join(' ')).toBe(true)
+    }
+}
+
 async function expectCliSplitRefused(home: string) {
     for (const args of UNSAFE_CLI_CASES) {
         resetRules(home, UNSAFE_FIXTURE)
@@ -432,6 +478,10 @@ describe('CLI route add / update / delete keep other lines byte-identical (issue
             await expectCliSplitRefused(home)
         }, 60_000)
 
+        it('refuses to add a new rule starting with # or // (BOM + CRLF file bytes unchanged)', async () => {
+            await expectCliRefused(home, NEW_COMMENT_CLI_CASES, NEW_RULE_COMMENT_MESSAGE)
+        }, 60_000)
+
         it('a missing pattern fails and leaves the file unchanged', async () => {
             resetRules(home)
             for (const cmd of ['update', 'delete']) {
@@ -474,6 +524,10 @@ describe('CLI route add / update / delete keep other lines byte-identical (issue
 
         it('refuses to split a line when a // or # pattern would start a line (BOM + CRLF file unchanged)', async () => {
             await expectCliSplitRefused(home)
+        }, 60_000)
+
+        it('refuses to add a new rule starting with # or // (BOM + CRLF file bytes unchanged)', async () => {
+            await expectCliRefused(home, NEW_COMMENT_CLI_CASES, NEW_RULE_COMMENT_MESSAGE)
         }, 60_000)
 
         it('GET …/content serves the BOM bytes as stored on disk', async () => {
@@ -578,6 +632,19 @@ describe('MCP route_rule_add / update / delete keep other lines byte-identical (
         }
     })
 
+    it('refuses to add a new rule starting with # or //: isError + message, BOM + CRLF file bytes unchanged', async () => {
+        const original = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(UNSAFE_FIXTURE.slice(1), 'utf8')])
+        for (const pattern of ['#foo.com', '//foo.com']) {
+            for (const extra of [{}, { exclusions: ['/x'] }]) {
+                resetRules(home, UNSAFE_FIXTURE)
+                const result: any = await client.callTool({ name: 'route_rule_add', arguments: { ruleFile: 'dev', pattern, target: '127.0.0.1:9', ...extra } })
+                expect(result.isError, pattern).toBe(true)
+                expect(result.content.map((c: any) => c.text).join('\n')).toContain(NEW_RULE_COMMENT_MESSAGE)
+                expect(ruleBytes(home).equals(original), pattern).toBe(true)
+            }
+        }
+    })
+
     it('tool descriptions say omitting exclusions keeps them and [] clears them', async () => {
         const { tools } = await client.listTools()
         for (const name of ['route_rule_add', 'route_rule_update']) {
@@ -669,6 +736,20 @@ describe('built-in Agent route tools keep other lines byte-identical (issue #145
         ] as Array<[string, Record<string, unknown>]>) {
             await expect(run(() => tools.get(name)!.prepareConfirmation!(input, { serverContext: ctx })), name).rejects.toThrow(SPLIT_UNSAFE_MESSAGE)
             await expect(run(() => tools.get(name)!.execute(input, { serverContext: ctx })), name).rejects.toThrow(SPLIT_UNSAFE_MESSAGE)
+        }
+        expect(ruleBytes(home).equals(before)).toBe(true)
+    })
+
+    it('refuses to add a new rule starting with # or // (file bytes unchanged)', async () => {
+        const { home, ctx } = agentContext()
+        resetRules(home, UNSAFE_FIXTURE)
+        const before = ruleBytes(home)
+        const tool = createAgentTools().get('route_rule_add')!
+        const run = (fn: () => unknown) => Promise.resolve().then(fn)
+        for (const pattern of ['#foo.com', '//foo.com']) {
+            const input = { ruleFile: 'dev', pattern, target: '127.0.0.1:9' }
+            await expect(run(() => tool.prepareConfirmation!(input, { serverContext: ctx })), pattern).rejects.toThrow(NEW_RULE_COMMENT_MESSAGE)
+            await expect(run(() => tool.execute(input, { serverContext: ctx })), pattern).rejects.toMatchObject({ code: 'RULE_LINE_SPLIT_UNSAFE', message: NEW_RULE_COMMENT_MESSAGE })
         }
         expect(ruleBytes(home).equals(before)).toBe(true)
     })

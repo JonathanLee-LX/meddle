@@ -6,6 +6,7 @@ import {
   parseEprcRules,
   rulesToEprc,
   rulesToEprcPreserving,
+  NEW_RULE_COMMENT_MESSAGE,
   SPLIT_UNSAFE_MESSAGE,
 } from './eprc-parser'
 
@@ -351,6 +352,28 @@ describe('rulesToEprcPreserving', () => {
     const edited = rules.map((r, i) => (i === 0 ? { ...r, target: '127.0.0.1:9' } : r))
     expect(() => rulesToEprcPreserving(edited, text)).toThrow(SPLIT_UNSAFE_MESSAGE)
     expect(() => rulesToEprcPreserving(rules.slice(1), text)).toThrow(SPLIT_UNSAFE_MESSAGE)
+  })
+
+  it.each(['#foo.com', '//foo.com'])('refuses a NEW table rule %s with the new-rule message (not the split one)', (pattern) => {
+    expect(NEW_RULE_COMMENT_MESSAGE).toBe('规则不能以 // 或 # 开头，否则会被当成禁用行或注释。要写注释或禁用规则，请用文本编辑器。')
+    const text = '\uFEFFa.example.com //cdn.example.com 127.0.0.1:1\r\nx.com 2\r\n'
+    const rules = parseEprcRules(text)
+    const added = { enabled: true, rule: pattern, target: '127.0.0.1:9', exclusions: [] }
+    for (const next of [[...rules, added], [added, ...rules], [rules[0], rules[1], added, rules[2]]]) {
+      expect(() => rulesToEprcPreserving(next, text)).toThrow(NEW_RULE_COMMENT_MESSAGE)
+      try {
+        rulesToEprcPreserving(next, text)
+      } catch (err) {
+        expect((err as { code?: string }).code).toBe('RULE_LINE_SPLIT_UNSAFE')
+      }
+    }
+    // Without original text (empty file) too.
+    expect(() => rulesToEprcPreserving([added], '')).toThrow(NEW_RULE_COMMENT_MESSAGE)
+    // Editing the target of the existing //cdn.example.com still reports a split, not a new rule.
+    const edited = rules.map((r) => (r.rule === '//cdn.example.com' ? { ...r, target: '127.0.0.1:9' } : r))
+    expect(() => rulesToEprcPreserving(edited, text)).toThrow(SPLIT_UNSAFE_MESSAGE)
+    // A disabled new rule is fine: it is written as a // line on purpose.
+    expect(rulesToEprcPreserving([...rules, { ...added, rule: 'ok.com', enabled: false }], text)).toBe(`${text}//ok.com 127.0.0.1:9\r\n`)
   })
 
   it('falls back to rulesToEprc without original text', () => {

@@ -353,6 +353,7 @@ meddle route update default "api.example.com" "localhost:4000"
 **Note:**
 - If the pattern argument has no `!path`, the rule keeps its existing exclusions. `!path` tokens (`"api.example.com !/health"`) replace them. There is no CLI option to clear them (see `route add`).
 - If one line holds several patterns, the updated pattern moves to its own line next to the others. If that would leave a pattern starting with `//` or `#` at the start of a line, the write is refused (exit code `1`, message 「该行剩余的 pattern 以 // 或 # 开头，拆开后会被当成注释，请用文本编辑器手动修改」) and the file is left unchanged. The same applies to `route add` over an existing rule and to `route delete`.
+- `route add` refuses a new rule whose pattern starts with `#` or `//` (for example `#foo.com` or `//foo.com`), because the appended line would read back as a comment or a disabled rule. It exits with code `1` and the message 「规则不能以 // 或 # 开头，否则会被当成禁用行或注释。要写注释或禁用规则，请用文本编辑器。」, and the file is left unchanged. To write a comment or a disabled rule, edit the file in a text editor.
 
 **MCP equivalents** (`route_rule_add` / `route_rule_update`): if you omit `exclusions`, the rule keeps its existing exclusions. `exclusions: []` clears them. A non-empty array replaces them.
 

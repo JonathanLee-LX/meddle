@@ -159,8 +159,31 @@ export class RuleLineSplitError extends Error {
   }
 }
 
-function canonicalRuleLine(rule: RuleItem): string {
-  if (rule.enabled && (rule.rule.startsWith('//') || rule.rule.startsWith('#'))) throw new RuleLineSplitError()
+export const NEW_RULE_COMMENT_MESSAGE = '规则不能以 // 或 # 开头，否则会被当成禁用行或注释。要写注释或禁用规则，请用文本编辑器。'
+
+/** A NEW rule whose pattern starts with `//` or `#` (same code as RuleLineSplitError). */
+export class RuleNewRuleCommentError extends Error {
+  readonly code = 'RULE_LINE_SPLIT_UNSAFE'
+
+  constructor() {
+    super(NEW_RULE_COMMENT_MESSAGE)
+    this.name = 'RuleNewRuleCommentError'
+  }
+}
+
+function startsAsComment(rule: RuleItem): boolean {
+  return rule.enabled && (rule.rule.startsWith('//') || rule.rule.startsWith('#'))
+}
+
+/**
+ * Canonical line for an added or edited rule. A pattern starting with `//` or `#`
+ * that already sat behind another pattern in the original text would be split
+ * off (split message); any other such pattern is a new rule (new-rule message).
+ */
+function canonicalRuleLine(rule: RuleItem, originalPatterns: Set<string>): string {
+  if (startsAsComment(rule)) {
+    throw originalPatterns.has(rule.rule) ? new RuleLineSplitError() : new RuleNewRuleCommentError()
+  }
   return rulesToEprc([rule])
 }
 
@@ -235,7 +258,10 @@ function alignRuleItems(a: RuleItem[], b: RuleItem[]): { matchA: number[]; match
 export function rulesToEprcPreserving(rules: RuleItem[], originalText: string): string {
   // A leading UTF-8 BOM belongs to the file, not to the first line.
   if (originalText.startsWith('\uFEFF')) return '\uFEFF' + rulesToEprcPreserving(rules, originalText.slice(1))
-  if (!originalText) return rulesToEprc(rules)
+  if (!originalText) {
+    if (rules.some(startsAsComment)) throw new RuleNewRuleCommentError()
+    return rulesToEprc(rules)
+  }
 
   const eol = originalText.includes('\r\n') ? '\r\n' : '\n'
   const entries = originalText.split(/\r?\n/).map((raw) => {
@@ -253,6 +279,7 @@ export function rulesToEprcPreserving(rules: RuleItem[], originalText: string): 
   })
 
   const { matchA, matchB } = alignRuleItems(flatItems, rules)
+  const originalPatterns = new Set(flatItems.map((item) => item.rule))
 
   // A rule line is intact when all of its rules survive, unchanged and adjacent.
   const firstFlat = new Array<number>(entries.length).fill(-1)
@@ -297,7 +324,7 @@ export function rulesToEprcPreserving(rules: RuleItem[], originalText: string): 
         ptr = entry + 1
         continue
       }
-      out.push(canonicalRuleLine(rules[j]))
+      out.push(canonicalRuleLine(rules[j], originalPatterns))
       j++
       continue
     }
@@ -317,7 +344,7 @@ export function rulesToEprcPreserving(rules: RuleItem[], originalText: string): 
     // A rule added after every existing rule goes to the end of the file
     // (before trailing blank lines), like the CLI / MCP add.
     if (!replaced && limit === entries.length) flushUntil(tailStart)
-    out.push(canonicalRuleLine(rules[j]))
+    out.push(canonicalRuleLine(rules[j], originalPatterns))
     j++
   }
   flushUntil(entries.length)

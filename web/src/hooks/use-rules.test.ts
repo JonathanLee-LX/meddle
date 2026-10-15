@@ -188,4 +188,18 @@ describe('useRules — a rule that would turn into a comment (issue #145)', () =
     await expect(result.current.saveFileContent('dev', removed)).rejects.toThrow('该行剩余的 pattern 以 // 或 # 开头，拆开后会被当成注释，请用文本编辑器手动修改')
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
+
+  it.each(['#foo.com', '//foo.com'])('saveFileContent rejects a NEW rule %s with the new-rule message and sends no write', async (pattern) => {
+    const text = '\uFEFFa.example.com 127.0.0.1:1\r\n'
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(text))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() => useRules())
+    await act(async () => {
+      await result.current.fetchFileContent('dev')
+    })
+    const next = [...result.current.rules, { enabled: true, rule: pattern, target: '127.0.0.1:9', exclusions: [] }]
+    await expect(result.current.saveFileContent('dev', next)).rejects.toThrow('规则不能以 // 或 # 开头，否则会被当成禁用行或注释。要写注释或禁用规则，请用文本编辑器。')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
 })

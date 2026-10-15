@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { toast } from '@/components/ui/toast'
 import type { RuleItem } from '@/types'
 import { RuleConfig } from './rule-config'
+import { rulesToEprcPreserving } from '@/utils/eprc-parser'
 
 vi.mock('@/components/ui/toast', () => ({
   toast: {
@@ -165,9 +166,13 @@ describe('RuleConfig text view', () => {
     )
   })
 
-  it('table save shows the error when a rule would turn into a comment (issue #145)', async () => {
-    const message = '该行剩余的 pattern 以 // 或 # 开头，拆开后会被当成注释，请用文本编辑器手动修改'
-    const saveFileContent = vi.fn().mockRejectedValue(new Error(message))
+  it('table save shows the new-rule error when a new rule starts with # (issue #145)', async () => {
+    const message = '规则不能以 // 或 # 开头，否则会被当成禁用行或注释。要写注释或禁用规则，请用文本编辑器。'
+    // Same serializer the real hook uses: an empty file plus a new #… rule is refused before any write.
+    const saveFileContent = vi.fn(async (_file: string, next: RuleItem[]) => {
+      rulesToEprcPreserving(next, '')
+      return true
+    })
     const saveRuleFileRawContent = vi.fn().mockResolvedValue(true)
 
     function Harness() {

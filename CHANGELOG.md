@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - MCP `route_rule_add` without `exclusions` now keeps an existing rule's exclusions; before #145 it cleared them. Pass `exclusions: []` to clear them. `route_rule_update` (and the built-in Agent's route tools) behave the same way: omitting `exclusions` keeps them and `[]` clears them. The CLI keeps a rule's exclusions unless the pattern argument has `!path` tokens (`"api.example.com !/health"`), which replace them. The CLI currently has no way to clear exclusions; use MCP with `[]` or the web UI.
 - Rule writes (CLI, MCP, Agent tools, web table view) now refuse an edit that would split a line and leave a pattern starting with `//` or `#` at the start of a line, because that line would read back as a disabled rule or a comment. Example: deleting `a.com` from `a.com //cdn.com target`. The error is 「该行剩余的 pattern 以 // 或 # 开头，拆开后会被当成注释，请用文本编辑器手动修改」. The CLI exits non-zero, MCP returns `isError`, and the web UI shows it as a toast. The rule file is left unchanged.
+- Adding a new rule whose pattern starts with `#` or `//` (for example `#foo.com`) is now refused in the CLI, MCP, Agent tools and web table view, because the new line would read back as a comment or a disabled rule. The error is 「规则不能以 // 或 # 开头，否则会被当成禁用行或注释。要写注释或禁用规则，请用文本编辑器。」 and uses the same `RULE_LINE_SPLIT_UNSAFE` code as the split error. The rule file is left unchanged.
 
 ### Fixed
 
