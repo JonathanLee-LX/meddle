@@ -48,7 +48,7 @@ import { getCachedSettings, loadSettings, updateSettings, type AccentColor } fro
 import { SaveButton } from '@/components/save-shortcut/save-button'
 import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut-context'
 import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
-import { fetchAppVersion } from '@/lib/app-version'
+import { fetchAppInfo } from '@/lib/app-version'
 import { toast } from '@/components/ui/toast'
 import { BreakablePath, MocksFileInvalidNote, MocksFileLegacyPathNote, MocksFileMissingNote } from '@/components/mocks-file-missing-note'
 import { formatMocksParseLocation, isRelativeMocksPathInput, isMocksFileInvalid, shouldShowMocksFileMissing, useMocksFileStatus } from '@/hooks/use-mocks-file-status'
@@ -104,6 +104,8 @@ const accentColorOptions: Array<{ value: AccentColor; label: string; color: stri
 const settingsContentClassName = 'app-panel-content mt-0'
 const settingsGroupClassName = 'app-field-group'
 const settingsSectionClassName = 'app-section'
+/** Shown only when /api/version did not report the directory (issue #139). */
+const ROUTE_RULES_DIR_FALLBACK = '$MEDDLE_HOME/route-rules/'
 type SettingsTab = 'preferences' | 'config' | 'clients' | 'ai'
 
 const normalizeZoomScale = (value?: string) => {
@@ -148,16 +150,24 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
 
   // 应用版本（来自后端 /api/version，即根 package.json，与 `meddle --version` 一致）
   const [appVersion, setAppVersion] = useState<string | null>(null)
+  // Issue #139: 路由规则目录（同一个 /api/version 响应，跟随 MEDDLE_HOME）
+  const [routeRulesDir, setRouteRulesDir] = useState<{ display: string; path: string | null } | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    fetchAppVersion().then((version) => {
-      if (!cancelled) setAppVersion(version)
+    fetchAppInfo().then((info) => {
+      if (cancelled) return
+      setAppVersion(info.version)
+      const display = info.routeRulesDirDisplay || info.routeRulesDir
+      if (display) setRouteRulesDir({ display, path: info.routeRulesDir })
     })
     return () => {
       cancelled = true
     }
   }, [])
+
+  // 后端未返回时不猜测具体路径（可能设置了 MEDDLE_HOME），只给出通用写法
+  const routeRulesDirText = routeRulesDir?.display ?? ROUTE_RULES_DIR_FALLBACK
 
   // 缩放比例偏好
   const [zoomScale, setZoomScale] = useState<string>(() => normalizeZoomScale(getCachedSettings().fontSize))
@@ -584,7 +594,9 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
             <div className={settingsGroupClassName}>
               <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
                 <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                <span className="text-xs font-mono truncate flex-1">~/.meddle/route-rules/</span>
+                <span data-testid="settings-route-rules-dir" className="text-xs font-mono flex-1 wrap-anywhere" title={routeRulesDir?.path ?? undefined}>
+                  <BreakablePath path={routeRulesDirText} />
+                </span>
               </div>
               {ruleFiles.length > 0 ? (
                 <div className="space-y-2">
@@ -601,7 +613,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
               ) : (
                 <p className="text-xs text-muted-foreground">暂无规则文件</p>
               )}
-              <p className="text-xs text-muted-foreground">规则文件存放于 ~/.meddle/route-rules/ 目录，纯文本格式。在"路由规则"页面管理。</p>
+              <p className="text-xs text-muted-foreground">规则文件存放于 {routeRulesDirText} 目录，纯文本格式。在"路由规则"页面管理。</p>
             </div>
           </div>
 
