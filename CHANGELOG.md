@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Read-only rulesets (#137). Lock a rule file in the web UI and every CLI, MCP and API write to it is rejected with `RULESET_READONLY` (HTTP 423, CLI exit code 3). The file is left unchanged. The lock is stored in `settings.json` under `readonlyRuleFiles`. A locked ruleset cannot be renamed; unlock it first, then rename (the web UI disables rename while locked). Lock and unlock are web-UI only (page token plus a same-origin check). This guards against accidents; it is not access control.
 - `readonly` field on rule-file list and detail responses, `meddle route list/show --json` and `route_rule_list`.
 
+### Fixed
+
+- Mock auto-reload now resumes when the mocks directory is deleted and recreated, for example when a symlinked dotfiles repo is removed and re-cloned. Before, edits to the mocks file stopped taking effect until Meddle was restarted (#148).
+
 ## [0.5.0-beta.18] - 2026-10-08
 
 ### Added
