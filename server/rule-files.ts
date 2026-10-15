@@ -6,7 +6,8 @@ import { parseEprcWithExclusions, routeRulesToLegacyMaps, type ExcludeMap, type 
 
 const DEFAULT_RULE_NAME = '默认规则'
 
-function getRulesDir(ctx: ServerContext): string {
+/** Directory the server reads/writes route-rule files from (<MEDDLE_HOME>/route-rules). */
+export function getRulesDir(ctx: Pick<ServerContext, 'meddleDir'>): string {
     return path.join(ctx.meddleDir, 'route-rules')
 }
 

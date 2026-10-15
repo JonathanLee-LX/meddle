@@ -1,11 +1,21 @@
 import { Application, Request, Response } from 'express'
 import * as fs from 'fs'
+import * as os from 'os'
 import * as path from 'path'
 import { ServerContext } from './index'
+import { getRulesDir } from './rule-files'
 
 export interface AppInfo {
     name: string
     version: string
+}
+
+/** GET /api/version payload: app info plus the data paths the server actually uses (issue #139). */
+export interface AppInfoResponse extends AppInfo {
+    /** Absolute route-rules directory (<MEDDLE_HOME>/route-rules). */
+    routeRulesDir?: string
+    /** Same directory for display: `~` for the home dir, trailing separator (e.g. `~/.meddle/route-rules/`). */
+    routeRulesDirDisplay?: string
 }
 
 const PACKAGE_NAME = '@jonathanleelx/meddle'
@@ -47,8 +57,36 @@ export function resolveAppInfo(ctx: Pick<ServerContext, 'appInfo'>): AppInfo {
     return readAppInfoFromPackageJson() || { name: PACKAGE_NAME, version: 'unknown' }
 }
 
+/**
+ * Format a directory for display: paths under the home directory use the `~`
+ * shorthand, and a trailing separator marks it as a directory
+ * (`/Users/me/.meddle/route-rules` → `~/.meddle/route-rules/`).
+ */
+export function formatDisplayDir(dir: string, homeDir: string = os.homedir()): string {
+    const abs = path.resolve(dir)
+    const home = homeDir ? path.resolve(homeDir) : ''
+    let shown = abs
+    if (home && home !== path.parse(home).root) {
+        if (abs === home) shown = '~'
+        else if (abs.startsWith(home + path.sep)) shown = '~' + abs.slice(home.length)
+    }
+    return shown.endsWith(path.sep) ? shown : shown + path.sep
+}
+
+export function buildAppInfoResponse(ctx: Pick<ServerContext, 'appInfo' | 'meddleDir'>, homeDir: string = os.homedir()): AppInfoResponse {
+    const info: AppInfoResponse = resolveAppInfo(ctx)
+    if (ctx.meddleDir) {
+        const routeRulesDir = getRulesDir(ctx)
+        info.routeRulesDir = routeRulesDir
+        info.routeRulesDirDisplay = formatDisplayDir(routeRulesDir, homeDir)
+    }
+    return info
+}
+
 export function registerAppInfoRoutes(app: Application, ctx: ServerContext): void {
+    // Issue #139: also reports the route-rules directory (follows MEDDLE_HOME), so
+    // the settings page shows the real path without an extra request.
     app.get('/api/version', (_req: Request, res: Response) => {
-        res.json(resolveAppInfo(ctx))
+        res.json(buildAppInfoResponse(ctx))
     })
 }
