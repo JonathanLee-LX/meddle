@@ -81,6 +81,16 @@ interface RuleConfigProps {
 /** Issue #137 copy (figma bro). */
 export const RULESET_LOCKED_HINT = '规则集已锁定，解锁后可编辑'
 const LOCKED_CONTROL_CLASS = 'cursor-not-allowed opacity-50'
+/** Read-only rule inputs: flat --muted fill, default arrow, so they don't read as editable. */
+const LOCKED_INPUT_CLASS = 'h-8 cursor-default bg-muted shadow-none dark:bg-muted'
+/**
+ * Locked ruleset switch: still shows its real state (no opacity). On = primary
+ * desaturated toward the muted grey; off = the grey track. Both keep >= 3:1
+ * against the row background (light / dark, selected or not).
+ */
+const LOCKED_SWITCH_ON_CLASS = 'size-4 text-[color-mix(in_oklab,var(--primary)_60%,var(--muted-foreground))]'
+/** Read-write rows: the open lock shows on hover / focus; on touch screens (no hover) it is always shown. */
+const OPEN_LOCK_VISIBILITY_CLASS = 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100'
 
 /**
  * Greyed control of a locked ruleset: it keeps focus (aria-disabled, not
@@ -163,7 +173,7 @@ const ExclusionsInput = memo(function ExclusionsInput({ exclusions, onCommit, lo
           }
         }}
         placeholder="!/api !/ws"
-        className="h-8"
+        className={locked ? LOCKED_INPUT_CLASS : 'h-8'}
       />
     </LockedHint>
   )
@@ -209,7 +219,7 @@ function RuleRowCells({
       </TableCell>
       <TableCell>
         <LockedHint locked={locked}>
-          <Input value={item.rule} readOnly={locked} onChange={locked ? undefined : onUpdateRule('rule')} placeholder="example.com" className="h-8" />
+          <Input value={item.rule} readOnly={locked} onChange={locked ? undefined : onUpdateRule('rule')} placeholder="example.com" className={locked ? LOCKED_INPUT_CLASS : 'h-8'} />
         </LockedHint>
       </TableCell>
       <TableCell>
@@ -217,7 +227,7 @@ function RuleRowCells({
       </TableCell>
       <TableCell>
         <LockedHint locked={locked}>
-          <Input value={item.target} readOnly={locked} onChange={locked ? undefined : onUpdateRule('target')} placeholder="127.0.0.1:3000" className="h-8" />
+          <Input value={item.target} readOnly={locked} onChange={locked ? undefined : onUpdateRule('target')} placeholder="127.0.0.1:3000" className={locked ? LOCKED_INPUT_CLASS : 'h-8'} />
         </LockedHint>
       </TableCell>
       <TableCell className="w-24">
@@ -461,7 +471,8 @@ function SortableRuleFileTab({
   const style: React.CSSProperties = {
     transform: listDragTransformStyle(transform),
     transition: isDragging ? undefined : transition,
-    opacity: isDragging ? 0.85 : 1,
+    // Only while dragging: an inline opacity would override the disabled-row fade class.
+    opacity: isDragging ? 0.85 : undefined,
     position: 'relative',
     zIndex: isDragging ? 1 : undefined,
     borderLeftWidth: 0,
@@ -473,7 +484,7 @@ function SortableRuleFileTab({
       ref={setNodeRef}
       style={style}
       value={file.name}
-      className="group relative h-auto w-full min-w-0 flex-none justify-start gap-2 rounded-none data-[ruleset-enabled=false]:opacity-60 border-x-0 border-b border-border/40 px-3 py-2 text-sm font-medium shadow-none hover:bg-accent/60 after:hidden group-data-[variant=line]/tabs-list:data-[state=active]:border-x-0 group-data-[variant=line]/tabs-list:data-[state=active]:border-b group-data-[variant=line]/tabs-list:data-[state=active]:border-border/40 group-data-[variant=line]/tabs-list:data-[state=active]:bg-accent group-data-[variant=line]/tabs-list:data-[state=active]:text-accent-foreground group-data-[variant=line]/tabs-list:data-[state=active]:shadow-none group-data-[variant=line]/tabs-list:data-[state=active]:after:opacity-0 dark:group-data-[variant=line]/tabs-list:data-[state=active]:border-x-0 dark:group-data-[variant=line]/tabs-list:data-[state=active]:border-border/40"
+      className="group relative h-auto w-full min-w-0 flex-none justify-start gap-2 rounded-none data-[ruleset-enabled=false]:data-[readonly=false]:opacity-60 border-x-0 border-b border-border/40 px-3 py-2 text-sm font-medium shadow-none hover:bg-accent/60 after:hidden group-data-[variant=line]/tabs-list:data-[state=active]:border-x-0 group-data-[variant=line]/tabs-list:data-[state=active]:border-b group-data-[variant=line]/tabs-list:data-[state=active]:border-border/40 group-data-[variant=line]/tabs-list:data-[state=active]:bg-accent group-data-[variant=line]/tabs-list:data-[state=active]:text-accent-foreground group-data-[variant=line]/tabs-list:data-[state=active]:shadow-none group-data-[variant=line]/tabs-list:data-[state=active]:after:opacity-0 dark:group-data-[variant=line]/tabs-list:data-[state=active]:border-x-0 dark:group-data-[variant=line]/tabs-list:data-[state=active]:border-border/40"
       data-dragging={isDragging ? 'true' : undefined}
       data-readonly={readonly ? 'true' : 'false'}
       data-ruleset-enabled={file.enabled ? 'true' : 'false'}
@@ -496,7 +507,7 @@ function SortableRuleFileTab({
         data-slot="rule-file-switch"
         aria-label={file.enabled ? `禁用规则集 ${file.name}` : `启用规则集 ${file.name}`}
         aria-disabled={readonly || undefined}
-        className={readonly ? `shrink-0 ${LOCKED_CONTROL_CLASS}` : 'shrink-0'}
+        className={readonly ? 'shrink-0 cursor-not-allowed' : 'shrink-0'}
         onClick={(e) => {
           e.stopPropagation()
           if (readonly) return
@@ -514,7 +525,7 @@ function SortableRuleFileTab({
         title={readonly ? RULESET_LOCKED_HINT : file.enabled ? '点击禁用路由' : '点击启用路由'}
       >
         {file.enabled ? (
-          <ToggleRight className={readonly ? 'size-4 text-muted-foreground' : 'size-4 text-primary'} />
+          <ToggleRight className={readonly ? LOCKED_SWITCH_ON_CLASS : 'size-4 text-primary'} />
         ) : (
           <ToggleLeft className="size-4 text-muted-foreground" />
         )}
@@ -529,7 +540,7 @@ function SortableRuleFileTab({
           title={readonly ? '解锁规则集' : '锁定规则集'}
           className={cn(
             'inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none transition-opacity hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50',
-            readonly ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100',
+            readonly ? 'opacity-100' : OPEN_LOCK_VISIBILITY_CLASS,
           )}
           onClick={(event) => {
             event.stopPropagation()
@@ -575,7 +586,12 @@ function SortableRuleFileTab({
         />
       ) : (
         <span
-          className={cn('min-w-0 flex-1 truncate text-left', readonly && 'text-muted-foreground')}
+          className={cn(
+            'min-w-0 flex-1 truncate text-left',
+            // Grey name marks a locked row; once selected it goes back to full
+            // foreground so it keeps >= 4.5:1 on the accent highlight.
+            readonly && 'text-muted-foreground group-data-[state=active]:text-foreground',
+          )}
           onDoubleClick={(event) => {
             event.stopPropagation()
             beginRename(file.name)

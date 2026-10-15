@@ -19,6 +19,7 @@ const FILES: RuleFile[] = [
   { name: 'locked', enabled: true, readonly: true, ruleCount: 1 },
   { name: 'open', enabled: true, readonly: false, ruleCount: 0 },
   { name: 'off', enabled: false, readonly: true, ruleCount: 0 },
+  { name: 'idle', enabled: false, readonly: false, ruleCount: 0 },
 ]
 const RULE_TEXT = 'locked.example.com 127.0.0.1:3001'
 const RULES: RuleItem[] = [{ enabled: true, rule: 'locked.example.com', target: '127.0.0.1:3001', exclusions: [] }]
@@ -95,6 +96,41 @@ describe('rule file list — lock button (issue #137)', () => {
     expect(open.querySelector('svg')).toHaveClass('size-4', 'lucide-lock-open')
   })
 
+  it('on touch screens (hover: none) the open lock is always shown, in muted grey', () => {
+    renderRules()
+    const open = lockButton('open')
+    expect(open).toHaveClass('[@media(hover:none)]:opacity-100', 'text-muted-foreground')
+  })
+
+  it('a selected locked row shows its name in foreground; the lock icon stays muted', () => {
+    renderRules({ activeFileName: 'locked' })
+    const row = fileRow('locked')
+    expect(row).toHaveAttribute('data-state', 'active')
+    expect(row).toHaveClass('group')
+    // Unselected: grey name. Selected (data-state=active on the row group): foreground.
+    expect(within(row).getByText('locked')).toHaveClass('text-muted-foreground', 'group-data-[state=active]:text-foreground')
+    const lock = lockButton('locked')
+    expect(lock).toHaveClass('text-muted-foreground')
+    expect(lock.className).not.toMatch(/group-data-\[state=active\]:text-foreground/)
+  })
+
+  it('a locked switch still shows its real state without fading', () => {
+    renderRules()
+    const onSwitch = within(fileRow('locked')).getByRole('button', { name: '禁用规则集 locked' })
+    const offSwitch = within(fileRow('off')).getByRole('button', { name: '启用规则集 off' })
+    for (const control of [onSwitch, offSwitch]) {
+      expect(control.className).not.toMatch(/(^|\s)opacity-/)
+      expect(control).toHaveClass('cursor-not-allowed')
+    }
+    // on: desaturated primary (not the full primary of a read-write switch); off: grey track
+    const onIcon = onSwitch.querySelector('svg')!
+    expect(onIcon).toHaveClass('lucide-toggle-right', 'text-[color-mix(in_oklab,var(--primary)_60%,var(--muted-foreground))]')
+    expect(onIcon).not.toHaveClass('text-primary')
+    expect(offSwitch.querySelector('svg')).toHaveClass('lucide-toggle-left', 'text-muted-foreground')
+    const openIcon = within(fileRow('open')).getByRole('button', { name: '禁用规则集 open' }).querySelector('svg')!
+    expect(openIcon).toHaveClass('text-primary')
+  })
+
   it('greys a read-only row (muted text, inert switch) distinctly from a disabled row (faded)', async () => {
     const { toggleRuleFile, deleteRuleFile } = renderRules()
     const lockedRow = fileRow('locked')
@@ -106,10 +142,21 @@ describe('rule file list — lock button (issue #137)', () => {
     const openRow = fileRow('open')
     expect(within(openRow).getByText('open')).not.toHaveClass('text-muted-foreground')
 
-    // disabled + read-only combine: faded row *and* muted text
+    // Disabled only: the row fades (opacity only applies while data-readonly=false).
+    const idleRow = fileRow('idle')
+    expect(idleRow).toHaveAttribute('data-ruleset-enabled', 'false')
+    expect(idleRow).toHaveAttribute('data-readonly', 'false')
+    expect(idleRow).toHaveClass('data-[ruleset-enabled=false]:data-[readonly=false]:opacity-60')
+    // No inline opacity that would override the fade class.
+    expect(idleRow.style.opacity).toBe('')
+    expect(within(idleRow).getByText('idle')).not.toHaveClass('text-muted-foreground')
+
+    // Disabled + read-only: grey text only, no stacked fade.
     const offRow = fileRow('off')
     expect(offRow).toHaveAttribute('data-ruleset-enabled', 'false')
-    expect(offRow).toHaveClass('data-[ruleset-enabled=false]:opacity-60')
+    expect(offRow).toHaveAttribute('data-readonly', 'true')
+    expect(offRow.className).not.toMatch(/(^|\s)data-\[ruleset-enabled=false\]:opacity-60(\s|$)/)
+    expect(offRow.className).not.toMatch(/(^|\s)opacity-/)
     expect(within(offRow).getByText('off')).toHaveClass('text-muted-foreground')
 
     // The switch stays focusable but does nothing.
@@ -254,6 +301,10 @@ describe('editor pane of a read-only ruleset (issue #137)', () => {
     const ruleInput = screen.getByDisplayValue('locked.example.com')
     expect(ruleInput).toHaveAttribute('readonly')
     expect(ruleInput.className).not.toMatch(/(^|\s)opacity-/)
+    // Flat, arrow cursor: doesn't look like an editable field.
+    for (const input of [ruleInput, screen.getByDisplayValue('127.0.0.1:3001')]) {
+      expect(input).toHaveClass('bg-muted', 'dark:bg-muted', 'cursor-default', 'shadow-none')
+    }
     await user.type(ruleInput, 'x')
     expect(ruleInput).toHaveValue('locked.example.com')
     expect(setRulesSpy).not.toHaveBeenCalled()
