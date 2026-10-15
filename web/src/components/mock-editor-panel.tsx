@@ -363,7 +363,7 @@ export function MockEditorPanel({
                   title={!isAIReady ? 'AI 未配置或未启用' : '使用 AI 修复响应内容'}
                 >
                   {fixing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Wand2 className="mr-1 h-3 w-3" />}
-                  {fixing ? '修复中...' : 'AI修复'}
+                  {fixing ? '修复中…' : 'AI修复'}
                 </Button>
               )}
               <Button
@@ -375,7 +375,7 @@ export function MockEditorPanel({
                 title="格式化响应内容"
               >
                 {formatting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Code className="mr-1 h-3 w-3" />}
-                {formatting ? '格式化中...' : '代码格式化'}
+                {formatting ? '格式化中…' : '代码格式化'}
               </Button>
             </div>
           </div>

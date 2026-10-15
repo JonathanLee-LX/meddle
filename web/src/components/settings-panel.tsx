@@ -267,7 +267,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
 
     setSaving(true)
     setAiTestResult(null)
-    setAiTestMessage('测试中...')
+    setAiTestMessage('测试中…')
 
     try {
       const url = aiConfig.baseUrl
@@ -687,7 +687,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
               </Button>
               <Button variant="outline" size="sm" onClick={handleDiagnose} disabled={diagnosing}>
                 <Stethoscope className="h-4 w-4 mr-1" />
-                {diagnosing ? '诊断中...' : '诊断配置'}
+                {diagnosing ? '诊断中…' : '诊断配置'}
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">点击重新加载可应用修改后的配置文件，点击诊断配置可检查配置有效性</p>
@@ -866,7 +866,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
 
           <SaveButton onClick={handleSaveClientAliases} disabled={saving}>
             <Save data-icon="inline-start" className="h-4 w-4" />
-            {saving ? '保存中...' : '保存客户端名称'}
+            {saving ? '保存中…' : '保存客户端名称'}
           </SaveButton>
         </TabsContent>
 
@@ -1176,7 +1176,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
               </Button>
               <SaveButton size="sm" onClick={handleAiSave} disabled={saving}>
                 <Save data-icon="inline-start" className="h-4 w-4" />
-                {saving ? '保存中...' : '保存'}
+                {saving ? '保存中…' : '保存'}
               </SaveButton>
             </div>
           </div>

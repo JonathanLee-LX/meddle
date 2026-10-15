@@ -56,7 +56,7 @@ function EditorFallback() {
   return (
     <div className="flex h-full min-h-[160px] items-center justify-center gap-2 text-sm text-muted-foreground">
       <Loader2 className="size-4 animate-spin" />
-      加载编辑器...
+      加载编辑器…
     </div>
   )
 }
@@ -565,7 +565,7 @@ export function PluginConfig({
               <Input
                 value={thirdPartyPath}
                 onChange={(event) => setThirdPartyPath(event.target.value)}
-                placeholder="输入插件路径..."
+                placeholder="输入插件路径…"
                 className="flex-1"
                 aria-label="第三方插件路径"
               />

@@ -1192,7 +1192,7 @@ export function RuleConfig(props: RuleConfigProps) {
                 )}
               </ToggleGroup>
               {isPending && (
-                <span className="text-xs text-muted-foreground">更新中...</span>
+                <span className="text-xs text-muted-foreground">更新中…</span>
               )}
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1257,7 +1257,7 @@ export function RuleConfig(props: RuleConfigProps) {
                 <Input
                   value={ruleFilter}
                   onChange={(e) => setRuleFilter(e.target.value)}
-                  placeholder="输入规则名称进行筛选..."
+                  placeholder="输入规则名称进行筛选…"
                   className="h-9"
                 />
                 {ruleFilter && (
@@ -1281,7 +1281,7 @@ export function RuleConfig(props: RuleConfigProps) {
                 <Input
                   value={targetFilter}
                   onChange={(e) => setTargetFilter(e.target.value)}
-                  placeholder="输入目标地址进行筛选..."
+                  placeholder="输入目标地址进行筛选…"
                   className="h-9"
                   list="target-list"
                 />
@@ -1337,7 +1337,7 @@ export function RuleConfig(props: RuleConfigProps) {
               <div className="app-pane-bar flex shrink-0 flex-wrap items-center justify-between gap-2 border-t text-xs text-muted-foreground">
                 <span>
                   {textLoading
-                    ? '正在加载规则文本...'
+                    ? '正在加载规则文本…'
                     : `已解析 ${rules.length} 条规则`}
                 </span>
                 {textDiagnostics.length > 0 && (

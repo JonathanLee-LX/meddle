@@ -27,9 +27,27 @@ function Tooltip({
 }
 
 function TooltipTrigger({
+  describe = true,
   ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
+}: React.ComponentProps<typeof TooltipPrimitive.Trigger> & {
+  /**
+   * While open, Radix points the trigger's aria-describedby at a visually hidden
+   * copy of the tooltip text. Pass false when that text is already part of the
+   * trigger's accessible name, so screen readers don't read it twice. Only the
+   * description is dropped; the visible tooltip and any caller-provided
+   * aria-describedby stay.
+   */
+  describe?: boolean
+}) {
+  return (
+    <TooltipPrimitive.Trigger
+      data-slot="tooltip-trigger"
+      {...props}
+      // Radix spreads trigger props after its own aria-describedby, so an
+      // explicit key (even undefined) replaces the tooltip reference.
+      {...(describe ? null : { "aria-describedby": props["aria-describedby"] })}
+    />
+  )
 }
 
 function TooltipContent({

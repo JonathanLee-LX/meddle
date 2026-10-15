@@ -145,7 +145,7 @@ export function RuleAiAssistantPanel({
             disabled={!activeFileName || !prompt.trim() || busy}
           >
             {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-            {generating ? 'AI 生成中...' : 'AI 生成规则'}
+            {generating ? 'AI 生成中…' : 'AI 生成规则'}
           </Button>
           <Button
             variant="outline"
@@ -154,7 +154,7 @@ export function RuleAiAssistantPanel({
             disabled={!activeFileName || rules.length === 0 || busy}
           >
             {merging ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {merging ? 'AI 合并中...' : 'AI 合并规则'}
+            {merging ? 'AI 合并中…' : 'AI 合并规则'}
           </Button>
         </div>
       </div>

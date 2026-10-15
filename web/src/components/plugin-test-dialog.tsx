@@ -526,7 +526,7 @@ export function PluginTestDialog({
           try {
             const parsed = JSON.parse(data)
             if (parsed.status === 'generating') {
-              setFixResult({ status: 'success', message: 'AI 正在分析错误并生成修复代码...' })
+              setFixResult({ status: 'success', message: 'AI 正在分析错误并生成修复代码…' })
             } else if (parsed.chunk) {
               fixedCode = parsed.accumulated || `${fixedCode}${parsed.chunk}`
               setFixStreamCode(fixedCode)
@@ -548,7 +548,7 @@ export function PluginTestDialog({
         throw new Error('AI 未返回有效代码')
       }
 
-      setFixResult({ status: 'success', message: 'AI 已生成修复代码，正在保存、热加载并重新测试...' })
+      setFixResult({ status: 'success', message: 'AI 已生成修复代码，正在保存、热加载并重新测试…' })
       await saveReloadAndRefresh(fixedCode, 'AI 已修复插件代码并完成热加载，测试结果已刷新。', true)
     } catch (error) {
       setFixResult({
@@ -614,7 +614,7 @@ export function PluginTestDialog({
           try {
             const parsed = JSON.parse(data)
             if (parsed.status === 'generating') {
-              setFixResult({ status: 'success', message: 'AI 正在根据额外要求更新插件代码...' })
+              setFixResult({ status: 'success', message: 'AI 正在根据额外要求更新插件代码…' })
             } else if (parsed.chunk) {
               revisedCode = parsed.accumulated || `${revisedCode}${parsed.chunk}`
               setFixStreamCode(revisedCode)
@@ -638,7 +638,7 @@ export function PluginTestDialog({
         throw new Error('AI 未返回有效代码')
       }
 
-      setFixResult({ status: 'success', message: 'AI 已生成更新后的代码，正在保存并热加载...' })
+      setFixResult({ status: 'success', message: 'AI 已生成更新后的代码，正在保存并热加载…' })
       await saveReloadAndRefresh(revisedCode, 'AI 已根据额外要求更新插件代码并完成热加载。', false)
       setExtraInstruction('')
     } catch (error) {
@@ -836,7 +836,7 @@ export function PluginTestDialog({
                       {fixing && fixStage !== 'retesting' ? (
                         <>
                           <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                          AI 更新中...
+                          AI 更新中…
                         </>
                       ) : (
                         <>
@@ -1014,7 +1014,7 @@ export function PluginTestDialog({
                             {fixing ? (
                               <>
                                 <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                AI 修复中...
+                                AI 修复中…
                               </>
                             ) : (
                               <>
@@ -1219,7 +1219,7 @@ export function PluginTestDialog({
             {testing ? (
               <>
                 <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                请求中...
+                请求中…
               </>
             ) : (
               <>
