@@ -245,6 +245,19 @@ meddle mock disable 2
 
 ## Route Commands
 
+### Read-only route files (rulesets)
+
+A route file can be locked as **read-only** in the Meddle web UI (issue #137). Full behavior: [只读规则集](./RULESET_READONLY.md).
+
+- The CLI has **no lock / unlock command** — a lock can only be set or cleared in the Meddle web UI.
+- `route list --json` and `route show <file> --json` include `"readonly": true|false`.
+- Every write to a locked file (`route add`, `route update`, `route delete`, and `route active set` when it would enable/disable a locked file) is rejected and the file is left unchanged:
+  - error code `RULESET_READONLY`, message 「该规则集已设为只读，只能在 Meddle 界面中解锁」 (printed to stderr);
+  - **exit code `3`** (dedicated to this case; other failures still exit `1`);
+  - with `--json`, stdout gets `{"success":false,"error":{"code":"RULESET_READONLY","message":"…","ruleFile":"<file>"}}`.
+  - A `RULESET_READONLY` rejection from the proxy is final (the CLI does not fall back to writing the file directly); in file mode (proxy not running) the CLI reads the same lock from `settings.json`.
+- A locked route file cannot be renamed: unlock it in the Meddle web UI first, then rename. Renaming the `.txt` file outside Meddle creates a new, read-write route file and the stale lock entry is removed silently.
+
 ### meddle route list
 
 List all route files.
@@ -259,8 +272,10 @@ meddle route list --json    # JSON 格式
 Route Files (2 total)
 
 ✓ default (5 rules, 2 exclusions)
-○ beta-rules (3 rules)
+○ beta-rules (3 rules) [read-only]
 ```
+
+`--json` items: `{ "name", "enabled", "readonly", "ruleCount", "excludeCount" }`.
 
 ### meddle route show
 
@@ -280,9 +295,11 @@ api.test.com !/internal localhost:8080
 *.example.com 127.0.0.1:5000
 ```
 
+`--json` output includes `"readonly": true|false`.
+
 ### meddle route active
 
-View or set active route files.
+View or set active route files. `active set` is rejected as a whole (exit code `3`, nothing changed) if it would enable or disable a read-only route file.
 
 ```bash
 meddle route active           # 查看当前激活的文件
@@ -315,6 +332,7 @@ meddle route add dev "^https://app.example.com[/api/v2]" "https://localhost:1300
 **Note:**
 - Supports exclusion patterns: `pattern !exclusion target`
 - Supports marker syntax: `pattern[marker] target`
+- Read-only route files reject the write: `RULESET_READONLY`, exit code `3` (also for `route update` / `route delete`).
 
 ### meddle route update
 
@@ -341,6 +359,17 @@ meddle route delete <file> <pattern>
 ```bash
 meddle route delete default "api.example.com"
 ```
+
+---
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `1` | General error (missing argument, file / pattern not found, …) |
+| `2` | `update --check` found a newer version; invalid `--session` usage |
+| `3` | `RULESET_READONLY` — the route file is read-only; unlock it in the Meddle web UI |
 
 ---
 

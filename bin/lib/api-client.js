@@ -25,7 +25,17 @@ async function apiRequest(method, pathname, body, timeoutMs = DEFAULT_TIMEOUT) {
 
   if (!response.ok) {
     const text = await response.text()
-    throw new Error(text || response.statusText)
+    const err = new Error(text || response.statusText)
+    err.status = response.status
+    // Structured errors (e.g. issue #137 RULESET_READONLY) keep their code.
+    try {
+      const data = JSON.parse(text)
+      if (data && typeof data === 'object') {
+        if (typeof data.code === 'string') err.code = data.code
+        if (typeof data.ruleFile === 'string') err.ruleFile = data.ruleFile
+      }
+    } catch (_) {}
+    throw err
   }
 
   const contentType = response.headers.get('content-type')

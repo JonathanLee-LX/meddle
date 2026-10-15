@@ -1002,6 +1002,7 @@ function App() {
                         renameRuleFile={store.renameRuleFile}
                         deleteRuleFile={store.deleteRuleFile}
                         reorderRuleFiles={store.reorderRuleFiles}
+                        setRuleFileReadonly={store.setRuleFileReadonly}
                       />
                     </Suspense>
                   </div>

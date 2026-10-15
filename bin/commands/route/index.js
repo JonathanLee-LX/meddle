@@ -43,6 +43,10 @@ Route Commands:
   meddle route update <file> <pattern> <target> Update a rule in file
   meddle route delete <file> <pattern>          Delete a rule from file
 
+Read-only route files:
+  Files locked in the Meddle web UI reject add/update/delete and active set
+  (error RULESET_READONLY, exit code 3). Lock/unlock is only available in the web UI.
+
 Examples:
   meddle route list
   meddle route show dev-rules

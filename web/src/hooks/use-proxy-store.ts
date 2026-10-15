@@ -45,6 +45,7 @@ export function useProxyStore() {
     renameRuleFile: rules.renameRuleFile,
     deleteRuleFile: rules.deleteRuleFile,
     reorderRuleFiles: rules.reorderRuleFiles,
+    setRuleFileReadonly: rules.setRuleFileReadonly,
 
     // Mocks
     mockRules: mocks.mockRules,

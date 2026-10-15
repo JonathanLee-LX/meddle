@@ -514,6 +514,12 @@ Preview route target for a URL.
 
 ## Rule Files API
 
+> **Read-only rule files (issue #137).** Each item has `readonly: true|false`. Every write to a read-only rule file —
+> `PUT /api/rule-files/:name/content`, `PUT /api/rule-files/:name` (`enabled` / `newName`), `DELETE /api/rule-files/:name`,
+> and changing its membership in `activeRuleFiles` through `/api/settings` — is rejected with **`423`** and
+> `{ "error": "该规则集已设为只读，只能在 Meddle 界面中解锁", "code": "RULESET_READONLY", "ruleFile": "<name>" }`;
+> the file is not touched. Only the web UI can lock / unlock (see `PUT /api/rule-files/:name/readonly`). Details: [只读规则集](./RULESET_READONLY.md).
+
 ### GET /api/rule-files
 
 List all rule files.
@@ -524,10 +530,19 @@ List all rule files.
   {
     "name": "default",
     "enabled": true,
+    "readonly": false,
     "ruleCount": 5,
     "excludeCount": 2
   }
 ]
+```
+
+### GET /api/rule-files/:name
+
+Rule file detail: the list item plus its raw `content`.
+
+```json
+{ "name": "default", "enabled": true, "readonly": true, "ruleCount": 5, "excludeCount": 2, "content": "example.com localhost:3000\n" }
 ```
 
 ### POST /api/rule-files
@@ -547,7 +562,7 @@ Create rule file.
 
 Get rule file content.
 
-**Response (text/plain):** EPRC format text
+**Response (text/plain):** EPRC format text. Header `X-Meddle-Ruleset-Readonly: true|false`.
 
 ### PUT /api/rule-files/:name/content
 
@@ -575,6 +590,20 @@ Update rule file attributes (enable/disable, rename).
 ### DELETE /api/rule-files/:name
 
 Delete rule file.
+
+### PUT /api/rule-files/:name/readonly (web UI only)
+
+Lock / unlock a rule file. **For the Meddle web UI only**; the CLI and MCP never call it.
+
+**Request:** `{ "readonly": true }` with header `X-Meddle-UI-Token: <token>`. The token is generated per server start and handed to
+the page in `index.html` (`<meta name="meddle-ui-token">`), or by the same-origin-only bootstrap `GET /api/ui-token`.
+The request must also be same-origin: `Sec-Fetch-Site: same-origin` when present, and an `Origin` whose host equals `Host`
+when present; a request with neither header is refused.
+
+**Errors:** `403` with `code` `UI_TOKEN_INVALID` (missing / wrong / stale token) or `UI_ORIGIN_REQUIRED` (not same-origin); `404` when the file does not exist.
+
+> This is an anti-accident guard, not access control: anything that can reach the port can GET the page for the token and forge
+> `Origin` / `Sec-Fetch-Site`, and anything with a shell can edit the files on disk.
 
 ---
 
@@ -677,8 +706,12 @@ All endpoints return errors in this format:
 }
 ```
 
+Some errors also carry a machine-readable `code` (e.g. `RULESET_READONLY`).
+
 HTTP Status Codes:
 - `400` - Bad Request (invalid parameters)
+- `403` - Forbidden (lock endpoint without UI token / same origin; `RULESET_LOCK_UI_ONLY` when `/api/settings` tries to change `readonlyRuleFiles`)
 - `404` - Not Found (plugin/rule not found)
 - `409` - Conflict (duplicate name)
+- `423` - Locked (`RULESET_READONLY`: the rule file is read-only)
 - `500` - Internal Server Error

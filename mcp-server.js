@@ -53,9 +53,45 @@ function proxyApiForSession(sessionId, method, pathname, body) {
     const opts = { method, headers: { 'Content-Type': 'application/json' } }
     if (body !== undefined) opts.body = typeof body === 'string' ? body : JSON.stringify(body)
     return fetch(url, opts).then((res) => {
-        if (!res.ok) return res.text().then((t) => { throw new Error(t || res.statusText) })
+        if (!res.ok) return res.text().then((t) => { throw apiError(res, t) })
         return res.headers.get('content-type')?.includes('application/json') ? res.json() : res.text()
     })
+}
+
+// ---------- Issue #137: 只读规则集 ----------
+// 锁只存在 settings.json，只能在 Meddle Web 界面中加锁 / 解锁；MCP 没有对应工具，只读取状态并在写入被拒时如实返回。
+const RULESET_READONLY = 'RULESET_READONLY'
+const RULESET_READONLY_MESSAGE = '该规则集已设为只读，只能在 Meddle 界面中解锁'
+const READONLY_NOTE = '只读规则集会被拒绝（错误码 RULESET_READONLY，只能在 Meddle 界面中解锁）。'
+
+/** 把代理 API 的错误响应转成 Error，保留结构化的 code / ruleFile。 */
+function apiError(res, text) {
+    const err = new Error(text || res.statusText)
+    err.status = res.status
+    try {
+        const data = JSON.parse(text)
+        if (data && typeof data === 'object') {
+            if (typeof data.code === 'string') err.code = data.code
+            if (typeof data.ruleFile === 'string') err.ruleFile = data.ruleFile
+        }
+    } catch (_) {}
+    return err
+}
+
+function rulesetReadonlyResult(ruleFile) {
+    return {
+        content: [{
+            type: 'text',
+            text: JSON.stringify({ error: { code: RULESET_READONLY, message: RULESET_READONLY_MESSAGE, ruleFile: ruleFile || null } }, null, 2)
+        }],
+        isError: true
+    }
+}
+
+/** 统一的错误返回：只读拒绝给出结构化结果，其它错误保持原样。 */
+function toolError(e, ruleFile) {
+    if (e && e.code === RULESET_READONLY) return rulesetReadonlyResult(e.ruleFile || ruleFile)
+    return { content: [{ type: 'text', text: e.message }], isError: true }
 }
 
 const FILE_PATTERN = /^file:\/\//
@@ -395,7 +431,7 @@ mcpServer.registerTool('mock_rule_list', {
         const rules = await proxyApiForSession(session, 'GET', '/api/mocks')
         return { content: [{ type: 'text', text: JSON.stringify(rules, null, 2) }] }
     } catch (e) {
-        return { content: [{ type: 'text', text: e.message }], isError: true }
+        return toolError(e)
     }
 })
 
@@ -435,7 +471,7 @@ mcpServer.registerTool('mock_rule_add', {
             content: [{ type: 'text', text: `已添加 Mock 规则 id=${rule.id}: ${rule.name} (${rule.urlPattern})` }]
         }
     } catch (e) {
-        return { content: [{ type: 'text', text: e.message }], isError: true }
+        return toolError(e)
     }
 })
 
@@ -470,7 +506,7 @@ mcpServer.registerTool('mock_rule_update', {
             content: [{ type: 'text', text: `已更新 Mock 规则 id=${id}: ${rule.name ?? '(未改)'}` }]
         }
     } catch (e) {
-        return { content: [{ type: 'text', text: e.message }], isError: true }
+        return toolError(e)
     }
 })
 
@@ -485,14 +521,14 @@ mcpServer.registerTool('mock_rule_delete', {
         await proxyApiForSession(session, 'DELETE', `/api/mocks/${id}`)
         return { content: [{ type: 'text', text: `已删除 Mock 规则 id=${id}` }] }
     } catch (e) {
-        return { content: [{ type: 'text', text: e.message }], isError: true }
+        return toolError(e)
     }
 })
 
 // ---------- 路由规则（可选 session 参数） ----------
 
 mcpServer.registerTool('route_rule_list', {
-    description: '列出所有路由规则文件；可选指定 ruleFile 获取该文件下的规则列表（pattern -> target 及 exclusions）。可选 session 参数指定操作的 session（不传则操作默认 session）。',
+    description: '列出所有路由规则文件（每项含 readonly: true|false）；可选指定 ruleFile 获取该文件下的规则列表（pattern -> target 及 exclusions，含 readonly）。readonly 只能在 Meddle 界面中修改，MCP 没有加锁/解锁工具。可选 session 参数指定操作的 session（不传则操作默认 session）。',
     inputSchema: {
         session: z.string().optional().describe('目标 session id，不传则操作默认 session'),
         ruleFile: z.string().optional().describe('规则文件名（不含 .txt），不传则只返回文件列表')
@@ -520,11 +556,13 @@ mcpServer.registerTool('route_rule_list', {
         for (const exclusions of Object.values(excludeMap)) {
             totalExclusions += exclusions.length
         }
+        const info = Array.isArray(files) ? files.find((item) => item && item.name === ruleFile.trim()) : null
+        const readonly = Boolean(info && info.readonly)
         return {
-            content: [{ type: 'text', text: JSON.stringify({ ruleFile, rules: displayRules, ruleCount: Object.keys(displayRules).length, exclusionCount: totalExclusions }, null, 2) }]
+            content: [{ type: 'text', text: JSON.stringify({ ruleFile, readonly, rules: displayRules, ruleCount: Object.keys(displayRules).length, exclusionCount: totalExclusions }, null, 2) }]
         }
     } catch (e) {
-        return { content: [{ type: 'text', text: e.message }], isError: true }
+        return toolError(e)
     }
 })
 
@@ -549,12 +587,12 @@ mcpServer.registerTool('route_rule_active_get', {
             }]
         }
     } catch (e) {
-        return { content: [{ type: 'text', text: e.message }], isError: true }
+        return toolError(e)
     }
 })
 
 mcpServer.registerTool('route_rule_active_set', {
-    description: '设置当前激活的路由规则文件。可选 session 参数指定操作的 session（不传则操作默认 session）。',
+    description: '设置当前激活的路由规则文件。会改变启用状态的规则集中若有只读规则集则整体拒绝、不做任何修改：' + READONLY_NOTE + '可选 session 参数指定操作的 session（不传则操作默认 session）。',
     inputSchema: {
         session: z.string().optional().describe('目标 session id，不传则操作默认 session'),
         ruleFile: z.string().describe('要设为当前激活的规则文件名（不含 .txt）')
@@ -571,6 +609,10 @@ mcpServer.registerTool('route_rule_active_set', {
             return { content: [{ type: 'text', text: `未找到规则文件: ${targetName}` }], isError: true }
         }
 
+        // 先整体检查，避免锁住的规则集让切换只做了一半
+        const blocked = files.find((item) => item && item.readonly && !!item.enabled !== (item.name === targetName))
+        if (blocked) return rulesetReadonlyResult(blocked.name)
+
         for (const item of files) {
             const nextEnabled = item.name === targetName
             if (!!item.enabled === nextEnabled) continue
@@ -585,12 +627,12 @@ mcpServer.registerTool('route_rule_active_set', {
             }]
         }
     } catch (e) {
-        return { content: [{ type: 'text', text: e.message }], isError: true }
+        return toolError(e)
     }
 })
 
 mcpServer.registerTool('route_rule_create_file', {
-    description: '创建新的路由规则文件。可选 session 参数指定操作的 session（不传则操作默认 session）。',
+    description: '创建新的路由规则文件（新文件默认可读写）。同名规则文件已存在时失败，不会覆盖已有规则集，因此只读规则集会被拒绝。可选 session 参数指定操作的 session（不传则操作默认 session）。',
     inputSchema: {
         session: z.string().optional().describe('目标 session id，不传则操作默认 session'),
         name: z.string().describe('规则文件名称（不含 .txt），如 dev、staging；非法字符会被替换为下划线'),
@@ -609,12 +651,12 @@ mcpServer.registerTool('route_rule_create_file', {
             }]
         }
     } catch (e) {
-        return { content: [{ type: 'text', text: e.message }], isError: true }
+        return toolError(e)
     }
 })
 
 mcpServer.registerTool('route_rule_add', {
-    description: '在指定规则文件中添加一条路由规则（pattern -> target）。若 pattern 已存在则覆盖。可选 session 参数指定操作的 session（不传则操作默认 session）。',
+    description: '在指定规则文件中添加一条路由规则（pattern -> target）。若 pattern 已存在则覆盖。' + READONLY_NOTE + '可选 session 参数指定操作的 session（不传则操作默认 session）。',
     inputSchema: {
         session: z.string().optional().describe('目标 session id，不传则操作默认 session'),
         ruleFile: z.string().describe('规则文件名（不含 .txt）'),
@@ -648,12 +690,12 @@ mcpServer.registerTool('route_rule_add', {
         const exclusionInfo = exclusions && exclusions.length > 0 ? `，排除规则: ${exclusions.join(', ')}` : ''
         return { content: [{ type: 'text', text: `已添加规则: ${pattern} -> ${target}${exclusionInfo}` }] }
     } catch (e) {
-        return { content: [{ type: 'text', text: e.message }], isError: true }
+        return toolError(e)
     }
 })
 
 mcpServer.registerTool('route_rule_update', {
-    description: '修改指定规则文件中某条规则的 target 和 exclusions（按 pattern 查找）。可选 session 参数指定操作的 session（不传则操作默认 session）。',
+    description: '修改指定规则文件中某条规则的 target 和 exclusions（按 pattern 查找）。' + READONLY_NOTE + '可选 session 参数指定操作的 session（不传则操作默认 session）。',
     inputSchema: {
         session: z.string().optional().describe('目标 session id，不传则操作默认 session'),
         ruleFile: z.string().describe('规则文件名（不含 .txt）'),
@@ -692,12 +734,12 @@ mcpServer.registerTool('route_rule_update', {
         const parts = [targetInfo, exclusionInfo].filter(Boolean).join(', ')
         return { content: [{ type: 'text', text: `已更新规则: ${pat}${parts ? ` (${parts})` : ''}` }] }
     } catch (e) {
-        return { content: [{ type: 'text', text: e.message }], isError: true }
+        return toolError(e)
     }
 })
 
 mcpServer.registerTool('route_rule_delete', {
-    description: '从指定规则文件中删除一条路由规则（按 pattern）。可选 session 参数指定操作的 session（不传则操作默认 session）。',
+    description: '从指定规则文件中删除一条路由规则（按 pattern）。' + READONLY_NOTE + '可选 session 参数指定操作的 session（不传则操作默认 session）。',
     inputSchema: {
         session: z.string().optional().describe('目标 session id，不传则操作默认 session'),
         ruleFile: z.string().describe('规则文件名（不含 .txt）'),
@@ -726,7 +768,7 @@ mcpServer.registerTool('route_rule_delete', {
         await proxyApiForSession(session, 'PUT', `/api/rule-files/${name}/content`, { content: newContent })
         return { content: [{ type: 'text', text: `已删除规则: ${pat}` }] }
     } catch (e) {
-        return { content: [{ type: 'text', text: e.message }], isError: true }
+        return toolError(e)
     }
 })
 
@@ -789,7 +831,7 @@ mcpServer.registerTool('route_preview', {
             content: [{ type: 'text', text: JSON.stringify(output, null, 2) }]
         }
     } catch (e) {
-        return { content: [{ type: 'text', text: e.message }], isError: true }
+        return toolError(e)
     }
 })
 

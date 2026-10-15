@@ -7,7 +7,7 @@ import { registerLogsRoutes } from './logs'
 import { registerMocksRoutes } from './mocks'
 import { registerPipelineRoutes } from './pipeline'
 import { registerRefactorRoutes } from './refactor'
-import { registerRuleFilesRoutes } from './rule-files'
+import { registerRuleFilesRoutes, registerUiTokenRoute } from './rule-files'
 import { registerAgentRoutes } from './agent/routes'
 import { registerHealthRoutes } from './health'
 import { registerSessionsRoutes } from './sessions'
@@ -220,6 +220,7 @@ export function createApp(serverContext: ServerContext): Application {
     registerAppInfoRoutes(app, serverContext)
     registerRefactorRoutes(app, serverContext)
     registerRuleFilesRoutes(app, serverContext)
+    registerUiTokenRoute(app, serverContext)
     registerAgentRoutes(app, serverContext)
     registerSessionsRoutes(app, serverContext)
 

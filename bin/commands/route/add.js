@@ -6,6 +6,7 @@ const output = require('../../lib/output')
 const { isProxyRunning } = require('../../lib/proxy-detect')
 const { apiGet, apiPut } = require('../../lib/api-client')
 const { getRuleFileContent, saveRuleFileContent, parseEprc, ruleMapToEprcText } = require('../../lib/file-access')
+const { isRulesetReadonlyError, exitRulesetReadonly } = require('../../lib/ruleset-readonly')
 
 // Parse arguments (skip 'route' and 'add' from argv)
 const args = process.argv.slice(4)
@@ -64,6 +65,8 @@ async function run() {
       output.success(`${pat} -> ${tgt}`)
       output.kv('File', fileName)
     } catch (e) {
+      // Issue #137: a locked ruleset is a final answer, never a cue to write the file directly.
+      if (isRulesetReadonlyError(e)) exitRulesetReadonly(e, { json: jsonFlag, ruleFile: fileName })
       // Fallback to file mode
       const content = getRuleFileContent(fileName)
       if (!content) {
@@ -132,6 +135,7 @@ async function run() {
 }
 
 run().catch(e => {
+  if (isRulesetReadonlyError(e)) exitRulesetReadonly(e, { json: jsonFlag, ruleFile: fileName })
   output.error(e.message)
   process.exit(1)
 })

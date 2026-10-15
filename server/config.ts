@@ -1,6 +1,56 @@
 import { Application, Request, Response } from 'express'
 import * as fs from 'fs'
 import { ServerContext } from './index'
+import {
+    assertRuleFilesWritable,
+    isRulesetReadonlyError,
+    normalizeReadonlyNames,
+    READONLY_SETTINGS_KEY,
+    rulesetReadonlyBody,
+    RULESET_READONLY_STATUS,
+} from './ruleset-lock'
+
+/**
+ * Issue #137: the settings endpoints must not become a side door around the
+ * ruleset lock. `readonlyRuleFiles` can only change through the UI lock route,
+ * and `activeRuleFiles` may not switch a locked ruleset on or off.
+ */
+function guardRulesetLockFields(ctx: ServerContext, current: Record<string, unknown>, next: Record<string, unknown>): void {
+    const currentLocked = normalizeReadonlyNames(current[READONLY_SETTINGS_KEY])
+    if (READONLY_SETTINGS_KEY in next) {
+        const incoming = normalizeReadonlyNames(next[READONLY_SETTINGS_KEY])
+        const same = incoming.length === currentLocked.length && incoming.every((name) => currentLocked.includes(name))
+        if (!same) {
+            throw Object.assign(new Error('规则集只读锁只能在 Meddle 界面中修改'), { status: 403, code: 'RULESET_LOCK_UI_ONLY' })
+        }
+    }
+    if (READONLY_SETTINGS_KEY in current) next[READONLY_SETTINGS_KEY] = current[READONLY_SETTINGS_KEY]
+    else delete next[READONLY_SETTINGS_KEY]
+
+    if ('activeRuleFiles' in next && currentLocked.length > 0) {
+        const before = new Set(Array.isArray(current.activeRuleFiles) ? current.activeRuleFiles as string[] : [])
+        const after = new Set(Array.isArray(next.activeRuleFiles) ? next.activeRuleFiles as string[] : [])
+        const changed = [...before].filter((name) => !after.has(name)).concat([...after].filter((name) => !before.has(name)))
+        assertRuleFilesWritable(ctx, changed)
+    }
+}
+
+function readCurrentSettings(ctx: ServerContext): Record<string, unknown> {
+    if (!fs.existsSync(ctx.settingsPath)) return {}
+    return JSON.parse(fs.readFileSync(ctx.settingsPath, 'utf8'))
+}
+
+function sendSettingsError(res: Response, error: unknown): void {
+    if (isRulesetReadonlyError(error)) {
+        res.statusCode = RULESET_READONLY_STATUS
+        res.write(JSON.stringify(rulesetReadonlyBody(error)))
+        return
+    }
+    const status = (error as { status?: number }).status
+    const code = (error as { code?: string }).code
+    res.statusCode = typeof status === 'number' ? status : 500
+    res.write(JSON.stringify(code ? { error: (error as Error).message, code } : { error: (error as Error).message }))
+}
 
 /**
  * Re-resolve the mocks file from settings and load it (issue #118). When the
@@ -93,11 +143,14 @@ export function registerConfigRoutes(app: Application, ctx: ServerContext): void
     app.post('/api/settings', (req: Request, res: Response) => {
         res.setHeader('Content-Type', 'application/json')
         try {
-            writeSettingsAndApply(req.body)
+            const next = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? { ...req.body } : req.body
+            if (next && typeof next === 'object' && !Array.isArray(next)) {
+                guardRulesetLockFields(ctx, readCurrentSettings(ctx), next)
+            }
+            writeSettingsAndApply(next)
             res.write(JSON.stringify({ status: 'success', message: '设置已保存' }))
         } catch (error) {
-            res.statusCode = 500
-            res.write(JSON.stringify({ error: (error as Error).message }))
+            sendSettingsError(res, error)
         }
         res.end()
     })
@@ -114,16 +167,13 @@ export function registerConfigRoutes(app: Application, ctx: ServerContext): void
                 res.end()
                 return
             }
-            let current: Record<string, unknown> = {}
-            if (fs.existsSync(ctx.settingsPath)) {
-                current = JSON.parse(fs.readFileSync(ctx.settingsPath, 'utf8'))
-            }
+            const current = readCurrentSettings(ctx)
             const merged = { ...current, ...updates }
+            guardRulesetLockFields(ctx, current, merged)
             writeSettingsAndApply(merged)
             res.write(JSON.stringify({ status: 'success', message: '设置已保存', settings: merged }))
         } catch (error) {
-            res.statusCode = 500
-            res.write(JSON.stringify({ error: (error as Error).message }))
+            sendSettingsError(res, error)
         }
         res.end()
     })

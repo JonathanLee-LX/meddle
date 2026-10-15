@@ -20,6 +20,8 @@ import {
   GitBranch,
   GripVertical,
   ListChecks,
+  Lock,
+  LockOpen,
   Plus,
   Table2,
   ToggleLeft,
@@ -29,6 +31,9 @@ import {
 } from 'lucide-react'
 import type { RuleItem, RuleFile } from '@/types'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import type { ReadonlyToggleResult } from '@/lib/ui-token'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { restrictToVerticalAxis, listDragTransformStyle } from '@/lib/rule-tab-dnd'
@@ -69,6 +74,36 @@ interface RuleConfigProps {
   renameRuleFile: (name: string, newName: string) => Promise<{ success: boolean; name?: string; error?: string }>
   deleteRuleFile: (name: string) => Promise<boolean>
   reorderRuleFiles: (order: string[]) => Promise<boolean>
+  /** Issue #137: lock / unlock a ruleset (web UI only). */
+  setRuleFileReadonly?: (name: string, readonly: boolean) => Promise<ReadonlyToggleResult>
+}
+
+/** Issue #137 copy (figma bro). */
+export const RULESET_LOCKED_HINT = '规则集已锁定，解锁后可编辑'
+const LOCKED_CONTROL_CLASS = 'cursor-not-allowed opacity-50'
+/** Read-only rule inputs: flat --muted fill, default arrow, so they don't read as editable. */
+const LOCKED_INPUT_CLASS = 'h-8 cursor-default bg-muted shadow-none'
+/**
+ * Locked ruleset switch: still shows its real state (no opacity). On = primary
+ * desaturated toward the muted grey; off = the grey track. Both keep >= 3:1
+ * against the row background (light / dark, selected or not).
+ */
+const LOCKED_SWITCH_ON_CLASS = 'size-4 text-[color-mix(in_oklab,var(--primary)_60%,var(--muted-foreground))]'
+/** Read-write rows: the open lock shows on hover / focus; on touch screens (no hover) it is always shown. */
+const OPEN_LOCK_VISIBILITY_CLASS = 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100'
+
+/**
+ * Greyed control of a locked ruleset: it keeps focus (aria-disabled, not
+ * disabled) and explains itself on hover / keyboard focus.
+ */
+function LockedHint({ locked, children }: { locked: boolean; children: React.ReactElement }) {
+  if (!locked) return children
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent>{RULESET_LOCKED_HINT}</TooltipContent>
+    </Tooltip>
+  )
 }
 
 interface RouteRuleHighlightEventDetail {
@@ -85,11 +120,14 @@ interface SortableRuleRowProps {
   onUpdateRule: (field: 'rule' | 'target' | 'exclusions', value: string | string[]) => void
   onDelete: () => void
   onMoveToTop: () => void
+  /** Issue #137: the ruleset is read-only; every control is greyed and inert. */
+  locked?: boolean
 }
 
 interface ExclusionsInputProps {
   exclusions: string[]
   onCommit: (value: string[]) => void
+  locked?: boolean
 }
 
 const RULE_ROW_HIGHLIGHT_CLASS = 'bg-primary/10 shadow-[inset_3px_0_0_var(--primary)] transition-[background-color,box-shadow]'
@@ -113,7 +151,7 @@ function getAvailableRuleFileName(files: RuleFile[], baseName: string): string {
   return `${baseName}-${index}`
 }
 
-const ExclusionsInput = memo(function ExclusionsInput({ exclusions, onCommit }: ExclusionsInputProps) {
+const ExclusionsInput = memo(function ExclusionsInput({ exclusions, onCommit, locked = false }: ExclusionsInputProps) {
   const [draft, setDraft] = useState(exclusions.join(' '))
 
   const commitDraft = useCallback(() => {
@@ -121,24 +159,113 @@ const ExclusionsInput = memo(function ExclusionsInput({ exclusions, onCommit }: 
   }, [draft, onCommit])
 
   return (
-    <Input
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commitDraft}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') {
-          commitDraft()
-        }
-      }}
-      placeholder="!/api !/ws"
-      className="h-8"
-    />
+    <LockedHint locked={locked}>
+      <Input
+        value={draft}
+        readOnly={locked}
+        onChange={(e) => {
+          if (!locked) setDraft(e.target.value)
+        }}
+        onBlur={locked ? undefined : commitDraft}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !locked) {
+            commitDraft()
+          }
+        }}
+        placeholder="!/api !/ws"
+        className={locked ? LOCKED_INPUT_CLASS : 'h-8'}
+      />
+    </LockedHint>
   )
 })
 
+/**
+ * Shared cells of a rule row. In a read-only ruleset the switch / delete /
+ * move-to-top are aria-disabled (still focusable, handlers no-op) and the
+ * inputs are read-only: rule text stays at full opacity and stays selectable.
+ */
+function RuleRowCells({
+  item,
+  locked,
+  onToggle,
+  onUpdateRule,
+  onCommitExclusions,
+  onDelete,
+  onMoveToTop,
+}: {
+  item: RuleItem
+  locked: boolean
+  onToggle: () => void
+  onUpdateRule: (field: 'rule' | 'target') => (e: React.ChangeEvent<HTMLInputElement>) => void
+  onCommitExclusions: (value: string[]) => void
+  onDelete: () => void
+  onMoveToTop: () => void
+}) {
+  const guard = (fn: () => void) => () => {
+    if (!locked) fn()
+  }
+  return (
+    <>
+      <TableCell className="w-12">
+        <LockedHint locked={locked}>
+          <Checkbox
+            checked={item.enabled}
+            onCheckedChange={guard(onToggle)}
+            aria-label={item.enabled ? '禁用规则' : '启用规则'}
+            aria-disabled={locked || undefined}
+            className={locked ? LOCKED_CONTROL_CLASS : undefined}
+          />
+        </LockedHint>
+      </TableCell>
+      <TableCell>
+        <LockedHint locked={locked}>
+          <Input value={item.rule} readOnly={locked} onChange={locked ? undefined : onUpdateRule('rule')} placeholder="example.com" className={locked ? LOCKED_INPUT_CLASS : 'h-8'} />
+        </LockedHint>
+      </TableCell>
+      <TableCell>
+        <ExclusionsInput key={JSON.stringify(item.exclusions || [])} exclusions={item.exclusions || []} onCommit={onCommitExclusions} locked={locked} />
+      </TableCell>
+      <TableCell>
+        <LockedHint locked={locked}>
+          <Input value={item.target} readOnly={locked} onChange={locked ? undefined : onUpdateRule('target')} placeholder="127.0.0.1:3000" className={locked ? LOCKED_INPUT_CLASS : 'h-8'} />
+        </LockedHint>
+      </TableCell>
+      <TableCell className="w-24">
+        <div className="flex gap-1">
+          <LockedHint locked={locked}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={guard(onMoveToTop)}
+              aria-disabled={locked || undefined}
+              className={locked ? `text-muted-foreground ${LOCKED_CONTROL_CLASS}` : 'text-muted-foreground hover:text-primary'}
+              title={locked ? undefined : '置顶'}
+              aria-label="置顶"
+            >
+              <ArrowUpToLine className="h-4 w-4" />
+            </Button>
+          </LockedHint>
+          <LockedHint locked={locked}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={guard(onDelete)}
+              aria-disabled={locked || undefined}
+              className={locked ? `text-muted-foreground ${LOCKED_CONTROL_CLASS}` : 'text-muted-foreground hover:text-destructive'}
+              aria-label="删除规则"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </LockedHint>
+        </div>
+      </TableCell>
+    </>
+  )
+}
+
 const SortableRuleRow = memo(
-  function SortableRuleRow({ id, item, highlighted, highlightRef, onToggle, onUpdateRule, onDelete, onMoveToTop }: SortableRuleRowProps) {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  function SortableRuleRow({ id, item, highlighted, highlightRef, onToggle, onUpdateRule, onDelete, onMoveToTop, locked = false }: SortableRuleRowProps) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: locked })
 
     const style: React.CSSProperties = {
       transform: CSS.Transform.toString(transform),
@@ -180,42 +307,38 @@ const SortableRuleRow = memo(
         className={highlighted ? `group ${RULE_ROW_HIGHLIGHT_CLASS}` : 'group'}
         data-dragging={isDragging ? 'true' : undefined}
       >
-        <TableCell
-          className="w-8 cursor-grab active:cursor-grabbing"
-          data-slot="rule-row-drag-handle"
-          {...attributes}
-          {...listeners}
-          aria-label="拖拽排序"
-        >
-          <GripVertical className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-data-[dragging=true]:opacity-100" />
-        </TableCell>
-        <TableCell className="w-12">
-          <Checkbox checked={item.enabled} onCheckedChange={handleToggle} />
-        </TableCell>
-        <TableCell>
-          <Input value={item.rule} onChange={handleUpdateRule('rule')} placeholder="example.com" className="h-8" />
-        </TableCell>
-        <TableCell>
-          <ExclusionsInput key={JSON.stringify(item.exclusions || [])} exclusions={item.exclusions || []} onCommit={handleCommitExclusions} />
-        </TableCell>
-        <TableCell>
-          <Input value={item.target} onChange={handleUpdateRule('target')} placeholder="127.0.0.1:3000" className="h-8" />
-        </TableCell>
-        <TableCell className="w-24">
-          <div className="flex gap-1">
-            <Button variant="ghost" size="icon-sm" onClick={handleMoveToTop} className="text-muted-foreground hover:text-primary" title="置顶" aria-label="置顶">
-              <ArrowUpToLine className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon-sm" onClick={handleDelete} className="text-muted-foreground hover:text-destructive" aria-label="删除规则">
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        </TableCell>
+        {locked ? (
+          <TableCell className="w-8" data-slot="rule-row-drag-handle" aria-hidden="true" />
+        ) : (
+          <TableCell
+            className="w-8 cursor-grab active:cursor-grabbing"
+            data-slot="rule-row-drag-handle"
+            {...attributes}
+            {...listeners}
+            aria-label="拖拽排序"
+          >
+            <GripVertical className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-data-[dragging=true]:opacity-100" />
+          </TableCell>
+        )}
+        <RuleRowCells
+          item={item}
+          locked={locked}
+          onToggle={handleToggle}
+          onUpdateRule={handleUpdateRule}
+          onCommitExclusions={handleCommitExclusions}
+          onDelete={handleDelete}
+          onMoveToTop={handleMoveToTop}
+        />
       </TableRow>
     )
   },
   (prevProps, nextProps) => {
-    return prevProps.item === nextProps.item && prevProps.highlighted === nextProps.highlighted && prevProps.id === nextProps.id
+    return (
+      prevProps.item === nextProps.item &&
+      prevProps.highlighted === nextProps.highlighted &&
+      prevProps.id === nextProps.id &&
+      prevProps.locked === nextProps.locked
+    )
   },
 )
 
@@ -227,10 +350,11 @@ interface FilteredRuleRowProps {
   onUpdateRule: (field: 'rule' | 'target' | 'exclusions', value: string | string[]) => void
   onDelete: () => void
   onMoveToTop: () => void
+  locked?: boolean
 }
 
 const FilteredRuleRow = memo(
-  function FilteredRuleRow({ item, highlighted, highlightRef, onToggle, onUpdateRule, onDelete, onMoveToTop }: FilteredRuleRowProps) {
+  function FilteredRuleRow({ item, highlighted, highlightRef, onToggle, onUpdateRule, onDelete, onMoveToTop, locked = false }: FilteredRuleRowProps) {
     const handleToggle = useCallback(() => onToggle(), [onToggle])
     const handleUpdateRule = useCallback(
       (field: 'rule' | 'target') => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -249,32 +373,20 @@ const FilteredRuleRow = memo(
 
     return (
       <TableRow ref={highlighted ? highlightRef : undefined} className={highlighted ? RULE_ROW_HIGHLIGHT_CLASS : undefined}>
-        <TableCell>
-          <Checkbox checked={item.enabled} onCheckedChange={handleToggle} />
-        </TableCell>
-        <TableCell>
-          <Input value={item.rule} onChange={handleUpdateRule('rule')} placeholder="example.com" className="h-8" />
-        </TableCell>
-        <TableCell>
-          <ExclusionsInput key={JSON.stringify(item.exclusions || [])} exclusions={item.exclusions || []} onCommit={handleCommitExclusions} />
-        </TableCell>
-        <TableCell>
-          <Input value={item.target} onChange={handleUpdateRule('target')} placeholder="127.0.0.1:3000" className="h-8" />
-        </TableCell>
-        <TableCell>
-          <div className="flex gap-1">
-            <Button variant="ghost" size="icon-sm" onClick={handleMoveToTop} className="text-muted-foreground hover:text-primary" title="置顶" aria-label="置顶">
-              <ArrowUpToLine className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon-sm" onClick={handleDelete} className="text-muted-foreground hover:text-destructive" aria-label="删除规则">
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        </TableCell>
+        <RuleRowCells
+          item={item}
+          locked={locked}
+          onToggle={handleToggle}
+          onUpdateRule={handleUpdateRule}
+          onCommitExclusions={handleCommitExclusions}
+          onDelete={handleDelete}
+          onMoveToTop={handleMoveToTop}
+        />
       </TableRow>
     )
   },
-  (prevProps, nextProps) => prevProps.item === nextProps.item && prevProps.highlighted === nextProps.highlighted,
+  (prevProps, nextProps) =>
+    prevProps.item === nextProps.item && prevProps.highlighted === nextProps.highlighted && prevProps.locked === nextProps.locked,
 )
 
 function RuleTableColGroup({ showDragColumn }: { showDragColumn: boolean }) {
@@ -329,6 +441,9 @@ interface SortableRuleFileTabProps {
   toggleRuleFile: (name: string, enabled: boolean) => Promise<boolean>
   onDelete: (name: string) => void
   dragDisabled: boolean
+  /** Issue #137: effective (optimistic) lock state of this ruleset. */
+  readonly: boolean
+  onToggleReadonly?: (name: string, readonly: boolean) => void
 }
 
 function SortableRuleFileTab({
@@ -344,6 +459,8 @@ function SortableRuleFileTab({
   toggleRuleFile,
   onDelete,
   dragDisabled,
+  readonly,
+  onToggleReadonly,
 }: SortableRuleFileTabProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: file.name,
@@ -354,7 +471,8 @@ function SortableRuleFileTab({
   const style: React.CSSProperties = {
     transform: listDragTransformStyle(transform),
     transition: isDragging ? undefined : transition,
-    opacity: isDragging ? 0.85 : 1,
+    // Only while dragging: an inline opacity would override the disabled-row fade class.
+    opacity: isDragging ? 0.85 : undefined,
     position: 'relative',
     zIndex: isDragging ? 1 : undefined,
     borderLeftWidth: 0,
@@ -366,8 +484,10 @@ function SortableRuleFileTab({
       ref={setNodeRef}
       style={style}
       value={file.name}
-      className="group relative h-auto w-full min-w-0 flex-none justify-start gap-2 rounded-none border-x-0 border-b border-border/40 px-3 py-2 text-sm font-medium shadow-none hover:bg-accent/60 after:hidden group-data-[variant=line]/tabs-list:data-[state=active]:border-x-0 group-data-[variant=line]/tabs-list:data-[state=active]:border-b group-data-[variant=line]/tabs-list:data-[state=active]:border-border/40 group-data-[variant=line]/tabs-list:data-[state=active]:bg-accent group-data-[variant=line]/tabs-list:data-[state=active]:text-accent-foreground group-data-[variant=line]/tabs-list:data-[state=active]:shadow-none group-data-[variant=line]/tabs-list:data-[state=active]:after:opacity-0 dark:group-data-[variant=line]/tabs-list:data-[state=active]:border-x-0 dark:group-data-[variant=line]/tabs-list:data-[state=active]:border-border/40"
+      className="group relative h-auto w-full min-w-0 flex-none justify-start gap-2 rounded-none data-[ruleset-enabled=false]:data-[readonly=false]:opacity-60 border-x-0 border-b border-border/40 px-3 py-2 text-sm font-medium shadow-none hover:bg-accent/60 after:hidden group-data-[variant=line]/tabs-list:data-[state=active]:border-x-0 group-data-[variant=line]/tabs-list:data-[state=active]:border-b group-data-[variant=line]/tabs-list:data-[state=active]:border-border/40 group-data-[variant=line]/tabs-list:data-[state=active]:bg-accent group-data-[variant=line]/tabs-list:data-[state=active]:text-accent-foreground group-data-[variant=line]/tabs-list:data-[state=active]:shadow-none group-data-[variant=line]/tabs-list:data-[state=active]:after:opacity-0 dark:group-data-[variant=line]/tabs-list:data-[state=active]:border-x-0 dark:group-data-[variant=line]/tabs-list:data-[state=active]:border-border/40"
       data-dragging={isDragging ? 'true' : undefined}
+      data-readonly={readonly ? 'true' : 'false'}
+      data-ruleset-enabled={file.enabled ? 'true' : 'false'}
     >
       {!dragDisabled && (
         <span
@@ -384,23 +504,60 @@ function SortableRuleFileTab({
       <span
         role="button"
         tabIndex={0}
-        className="shrink-0"
+        data-slot="rule-file-switch"
+        aria-label={file.enabled ? `禁用规则集 ${file.name}` : `启用规则集 ${file.name}`}
+        aria-disabled={readonly || undefined}
+        className={readonly ? 'shrink-0 cursor-not-allowed' : 'shrink-0'}
         onClick={(e) => {
           e.stopPropagation()
+          if (readonly) return
           void toggleRuleFile(file.name, !file.enabled)
         }}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault()
             event.stopPropagation()
+            if (readonly) return
             void toggleRuleFile(file.name, !file.enabled)
           }
         }}
         onPointerDown={(event) => event.stopPropagation()}
-        title={file.enabled ? '点击禁用路由' : '点击启用路由'}
+        title={readonly ? RULESET_LOCKED_HINT : file.enabled ? '点击禁用路由' : '点击启用路由'}
       >
-        {file.enabled ? <ToggleRight className="size-4 text-primary" /> : <ToggleLeft className="size-4 text-muted-foreground" />}
+        {file.enabled ? (
+          <ToggleRight className={readonly ? LOCKED_SWITCH_ON_CLASS : 'size-4 text-primary'} />
+        ) : (
+          <ToggleLeft className="size-4 text-muted-foreground" />
+        )}
       </span>
+      {onToggleReadonly && (
+        <span
+          role="button"
+          tabIndex={0}
+          data-slot="rule-file-lock"
+          aria-pressed={readonly}
+          aria-label={readonly ? '解锁规则集' : '锁定规则集'}
+          title={readonly ? '解锁规则集' : '锁定规则集'}
+          className={cn(
+            'inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none transition-opacity hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50',
+            readonly ? 'opacity-100' : OPEN_LOCK_VISIBILITY_CLASS,
+          )}
+          onClick={(event) => {
+            event.stopPropagation()
+            onToggleReadonly(file.name, !readonly)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              event.stopPropagation()
+              onToggleReadonly(file.name, !readonly)
+            }
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          {readonly ? <Lock className="size-4" aria-hidden="true" /> : <LockOpen className="size-4" aria-hidden="true" />}
+        </span>
+      )}
       {renamingFileName === file.name ? (
         <input
           value={renameDraft}
@@ -429,12 +586,21 @@ function SortableRuleFileTab({
         />
       ) : (
         <span
-          className="min-w-0 flex-1 truncate text-left"
+          className={cn(
+            'min-w-0 flex-1 truncate text-left',
+            // Grey name marks a locked row; once selected it goes back to full
+            // foreground so it keeps >= 4.5:1 on the accent highlight.
+            readonly && 'text-muted-foreground group-data-[state=active]:text-foreground cursor-not-allowed',
+          )}
+          data-slot="rule-file-name"
+          // Issue #143: renaming a locked ruleset is not allowed; unlock it first.
+          aria-disabled={readonly || undefined}
           onDoubleClick={(event) => {
             event.stopPropagation()
+            if (readonly) return
             beginRename(file.name)
           }}
-          title="双击重命名"
+          title={readonly ? RULESET_LOCKED_HINT : '双击重命名'}
         >
           {file.name}
         </span>
@@ -446,20 +612,27 @@ function SortableRuleFileTab({
         <span
           role="button"
           tabIndex={0}
-          className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+          aria-label={`删除规则文件 ${file.name}`}
+          aria-disabled={readonly || undefined}
+          className={cn(
+            'opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground',
+            readonly ? 'cursor-not-allowed group-hover:opacity-50' : 'hover:text-destructive',
+          )}
           onClick={(e) => {
             e.stopPropagation()
+            if (readonly) return
             onDelete(file.name)
           }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault()
               event.stopPropagation()
+              if (readonly) return
               onDelete(file.name)
             }
           }}
           onPointerDown={(event) => event.stopPropagation()}
-          title="删除规则文件"
+          title={readonly ? RULESET_LOCKED_HINT : '删除规则文件'}
         >
           <X className="size-3" />
         </span>
@@ -484,9 +657,89 @@ export function RuleConfig(props: RuleConfigProps) {
     renameRuleFile,
     deleteRuleFile,
     reorderRuleFiles,
+    setRuleFileReadonly,
   } = props
 
   const [saving, setSaving] = useState(false)
+
+  // Issue #137: ruleset lock. The icon flips at once (optimistic override),
+  // the list title bar reads 「保存中…」 then 「已保存」, and a failed save rolls back.
+  const [readonlyOverrides, setReadonlyOverrides] = useState<Record<string, boolean>>({})
+  const [lockStatus, setLockStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const lockSeqRef = useRef(0)
+  const lockStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const isFileReadonly = useCallback(
+    (name: string | null | undefined): boolean => {
+      if (!name) return false
+      if (name in readonlyOverrides) return readonlyOverrides[name]
+      return Boolean(ruleFiles.find((file) => file.name === name)?.readonly)
+    },
+    [readonlyOverrides, ruleFiles],
+  )
+
+  // Drop overrides once the server data agrees (or the file is gone).
+  useEffect(() => {
+    setReadonlyOverrides((prev) => {
+      const names = Object.keys(prev)
+      if (names.length === 0) return prev
+      const next = { ...prev }
+      let changed = false
+      for (const name of names) {
+        const file = ruleFiles.find((item) => item.name === name)
+        if (!file || Boolean(file.readonly) === prev[name]) {
+          delete next[name]
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [ruleFiles])
+
+  useEffect(() => () => {
+    if (lockStatusTimerRef.current) clearTimeout(lockStatusTimerRef.current)
+  }, [])
+
+  const toggleRulesetLock = useCallback(
+    async (name: string, readonly: boolean): Promise<boolean> => {
+      if (!setRuleFileReadonly) return false
+      const seq = ++lockSeqRef.current
+      if (lockStatusTimerRef.current) clearTimeout(lockStatusTimerRef.current)
+      setReadonlyOverrides((prev) => ({ ...prev, [name]: readonly }))
+      setLockStatus('saving')
+      let result: ReadonlyToggleResult
+      try {
+        result = await setRuleFileReadonly(name, readonly)
+      } catch (err) {
+        result = { success: false, error: err instanceof Error ? err.message : undefined }
+      }
+      if (!result.success) {
+        setReadonlyOverrides((prev) => {
+          const next = { ...prev }
+          delete next[name]
+          return next
+        })
+        if (seq === lockSeqRef.current) setLockStatus('idle')
+        toast.error(result.error ? `${readonly ? '锁定' : '解锁'}失败：${result.error}` : `${readonly ? '锁定' : '解锁'}失败`)
+        return false
+      }
+      if (seq === lockSeqRef.current) {
+        setLockStatus('saved')
+        lockStatusTimerRef.current = setTimeout(() => setLockStatus('idle'), 2000)
+      }
+      return true
+    },
+    [setRuleFileReadonly],
+  )
+
+  const handleToggleReadonly = useCallback(
+    (name: string, readonly: boolean) => {
+      void toggleRulesetLock(name, readonly)
+    },
+    [toggleRulesetLock],
+  )
+
+  const activeReadonly = isFileReadonly(activeFileName)
 
   const openRuleOverview = useCallback(() => {
     window.dispatchEvent(
@@ -644,6 +897,7 @@ export function RuleConfig(props: RuleConfigProps) {
 
   // 从文件导入 → 创建新规则文件
   const handleImportFile = useCallback(async () => {
+    if (activeReadonly) return
     if (supportsOpenFilePicker(window)) {
       try {
         const [fileHandle] = await window.showOpenFilePicker({
@@ -669,7 +923,7 @@ export function RuleConfig(props: RuleConfigProps) {
       }
     }
     importFileRef.current?.click()
-  }, [])
+  }, [activeReadonly])
 
   const handleImportInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -688,12 +942,13 @@ export function RuleConfig(props: RuleConfigProps) {
 
   // 文本导入：打开弹窗
   const handleImportText = useCallback(() => {
+    if (activeReadonly) return
     setTextImportName(getAvailableRuleFileName(ruleFiles, '文本导入'))
     setTextImportDraft('')
     setTextImportError(null)
     setTextImportCreating(false)
     setTextImportOpen(true)
-  }, [ruleFiles])
+  }, [activeReadonly, ruleFiles])
 
   // 文本导入弹窗：解析预览
   const textImportParsedRules = useMemo(
@@ -735,7 +990,7 @@ export function RuleConfig(props: RuleConfigProps) {
 
   // 保存当前文件
   const handleSave = useCallback(async () => {
-    if (!activeFileName) return
+    if (!activeFileName || activeReadonly) return
     // 文本模式下若有未识别行，阻止保存（按钮已禁用，此处为防御性兜底）
     if (viewMode === 'text' && getEprcTextDiagnostics(textDraft).length > 0) return
     setSaving(true)
@@ -747,7 +1002,7 @@ export function RuleConfig(props: RuleConfigProps) {
     } else {
       toast.error('规则保存失败')
     }
-  }, [activeFileName, fetchRuleFiles, rules, saveFileContent, saveRuleFileRawContent, textDraft, viewMode])
+  }, [activeFileName, activeReadonly, fetchRuleFiles, rules, saveFileContent, saveRuleFileRawContent, textDraft, viewMode])
 
   // 删除规则文件
   const handleDelete = useCallback(
@@ -759,10 +1014,11 @@ export function RuleConfig(props: RuleConfigProps) {
   )
 
   const beginRename = useCallback((name: string) => {
+    if (isFileReadonly(name)) return
     setRenamingFileName(name)
     setRenameDraft(name)
     setRenameError(null)
-  }, [])
+  }, [isFileReadonly])
 
   const cancelRename = useCallback(() => {
     setRenamingFileName(null)
@@ -782,53 +1038,65 @@ export function RuleConfig(props: RuleConfigProps) {
       return
     }
 
+    // Issue #143: a locked ruleset cannot be renamed from the UI; unlock it first.
+    if (isFileReadonly(renamingFileName)) {
+      setRenameError(RULESET_LOCKED_HINT)
+      return
+    }
+
     renameInFlightRef.current = true
     try {
       const result = await renameRuleFile(renamingFileName, nextName)
       if (result.success) {
+        const finalName = result.name || nextName
         setRenamingFileName(null)
         setRenameDraft('')
         setRenameError(null)
-        await fetchFileContent(result.name || nextName)
+        await fetchFileContent(finalName)
       } else {
         setRenameError(result.error || '重命名失败')
       }
     } finally {
       renameInFlightRef.current = false
     }
-  }, [cancelRename, fetchFileContent, renameDraft, renameRuleFile, renamingFileName])
+  }, [cancelRename, fetchFileContent, isFileReadonly, renameDraft, renameRuleFile, renamingFileName])
 
   // 规则编辑操作
   const toggleRule = useCallback(
     (index: number) => {
+      if (activeReadonly) return
       startTransition(() => setRules((prev) => prev.map((r, i) => (i === index ? { ...r, enabled: !r.enabled } : r))))
     },
-    [setRules],
+    [activeReadonly, setRules],
   )
 
   const updateRule = useCallback(
     (index: number, field: 'rule' | 'target' | 'exclusions', value: string | string[]) => {
+      if (activeReadonly) return
       setRules((prev) => prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)))
     },
-    [setRules],
+    [activeReadonly, setRules],
   )
 
   const deleteRule = useCallback(
     (index: number) => {
+      if (activeReadonly) return
       setRuleRowIds((prev) => prev.filter((_, i) => i !== index))
       startTransition(() => setRules((prev) => prev.filter((_, i) => i !== index)))
     },
-    [setRules],
+    [activeReadonly, setRules],
   )
 
   const addRule = useCallback(() => {
+    if (activeReadonly) return
     setRuleRowIds((prev) => [createRuleRowId(), ...prev])
     startTransition(() => setRules((prev) => [{ enabled: true, rule: '', target: '', exclusions: [] }, ...prev]))
     setHighlightIndex(0)
-  }, [createRuleRowId, setRules])
+  }, [activeReadonly, createRuleRowId, setRules])
 
   const moveToTop = useCallback(
     (index: number) => {
+      if (activeReadonly) return
       setRuleRowIds((prev) => arrayMove(prev, index, 0))
       startTransition(() =>
         setRules((prev) => {
@@ -840,20 +1108,22 @@ export function RuleConfig(props: RuleConfigProps) {
       )
       setHighlightIndex(0)
     },
-    [setRules],
+    [activeReadonly, setRules],
   )
 
   const handleTextChange = useCallback(
     (value: string) => {
+      if (activeReadonly) return
       textDraftRef.current = value
       setTextDraft(value)
       setRules(parseEprcRules(value))
     },
-    [setRules],
+    [activeReadonly, setRules],
   )
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
+      if (activeReadonly) return
       const { active, over } = event
       const nextRowIds = over ? getRuleRowOrder(ruleRowIds, active.id, over.id) : ruleRowIds
 
@@ -864,7 +1134,7 @@ export function RuleConfig(props: RuleConfigProps) {
         })
       }
     },
-    [ruleRowIds, setRules],
+    [activeReadonly, ruleRowIds, setRules],
   )
 
   const sensors = useSensors(
@@ -990,7 +1260,7 @@ export function RuleConfig(props: RuleConfigProps) {
   const textHasErrors = viewMode === 'text' && textDiagnostics.length > 0
   const showDragColumn = !ruleFilter && !targetFilter
 
-  const canSave = Boolean(activeFileName) && !saving && !textLoading && !textHasErrors
+  const canSave = Boolean(activeFileName) && !activeReadonly && !saving && !textLoading && !textHasErrors
   useSaveShortcut({
     active: !textImportOpen,
     enabled: canSave,
@@ -1022,7 +1292,12 @@ export function RuleConfig(props: RuleConfigProps) {
       list={
       <>
         <PaneBar>
-          <PaneTitle>规则文件</PaneTitle>
+          <div className="flex min-w-0 items-center gap-2">
+            <PaneTitle>规则文件</PaneTitle>
+            <span role="status" aria-live="polite" data-slot="rule-lock-status" className="shrink-0 text-xs text-muted-foreground">
+              {lockStatus === 'saving' ? '保存中…' : lockStatus === 'saved' ? '已保存' : ''}
+            </span>
+          </div>
           <div data-slot="rule-file-actions" className="flex shrink-0 items-center">
             {isCreating ? (
               <div
@@ -1121,6 +1396,8 @@ export function RuleConfig(props: RuleConfigProps) {
                       toggleRuleFile={toggleRuleFile}
                       onDelete={handleDelete}
                       dragDisabled={ruleFiles.length < 2}
+                      readonly={isFileReadonly(rf.name)}
+                      onToggleReadonly={setRuleFileReadonly ? handleToggleReadonly : undefined}
                     />
                   ))}
                 </TabsList>
@@ -1134,9 +1411,34 @@ export function RuleConfig(props: RuleConfigProps) {
         <EditorTitleBar
           data-testid="rule-editor-title-bar"
           scrolled={editorScroll.scrolled}
-          title={activeFileName ? `编辑规则 · ${activeFileName}` : '编辑规则'}
+          title={
+            activeFileName && activeReadonly ? (
+              <span className="inline-flex min-w-0 max-w-full items-center gap-2">
+                <span className="min-w-0 truncate">{`编辑规则 · ${activeFileName}`}</span>
+                <Badge variant="outline" data-slot="ruleset-readonly-badge" className="text-muted-foreground">
+                  <Lock aria-hidden="true" />
+                  只读
+                </Badge>
+              </span>
+            ) : activeFileName ? (
+              `编辑规则 · ${activeFileName}`
+            ) : (
+              '编辑规则'
+            )
+          }
           actions={
-            activeFileName ? (
+            activeFileName && activeReadonly ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-slot="editor-unlock"
+                onClick={() => void toggleRulesetLock(activeFileName, false)}
+              >
+                <LockOpen data-icon="inline-start" />
+                解锁
+              </Button>
+            ) : activeFileName ? (
               <EditorSaveButton
                 onClick={handleSave}
                 saving={saving}
@@ -1209,15 +1511,19 @@ export function RuleConfig(props: RuleConfigProps) {
               )}
               {viewMode === 'table' && (
                 <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={addRule}
-                    disabled={!activeFileName}
-                  >
-                    <Plus data-icon="inline-start" />
-                    添加规则
-                  </Button>
+                  <LockedHint locked={activeReadonly}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={addRule}
+                      disabled={!activeFileName}
+                      aria-disabled={activeReadonly || undefined}
+                      className={activeReadonly ? LOCKED_CONTROL_CLASS : undefined}
+                    >
+                      <Plus data-icon="inline-start" />
+                      添加规则
+                    </Button>
+                  </LockedHint>
                   <input
                     ref={importFileRef}
                     type="file"
@@ -1225,14 +1531,30 @@ export function RuleConfig(props: RuleConfigProps) {
                     className="hidden"
                     onChange={handleImportInputChange}
                   />
-                  <Button variant="outline" size="sm" onClick={handleImportFile}>
-                    <FolderOpen data-icon="inline-start" />
-                    从文件加载
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={handleImportText}>
-                    <ClipboardPaste data-icon="inline-start" />
-                    文本导入
-                  </Button>
+                  <LockedHint locked={activeReadonly}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleImportFile}
+                      aria-disabled={activeReadonly || undefined}
+                      className={activeReadonly ? LOCKED_CONTROL_CLASS : undefined}
+                    >
+                      <FolderOpen data-icon="inline-start" />
+                      从文件加载
+                    </Button>
+                  </LockedHint>
+                  <LockedHint locked={activeReadonly}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleImportText}
+                      aria-disabled={activeReadonly || undefined}
+                      className={activeReadonly ? LOCKED_CONTROL_CLASS : undefined}
+                    >
+                      <ClipboardPaste data-icon="inline-start" />
+                      文本导入
+                    </Button>
+                  </LockedHint>
                 </>
               )}
             </div>
@@ -1328,6 +1650,7 @@ export function RuleConfig(props: RuleConfigProps) {
                 value={displayedTextDraft}
                 onChange={handleTextChange}
                 disabled={!activeFileName || textLoading}
+                readOnly={activeReadonly}
                 placeholder={
                   activeFileName
                     ? 'example.com !/api localhost:3000'
@@ -1407,6 +1730,7 @@ export function RuleConfig(props: RuleConfigProps) {
                         onUpdateRule={createUpdateRuleCallback(index)}
                         onDelete={createDeleteRuleCallback(index)}
                         onMoveToTop={createMoveToTopCallback(index)}
+                        locked={activeReadonly}
                       />
                     ))
                   ) : (
@@ -1430,6 +1754,7 @@ export function RuleConfig(props: RuleConfigProps) {
                             onUpdateRule={createUpdateRuleCallback(index)}
                             onDelete={createDeleteRuleCallback(index)}
                             onMoveToTop={createMoveToTopCallback(index)}
+                            locked={activeReadonly}
                           />
                         ))}
                       </SortableContext>

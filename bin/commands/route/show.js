@@ -5,7 +5,7 @@
 const output = require('../../lib/output')
 const { isProxyRunning } = require('../../lib/proxy-detect')
 const { apiGet } = require('../../lib/api-client')
-const { getRuleFileContent, parseEprcWithExclusions } = require('../../lib/file-access')
+const { getRuleFileContent, parseEprcWithExclusions, isRuleFileReadonly } = require('../../lib/file-access')
 
 // Parse arguments (skip 'route' and 'show' from argv)
 const args = process.argv.slice(4)
@@ -26,10 +26,15 @@ async function run() {
   let content = null
   let ruleMap = {}
   let excludeMap = {}
+  // Issue #137: report the lock state (read-only for the CLI either way).
+  let readonly = false
 
   if (running) {
     try {
       content = await apiGet(`/api/rule-files/${encodeURIComponent(fileName)}/content`)
+      const files = await apiGet('/api/rule-files')
+      const info = Array.isArray(files) ? files.find((f) => f && f.name === fileName) : null
+      readonly = Boolean(info && info.readonly)
       const parsed = parseEprcWithExclusions(typeof content === 'string' ? content : String(content))
       ruleMap = parsed.ruleMap
       excludeMap = parsed.excludeMap
@@ -43,6 +48,7 @@ async function run() {
       const parsed = parseEprcWithExclusions(content)
       ruleMap = parsed.ruleMap
       excludeMap = parsed.excludeMap
+      readonly = isRuleFileReadonly(fileName)
     }
   } else {
     content = getRuleFileContent(fileName)
@@ -53,6 +59,7 @@ async function run() {
     const parsed = parseEprcWithExclusions(content)
     ruleMap = parsed.ruleMap
     excludeMap = parsed.excludeMap
+    readonly = isRuleFileReadonly(fileName)
   }
 
   // Build display rules (handle [marker] syntax)
@@ -76,6 +83,7 @@ async function run() {
   if (jsonFlag) {
     output.jsonRaw({
       file: fileName,
+      readonly,
       rules: displayRules,
       ruleCount: Object.keys(displayRules).length,
       exclusionCount: totalExclusions
@@ -84,6 +92,7 @@ async function run() {
   }
 
   output.header(`Route File: ${fileName}`)
+  output.kv('Read-only', readonly ? 'Yes (unlock in the Meddle UI)' : 'No')
   output.kv('Rules', Object.keys(displayRules).length)
   if (totalExclusions > 0) {
     output.kv('Exclusions', totalExclusions)

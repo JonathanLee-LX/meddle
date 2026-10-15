@@ -3,6 +3,19 @@ import * as path from 'path'
 import { Application, Request, Response } from 'express'
 import { ServerContext, RuleMap } from './index'
 import { parseEprcWithExclusions, routeRulesToLegacyMaps, type ExcludeMap, type RouteRuleEntry } from '../helpers'
+import {
+    assertRuleFileWritable,
+    assertRuleFilesWritable,
+    getReadonlyRuleFileNames,
+    getUiToken,
+    hasValidUiToken,
+    isRuleFileReadonly,
+    isRulesetReadonlyError,
+    isSameOriginRequest,
+    rulesetReadonlyBody,
+    RULESET_READONLY_STATUS,
+    setRuleFileReadonly,
+} from './ruleset-lock'
 
 const DEFAULT_RULE_NAME = '默认规则'
 
@@ -169,6 +182,8 @@ export function setRuleFileOrder(ctx: ServerContext, names: string[]): string[] 
 export interface RuleFileInfo {
     name: string
     enabled: boolean
+    /** Issue #137: locked rulesets reject every write from CLI / MCP / API. */
+    readonly: boolean
     ruleCount: number
     excludeCount: number
 }
@@ -192,8 +207,9 @@ export function writeRuleFileContent(ctx: ServerContext, name: string, content: 
     const safeName = normalizeRuleFileName(name)
     const filePath = ruleFilePath(ctx, safeName)
     if (!fs.existsSync(filePath)) {
-        throw new Error(`规则文件 "${safeName}" 不存在`)
+        throw ruleFileNotFound(safeName)
     }
+    assertRuleFileWritable(ctx, safeName)
     fs.writeFileSync(filePath, content, 'utf8')
     ctx.reloadAllRuleFiles()
 }
@@ -206,6 +222,8 @@ export function createRuleFile(ctx: ServerContext, name: string, content = '', e
         throw new Error(`规则文件 "${safeName}" 已存在`)
     }
 
+    // Drop stale lock entries first so a new file never inherits an old lock.
+    getReadonlyRuleFileNames(ctx)
     fs.writeFileSync(filePath, content, 'utf8')
     ensureRuleFileInOrder(ctx, safeName)
 
@@ -222,6 +240,7 @@ export function createRuleFile(ctx: ServerContext, name: string, content = '', e
     return {
         name: safeName,
         enabled,
+        readonly: false,
         ruleCount: Object.keys(ruleMap).length,
         excludeCount: Object.values(excludeMap).reduce((total, exclusions) => total + exclusions.length, 0),
     }
@@ -234,6 +253,12 @@ export function setActiveRuleFileNames(ctx: ServerContext, names: string[]): str
     if (missingNames.length > 0) {
         throw new Error(`规则文件不存在: ${missingNames.join(', ')}`)
     }
+
+    // A locked ruleset may not be switched on or off.
+    const previous = new Set(getActiveFileNames(ctx))
+    const next = new Set(safeNames)
+    const changed = [...previous].filter((name) => !next.has(name)).concat(safeNames.filter((name) => !previous.has(name)))
+    assertRuleFilesWritable(ctx, changed)
 
     setActiveFileNames(ctx, safeNames)
 
@@ -280,6 +305,7 @@ export function listRuleFiles(ctx: ServerContext): RuleFileInfo[] {
     const activeNames = getActiveFileNames(ctx)
     const files = readDiskRuleFileNames(ctx)
     const orderedNames = resolveRuleFileOrder(files, getStoredRuleFileOrder(ctx), activeNames)
+    const readonlyNames = new Set(getReadonlyRuleFileNames(ctx))
 
     // Persist seeded order and newly discovered / deleted names so tabs stay stable
     const stored = getStoredRuleFileOrder(ctx)
@@ -307,10 +333,94 @@ export function listRuleFiles(ctx: ServerContext): RuleFileInfo[] {
         return {
             name,
             enabled: activeNames.includes(name),
+            readonly: readonlyNames.has(name),
             ruleCount,
             excludeCount,
         }
     })
+}
+
+export interface RuleFileDetail extends RuleFileInfo {
+    content: string
+}
+
+/** Detail of one ruleset (info + raw content). Read-only operation. */
+export function getRuleFileDetail(ctx: ServerContext, name: string): RuleFileDetail {
+    const content = readRuleFileContent(ctx, name)
+    const safeName = normalizeRuleFileName(name)
+    const info = listRuleFiles(ctx).find((file) => file.name === safeName)
+    if (!info) throw new Error(`规则文件 "${safeName}" 不存在`)
+    return { ...info, content }
+}
+
+function ruleFileNotFound(name: string): Error & { status: number } {
+    return Object.assign(new Error(`规则文件 "${name}" 不存在`), { status: 404 })
+}
+
+/**
+ * Enable / disable and / or rename a ruleset. A locked ruleset is rejected
+ * before anything changes (the web UI must unlock it first).
+ */
+export function updateRuleFile(ctx: ServerContext, rawName: string, changes: { enabled?: boolean; newName?: string }): { name: string } {
+    const name = normalizeRuleFileName(rawName)
+    const filePath = ruleFilePath(ctx, name)
+    if (!fs.existsSync(filePath)) throw ruleFileNotFound(name)
+    assertRuleFileWritable(ctx, name)
+
+    const { enabled, newName } = changes
+    let currentName = name
+    const activeNames = getActiveFileNames(ctx)
+
+    if (newName && newName.trim() && newName.trim() !== name) {
+        const safeName = normalizeRuleFileName(newName)
+        const newPath = ruleFilePath(ctx, safeName)
+        if (fs.existsSync(newPath)) {
+            throw Object.assign(new Error(`规则文件 "${safeName}" 已存在`), { status: 409 })
+        }
+        // Drop stale lock entries so the new name does not inherit an old lock.
+        getReadonlyRuleFileNames(ctx)
+        fs.renameSync(filePath, newPath)
+        const idx = activeNames.indexOf(name)
+        if (idx !== -1) activeNames[idx] = safeName
+        currentName = safeName
+        renameRuleFileInOrder(ctx, name, safeName)
+    }
+
+    if (enabled !== undefined) {
+        const idx = activeNames.indexOf(currentName)
+        if (enabled && idx === -1) {
+            activeNames.push(currentName)
+        } else if (!enabled && idx !== -1) {
+            activeNames.splice(idx, 1)
+        }
+    }
+
+    const fileOrder = resolveRuleFileOrder(
+        readDiskRuleFileNames(ctx),
+        getStoredRuleFileOrder(ctx),
+        activeNames,
+    )
+    setActiveFileNames(ctx, syncActiveRuleFilesToOrder(activeNames, fileOrder))
+    ctx.reloadAllRuleFiles()
+    return { name: currentName }
+}
+
+/** Delete a ruleset. A locked ruleset is rejected and stays on disk. */
+export function deleteRuleFile(ctx: ServerContext, rawName: string): void {
+    const name = normalizeRuleFileName(rawName)
+    const filePath = ruleFilePath(ctx, name)
+    if (!fs.existsSync(filePath)) throw ruleFileNotFound(name)
+    assertRuleFileWritable(ctx, name)
+
+    fs.unlinkSync(filePath)
+    const activeNames = getActiveFileNames(ctx)
+    const idx = activeNames.indexOf(name)
+    if (idx !== -1) {
+        activeNames.splice(idx, 1)
+        setActiveFileNames(ctx, activeNames)
+    }
+    removeRuleFileFromOrder(ctx, name)
+    ctx.reloadAllRuleFiles()
 }
 
 export interface MergedRules {
@@ -583,124 +693,111 @@ export function registerRuleFilesRoutes(app: Application, ctx: ServerContext): v
         }
 
         res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+        res.setHeader('X-Meddle-Ruleset-Readonly', isRuleFileReadonly(ctx, name) ? 'true' : 'false')
         res.write(fs.readFileSync(filePath, 'utf8'))
         res.end()
     })
 
-    // PUT /api/rule-files/:name/content - 保存规则文件内容
+    // GET /api/rule-files/:name - 规则集详情（含 readonly 与内容）
+    app.get('/api/rule-files/:name', (req: Request, res: Response) => {
+        const name = decodeURIComponent(req.params.name as string)
+        if (!fs.existsSync(ruleFilePath(ctx, name))) {
+            sendJson(res, 404, { error: '规则文件不存在' })
+            return
+        }
+        try {
+            sendJson(res, 200, getRuleFileDetail(ctx, name))
+        } catch (err) {
+            sendError(res, err)
+        }
+    })
+
+    // PUT /api/rule-files/:name/content - 保存规则文件内容（锁住时拒绝）
     app.put('/api/rule-files/:name/content', (req: Request, res: Response) => {
-        res.setHeader('Content-Type', 'application/json')
         const name = decodeURIComponent(req.params.name as string)
-        const filePath = ruleFilePath(ctx, name)
-
-        if (!fs.existsSync(filePath)) {
-            res.statusCode = 404
-            res.write(JSON.stringify({ error: '规则文件不存在' }))
-            res.end()
-            return
-        }
-
         try {
-            const text = typeof req.body === 'string' ? req.body : (req.body.content ?? '')
-            fs.writeFileSync(filePath, text, 'utf8')
-            ctx.reloadAllRuleFiles()
-            res.write(JSON.stringify({ status: 'success' }))
+            const text = typeof req.body === 'string' ? req.body : (req.body?.content ?? '')
+            writeRuleFileContent(ctx, name, text)
+            sendJson(res, 200, { status: 'success' })
         } catch (err) {
-            res.statusCode = 500
-            res.write(JSON.stringify({ error: (err as Error).message }))
+            sendError(res, err)
         }
-        res.end()
     })
 
-    // PUT /api/rule-files/:name - 更新规则文件属性（启用/禁用、重命名）
+    // PUT /api/rule-files/:name/readonly - 加锁 / 解锁（仅 Web 界面：页面令牌 + 同源）
+    app.put('/api/rule-files/:name/readonly', (req: Request, res: Response) => {
+        const rawName = decodeURIComponent(req.params.name as string)
+        if (!isSameOriginRequest(req)) {
+            sendJson(res, 403, { error: '只能在 Meddle 界面中加锁或解锁', code: 'UI_ORIGIN_REQUIRED' })
+            return
+        }
+        if (!hasValidUiToken(req, ctx)) {
+            sendJson(res, 403, { error: '界面令牌无效，请刷新 Meddle 页面后重试', code: 'UI_TOKEN_INVALID' })
+            return
+        }
+        const readonly = req.body?.readonly
+        if (typeof readonly !== 'boolean') {
+            sendJson(res, 400, { error: '缺少 readonly 布尔值' })
+            return
+        }
+        try {
+            const name = normalizeRuleFileName(rawName)
+            if (!fs.existsSync(ruleFilePath(ctx, name))) throw ruleFileNotFound(name)
+            setRuleFileReadonly(ctx, name, readonly)
+            sendJson(res, 200, { status: 'success', name, readonly })
+        } catch (err) {
+            sendError(res, err)
+        }
+    })
+
+    // PUT /api/rule-files/:name - 更新规则文件属性（启用/禁用、重命名；锁住时拒绝）
     app.put('/api/rule-files/:name', (req: Request, res: Response) => {
-        res.setHeader('Content-Type', 'application/json')
         const name = decodeURIComponent(req.params.name as string)
-        const filePath = ruleFilePath(ctx, name)
-
-        if (!fs.existsSync(filePath)) {
-            res.statusCode = 404
-            res.write(JSON.stringify({ error: '规则文件不存在' }))
-            res.end()
-            return
-        }
-
         try {
-            const { enabled, newName } = req.body
-            let currentName = name
-            const activeNames = getActiveFileNames(ctx)
-
-            if (newName && newName.trim() && newName.trim() !== name) {
-                const safeName = newName.trim().replace(/[/\\:*?"<>|]/g, '_')
-                const newPath = ruleFilePath(ctx, safeName)
-                if (fs.existsSync(newPath)) {
-                    res.statusCode = 409
-                    res.write(JSON.stringify({ error: `规则文件 "${safeName}" 已存在` }))
-                    res.end()
-                    return
-                }
-                fs.renameSync(filePath, newPath)
-                const idx = activeNames.indexOf(name)
-                if (idx !== -1) activeNames[idx] = safeName
-                currentName = safeName
-                renameRuleFileInOrder(ctx, name, safeName)
-            }
-
-            if (enabled !== undefined) {
-                const idx = activeNames.indexOf(currentName)
-                if (enabled && idx === -1) {
-                    activeNames.push(currentName)
-                } else if (!enabled && idx !== -1) {
-                    activeNames.splice(idx, 1)
-                }
-            }
-
-            const fileOrder = resolveRuleFileOrder(
-                readDiskRuleFileNames(ctx),
-                getStoredRuleFileOrder(ctx),
-                activeNames,
-            )
-            setActiveFileNames(ctx, syncActiveRuleFilesToOrder(activeNames, fileOrder))
-            ctx.reloadAllRuleFiles()
-
-            res.write(JSON.stringify({ status: 'success', name: currentName }))
+            const { enabled, newName } = req.body || {}
+            const result = updateRuleFile(ctx, name, { enabled, newName })
+            sendJson(res, 200, { status: 'success', name: result.name })
         } catch (err) {
-            res.statusCode = 500
-            res.write(JSON.stringify({ error: (err as Error).message }))
+            sendError(res, err)
         }
-        res.end()
     })
 
-    // DELETE /api/rule-files/:name - 删除规则文件
+    // DELETE /api/rule-files/:name - 删除规则文件（锁住时拒绝）
     app.delete('/api/rule-files/:name', (req: Request, res: Response) => {
-        res.setHeader('Content-Type', 'application/json')
         const name = decodeURIComponent(req.params.name as string)
-        const filePath = ruleFilePath(ctx, name)
+        try {
+            deleteRuleFile(ctx, name)
+            sendJson(res, 200, { status: 'success' })
+        } catch (err) {
+            sendError(res, err)
+        }
+    })
+}
 
-        if (!fs.existsSync(filePath)) {
-            res.statusCode = 404
-            res.write(JSON.stringify({ error: '规则文件不存在' }))
-            res.end()
+function sendJson(res: Response, status: number, body: unknown): void {
+    res.statusCode = status
+    res.setHeader('Content-Type', 'application/json')
+    res.write(JSON.stringify(body))
+    res.end()
+}
+
+function sendError(res: Response, err: unknown): void {
+    if (isRulesetReadonlyError(err)) {
+        sendJson(res, RULESET_READONLY_STATUS, rulesetReadonlyBody(err))
+        return
+    }
+    const status = typeof (err as { status?: unknown })?.status === 'number' ? (err as { status: number }).status : 500
+    sendJson(res, status, { error: (err as Error).message })
+}
+
+/** Page bootstrap for the UI token (fallback when index.html was not served by Meddle, e.g. Vite dev). */
+export function registerUiTokenRoute(app: Application, ctx: ServerContext): void {
+    app.get('/api/ui-token', (req: Request, res: Response) => {
+        res.setHeader('Cache-Control', 'no-store')
+        if (!isSameOriginRequest(req)) {
+            sendJson(res, 403, { error: '只能在 Meddle 界面中获取', code: 'UI_ORIGIN_REQUIRED' })
             return
         }
-
-        try {
-            fs.unlinkSync(filePath)
-
-            const activeNames = getActiveFileNames(ctx)
-            const idx = activeNames.indexOf(name)
-            if (idx !== -1) {
-                activeNames.splice(idx, 1)
-                setActiveFileNames(ctx, activeNames)
-            }
-            removeRuleFileFromOrder(ctx, name)
-
-            ctx.reloadAllRuleFiles()
-            res.write(JSON.stringify({ status: 'success' }))
-        } catch (err) {
-            res.statusCode = 500
-            res.write(JSON.stringify({ error: (err as Error).message }))
-        }
-        res.end()
+        sendJson(res, 200, { token: getUiToken(ctx) })
     })
 }

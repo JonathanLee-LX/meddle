@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import type { RuleItem, RuleFile } from '@/types'
 import { parseEprcRules, rulesToEprc } from '@/utils/eprc-parser'
+import { putRuleFileReadonly, type ReadonlyToggleResult } from '@/lib/ui-token'
 
 export function useRules() {
   const [rules, setRules] = useState<RuleItem[]>([])
@@ -174,6 +175,16 @@ export function useRules() {
     }
   }, [fetchRuleFiles, ruleFiles])
 
+  /** Issue #137: lock / unlock a ruleset (UI only; the caller shows the optimistic state). */
+  const setRuleFileReadonly = useCallback(async (name: string, readonly: boolean): Promise<ReadonlyToggleResult> => {
+    const result = await putRuleFileReadonly(name, readonly)
+    if (result.success) {
+      setRuleFiles((files) => files.map((file) => (file.name === name ? { ...file, readonly } : file)))
+      void fetchRuleFiles()
+    }
+    return result
+  }, [fetchRuleFiles])
+
   return {
     rules,
     setRules,
@@ -189,5 +200,6 @@ export function useRules() {
     renameRuleFile,
     deleteRuleFile,
     reorderRuleFiles,
+    setRuleFileReadonly,
   }
 }

@@ -20,6 +20,13 @@
   - 系统设置
   - SSL 证书
 
+### 规则集只读锁
+
+- **[只读规则集](./RULESET_READONLY.md)**
+  - 锁的存储位置与兼容性
+  - 被拒绝的写操作、`RULESET_READONLY` 错误码与 CLI 退出码 3
+  - 改名规则、令牌与同源校验的局限
+
 ### 日志与来源识别
 
 - **[请求来源应用识别](./APPLICATION_IDENTITY.md)**
