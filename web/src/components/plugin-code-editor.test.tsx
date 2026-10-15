@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { EditorPaneActionsProvider } from './editor-pane-actions'
 import { PluginCodeEditor } from './plugin-code-editor'
 
@@ -42,8 +42,9 @@ describe('PluginCodeEditor embedded heading', () => {
     )
 
     expect(await screen.findByTestId('plugin-code')).toHaveTextContent('exports.plugin')
-    expect(host).toHaveTextContent('保存')
-    expect(host).toHaveTextContent('保存并热加载')
+    // Save buttons carry a hidden sizing label (#140): assert accessible names, not textContent.
+    expect(within(host).getByRole('button', { name: '保存' })).toHaveAccessibleName('保存')
+    expect(within(host).getByRole('button', { name: '保存并热加载' })).toHaveAccessibleName('保存并热加载')
     expect(host).toHaveTextContent('还原')
     expect(host).toHaveTextContent('AI 更新代码')
     expect(screen.queryByRole('button', { name: '关闭' })).not.toBeInTheDocument()

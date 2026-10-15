@@ -85,7 +85,7 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
 
     setSaving(true)
     setTestResult(null)
-    setTestMessage('测试中...')
+    setTestMessage('测试中…')
 
     try {
       const url = config.baseUrl
@@ -307,7 +307,7 @@ export function AISettings({ open, onOpenChange }: AISettingsProps) {
             </Button>
             <SaveButton size="sm" onClick={handleSave} disabled={saving}>
               <Save data-icon="inline-start" className="h-4 w-4" />
-              {saving ? '保存中...' : '保存'}
+              {saving ? '保存中…' : '保存'}
             </SaveButton>
           </div>
         </div>

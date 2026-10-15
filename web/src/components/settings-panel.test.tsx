@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SettingsPanel } from './settings-panel'
@@ -88,6 +88,71 @@ describe('SettingsPanel about section (#112)', () => {
 
     expect(await screen.findByTestId('settings-app-version')).toHaveTextContent('版本: —')
     expect(screen.queryByText('版本: 1.0.0')).not.toBeInTheDocument()
+  })
+})
+
+describe('SettingsPanel route-rules directory (#139)', () => {
+  function stubVersion(body: unknown, status = 200) {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/version') {
+        return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response('[]', { headers: { 'Content-Type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  async function openConfigTab() {
+    const user = userEvent.setup()
+    render(<SettingsPanel embedded />)
+    const navigation = screen.getByRole('tablist', { name: '设置分类' })
+    await user.click(within(navigation).getByRole('tab', { name: '配置文件' }))
+    await screen.findByText('路由规则文件')
+  }
+
+  it('shows ~/.meddle/route-rules/ reported by the server when MEDDLE_HOME is not set', async () => {
+    const fetchMock = stubVersion({
+      name: '@jonathanleelx/meddle',
+      version: '0.5.0-beta.23',
+      routeRulesDir: '/Users/alice/.meddle/route-rules',
+      routeRulesDirDisplay: '~/.meddle/route-rules/',
+    })
+
+    await openConfigTab()
+
+    const dir = await screen.findByTestId('settings-route-rules-dir')
+    await waitFor(() => expect(dir).toHaveTextContent('~/.meddle/route-rules/'))
+    expect(dir).toHaveAttribute('title', '/Users/alice/.meddle/route-rules')
+    expect(screen.getByText(/规则文件存放于 ~\/\.meddle\/route-rules\/ 目录/)).toBeInTheDocument()
+    expect(fetchMock.mock.calls.filter(([input]) => String(input) === '/api/version')).toHaveLength(1)
+  })
+
+  it('shows the actual MEDDLE_HOME route-rules directory instead of the hard-coded default', async () => {
+    stubVersion({
+      name: '@jonathanleelx/meddle',
+      version: '0.5.0-beta.23',
+      routeRulesDir: '/tmp/meddle-home-139/route-rules',
+      routeRulesDirDisplay: '/tmp/meddle-home-139/route-rules/',
+    })
+
+    await openConfigTab()
+
+    const dir = await screen.findByTestId('settings-route-rules-dir')
+    await waitFor(() => expect(dir).toHaveTextContent('/tmp/meddle-home-139/route-rules/'))
+    expect(dir).not.toHaveTextContent('~/.meddle')
+    expect(screen.getByText(/规则文件存放于 \/tmp\/meddle-home-139\/route-rules\/ 目录/)).toBeInTheDocument()
+    expect(screen.queryByText(/~\/\.meddle\/route-rules/)).not.toBeInTheDocument()
+  })
+
+  it('does not claim ~/.meddle when the server did not report the directory', async () => {
+    stubVersion('not found', 404)
+
+    await openConfigTab()
+
+    const dir = await screen.findByTestId('settings-route-rules-dir')
+    expect(dir).toHaveTextContent('$MEDDLE_HOME/route-rules/')
+    expect(screen.queryByText(/~\/\.meddle\/route-rules/)).not.toBeInTheDocument()
   })
 })
 
@@ -248,5 +313,77 @@ describe('SettingsPanel legacy relative mocks path notice (#121)', () => {
     await open()
     await screen.findByTestId('settings-mocks-file-resolved')
     expect(screen.queryByTestId('settings-mocks-file-legacy-wrap')).not.toBeInTheDocument()
+  })
+})
+
+describe('SettingsPanel config 「应用」 button (#138)', () => {
+  it('is the solid primary save button and reads 「应用中…」 while saving (no spinner); secondary buttons stay outline', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('[]', {
+      headers: { 'Content-Type': 'application/json' },
+    })))
+    let finish!: () => void
+    vi.mocked(updateSettings).mockImplementation((updates) => (
+      'mocksFilePath' in (updates as object)
+        ? new Promise<void>((resolve) => { finish = resolve })
+        : Promise.resolve()
+    ) as ReturnType<typeof updateSettings>)
+
+    const user = userEvent.setup()
+    render(<SettingsPanel embedded />)
+    await user.click(within(screen.getByRole('tablist', { name: '设置分类' })).getByRole('tab', { name: '配置文件' }))
+    await screen.findByText('Mock 规则文件')
+
+    const apply = screen.getByTestId('settings-mocks-file-apply')
+    expect(apply).toHaveAccessibleName('应用')
+    expect(apply).toHaveAttribute('data-variant', 'default')
+    expect(apply).toBeEnabled()
+    expect(screen.getByRole('button', { name: /重新加载配置/ })).toHaveAttribute('data-variant', 'outline')
+    expect(screen.getByRole('button', { name: /诊断配置/ })).toHaveAttribute('data-variant', 'outline')
+
+    await user.click(apply)
+    await vi.waitFor(() => expect(apply).toHaveAccessibleName('应用中…'))
+    expect(apply).toBeDisabled()
+    expect(apply).toHaveAttribute('aria-busy', 'true')
+    expect(apply).toHaveAttribute('data-variant', 'default')
+    expect(apply.querySelector('.animate-spin')).toBeNull()
+
+    finish()
+    await vi.waitFor(() => expect(apply).toHaveAccessibleName('应用'))
+    expect(apply).toBeEnabled()
+    expect(apply).not.toHaveAttribute('aria-busy')
+    vi.mocked(updateSettings).mockReset()
+    vi.mocked(updateSettings).mockResolvedValue(undefined)
+  })
+})
+
+describe('SettingsPanel config 「应用」 failure (#140 follow-up)', () => {
+  it('re-enables and returns to 「应用」 after a rejected save', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('[]', {
+      headers: { 'Content-Type': 'application/json' },
+    })))
+    let fail!: (error: Error) => void
+    vi.mocked(updateSettings).mockImplementation((updates) => (
+      'mocksFilePath' in (updates as object)
+        ? new Promise<void>((_resolve, reject) => { fail = reject })
+        : Promise.resolve()
+    ) as ReturnType<typeof updateSettings>)
+
+    const user = userEvent.setup()
+    render(<SettingsPanel embedded />)
+    await user.click(within(screen.getByRole('tablist', { name: '设置分类' })).getByRole('tab', { name: '配置文件' }))
+    await screen.findByText('Mock 规则文件')
+
+    const apply = screen.getByTestId('settings-mocks-file-apply')
+    await user.click(apply)
+    await vi.waitFor(() => expect(apply).toHaveAccessibleName('应用中…'))
+    expect(apply).toBeDisabled()
+
+    fail(new Error('磁盘不可写'))
+    await vi.waitFor(() => expect(apply).toHaveAccessibleName('应用'))
+    expect(apply).toBeEnabled()
+    expect(apply).not.toHaveAttribute('aria-busy')
+    expect(apply).toHaveAttribute('data-variant', 'default')
+    vi.mocked(updateSettings).mockReset()
+    vi.mocked(updateSettings).mockResolvedValue(undefined)
   })
 })

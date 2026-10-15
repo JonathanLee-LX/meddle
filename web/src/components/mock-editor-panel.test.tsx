@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { EditorPaneActionsProvider } from './editor-pane-actions'
 import { MockEditorPanel } from './mock-editor-panel'
 
@@ -21,7 +21,8 @@ describe('MockEditorPanel actions', () => {
       </EditorPaneActionsProvider>,
     )
 
-    expect(host).toHaveTextContent('保存')
+    // The save button's textContent also holds the hidden sizing label (#140), so assert the accessible name.
+    expect(within(host).getByRole('button', { name: '保存' })).toHaveAccessibleName('保存')
     expect(screen.queryByRole('separator')).not.toBeInTheDocument()
     host.remove()
   })

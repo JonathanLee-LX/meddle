@@ -159,7 +159,7 @@ export function MonacoEditor({
         loading={
           <div className="flex flex-col items-center justify-center h-full gap-3 text-sm text-muted-foreground">
             <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-            <span>加载编辑器中...</span>
+            <span>加载编辑器中…</span>
           </div>
         }
       />
@@ -224,7 +224,7 @@ export function MonacoDiffEditor({
         loading={
           <div className="flex flex-col items-center justify-center h-full gap-3 text-sm text-muted-foreground">
             <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-            <span>加载 Diff 编辑器中...</span>
+            <span>加载 Diff 编辑器中…</span>
           </div>
         }
       />

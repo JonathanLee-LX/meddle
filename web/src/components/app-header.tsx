@@ -146,7 +146,14 @@ export function ShellNav({ activeTab, onTabChange, mockEnabledCount = 0 }: Shell
     const active = activeTab === item.tab
     const showBadge = item.tab === 'mock' && mockEnabledCount > 0
     // Issue #133: fixed-width digits (2ch, tabular) and a 99+ cap keep the badge width stable.
-    const badgeText = mockEnabledCount > 99 ? '99+' : String(mockEnabledCount)
+    const badgeCapped = mockEnabledCount > 99
+    const badgeText = badgeCapped ? '99+' : String(mockEnabledCount)
+    // #135/#140 follow-up: the visual badge (capped "99+") is aria-hidden in both
+    // rail modes and the item gets an explicit name, so expanded and collapsed
+    // both read 「Mock，1234 条启用」 (the badge counts enabled Mock rules). An
+    // aria-label rather than an sr-only span: Chrome inserts a space before an
+    // out-of-flow sr-only span (「Mock ，…」). No layout change either way.
+    const navLabel = showBadge ? `${item.label}，${mockEnabledCount} 条启用` : undefined
     const badgeNum = (text: string | null) => (
       <span data-slot="shell-nav-mock-count" className="inline-block min-w-[2ch] text-center tabular-nums">{text}</span>
     )
@@ -161,6 +168,7 @@ export function ShellNav({ activeTab, onTabChange, mockEnabledCount = 0 }: Shell
             data-testid="shell-nav-mock-badge"
             // Pinned to the 32px icon button's top-right corner (−4px each way), so it
             // never sits on the glyph and stays inside the gap to the next button.
+            aria-hidden
             className="pointer-events-none absolute -top-1 -right-1 h-[16px] min-w-[16px] px-1 text-[10px] leading-none"
           >
             {badgeNum(badgeText)}
@@ -176,7 +184,7 @@ export function ShellNav({ activeTab, onTabChange, mockEnabledCount = 0 }: Shell
           <Badge
             variant="secondary"
             data-testid={showBadge ? 'shell-nav-mock-badge' : 'shell-nav-mock-badge-slot'}
-            aria-hidden={showBadge ? undefined : true}
+            aria-hidden
             className={cn('h-5 px-1.5 text-[10px]', !showBadge && 'invisible')}
           >
             {badgeNum(showBadge ? badgeText : null)}
@@ -190,6 +198,7 @@ export function ShellNav({ activeTab, onTabChange, mockEnabledCount = 0 }: Shell
           asChild
           value={item.tab}
           data-testid={`shell-nav-${item.tab}`}
+          aria-label={navLabel}
           data-shell-nav-mode={item.mode}
           // Collapsed: the tooltip names the page; a native title would double it.
           title={collapsed ? undefined : item.title}
@@ -199,7 +208,10 @@ export function ShellNav({ activeTab, onTabChange, mockEnabledCount = 0 }: Shell
             collapsed && 'justify-center px-2.5',
           )}
         >
-          <TooltipTrigger>{content}</TooltipTrigger>
+          {/* The tooltip only repeats item.label, which the name (text or
+              aria-label) already contains; skip Radix's aria-describedby so
+              collapsed items don't read 「Mock，1234 条启用」 then 「Mock」. */}
+          <TooltipTrigger describe={false}>{content}</TooltipTrigger>
         </TabsTrigger>
         <TooltipContent side="right" sideOffset={8} data-testid={`shell-nav-tooltip-${item.tab}`}>
           {item.label}

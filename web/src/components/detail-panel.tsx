@@ -781,7 +781,7 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
                   title="使用相同的请求参数重新发送请求"
                 >
                   <RotateCw className={`h-3.5 w-3.5 mr-1 ${replaying ? 'animate-spin' : ''}`} />
-                  {replaying ? '重放中...' : '重放'}
+                  {replaying ? '重放中…' : '重放'}
                 </Button>
               )}
               {selectedRecord && onJumpToRule && selectedRecord.source !== selectedRecord.target && !selectedRecord.mock && (
