@@ -565,12 +565,13 @@ function createRouteRuleUpdateTool(): AgentTool {
             const normalized = normalizeRouteRuleUpdateInput(input)
             const next = buildRouteRuleUpdateContent(normalized, ctx)
             return {
-                summary: `更新路由规则：${normalized.pattern}`,
+                summary: `更新路由规则：${normalized.pattern} -> ${next.newTarget}`,
                 diff: buildRouteRuleUpdateDiff(normalized, next),
                 preview: {
                     ruleFile: normalized.ruleFile,
                     pattern: normalized.pattern,
                     target: next.newTarget,
+                    newTarget: next.newTarget,
                     exclusions: next.exclusions,
                 },
                 input: normalized,

@@ -335,25 +335,30 @@ meddle route add dev "^https://app.example.com[/api/v2]" "https://localhost:1300
 - Read-only route files reject the write: `RULESET_READONLY`, exit code `3` (also for `route update` / `route delete`).
 - `route add`, `route update` and `route delete` edit only the line(s) that hold the pattern. Comments, blank lines, disabled (`//`) rules and every other rule, with its exclusions, keep their exact bytes. A new rule is appended at the end of the file.
 - If the pattern already exists, `route add` overwrites its target in place.
-- Exclusions: if the pattern argument has no `!path`, the rule keeps its existing exclusions. If it has `!path` tokens (`"app.example.com !/api"`), they replace the existing ones. The CLI has no option to clear a rule's exclusions. To clear them, call the MCP tool `route_rule_update` with `exclusions: []`, or edit the rule in the web UI.
+- Exclusions: if the pattern argument has no `!path` and you omit `--exclusions`, the rule keeps its existing exclusions. `!path` tokens (`"app.example.com !/api"`) replace them. `--exclusions=/a,/b` replaces them too (a leading `!` is optional). `--exclusions=` clears them: that line is written with no `!path`, and every other line stays byte-for-byte. A bare `--exclusions`, an empty `!` token, an unknown flag, or both `!path` and `--exclusions` together exits `1` and leaves the file unchanged.
 
 ### meddle route update
 
 Update a rule in a route file.
 
 ```bash
-meddle route update <file> <pattern> <new-target>
+meddle route update <file> <pattern> [<new-target>] [--exclusions=<list>]
 ```
 
 **Example:**
 ```bash
 meddle route update default "api.example.com" "localhost:4000"
+meddle route update default "api.example.com" --exclusions=
+meddle route update default "api.example.com" "localhost:4000" --exclusions=/health,/ready
 ```
 
 **Note:**
-- If the pattern argument has no `!path`, the rule keeps its existing exclusions. `!path` tokens (`"api.example.com !/health"`) replace them. There is no CLI option to clear them (see `route add`).
+- If the pattern argument has no `!path` and you omit `--exclusions`, the rule keeps its existing exclusions. `!path` tokens (`"api.example.com !/health"`) replace them. `--exclusions=` clears them (same as MCP `exclusions: []`): the edited line no longer contains `!path`, and every other line is unchanged byte-for-byte. `--exclusions=/health,/ready` replaces them. The `<new-target>` may be omitted when `--exclusions` is set; the current target stays.
+- Success is not silent. The human output names the rule and, when exclusions were set or cleared, prints `Exclusions: cleared` or `Exclusions: !/health`. `--json` includes `"exclusions":[]` when they were cleared, or the new list when they were replaced. The field is omitted when exclusions were left unchanged.
+- A bare `--exclusions` (no `=`), an empty `!` token (`"api.example.com !"`), an unknown flag, a repeated `--exclusions`, or both `!path` and `--exclusions` together exits `1` and does not change the file. `--json` still prints `{"success":false,"error":{"message":"…"}}`.
+- A `#` comments out a whole line only when it is the first non-space character of that line. Those comment lines are kept byte-for-byte when another rule is edited. A `#…` token later on a rule line is a pattern, not a trailing comment; the CLI does not strip trailing comments. Put notes on their own `#` line.
 - If one line holds several patterns, the updated pattern moves to its own line next to the others. If that would leave a pattern starting with `//` or `#` at the start of a line, the write is refused (exit code `1`, message 「该行剩余的 pattern 以 // 或 # 开头，拆开后会被当成注释，请用文本编辑器手动修改」) and the file is left unchanged. The same applies to `route add` over an existing rule and to `route delete`.
-- `route add` refuses a new rule whose pattern starts with `#` or `//` (for example `#foo.com` or `//foo.com`), because the appended line would read back as a comment or a disabled rule. It exits with code `1` and the message 「规则不能以 // 或 # 开头，否则会被当成禁用行或注释。要写注释或禁用规则，请用文本编辑器。」, and the file is left unchanged. To write a comment or a disabled rule, edit the file in a text editor.
+- `route add` refuses a new rule whose pattern starts with `#` or `//` (for example `#foo.com` or `//foo.com`), because the appended line would read back as a comment or a disabled rule. It exits with code `1` and the message 「规则不能以 // 或 # 开头，否则会被当成禁用行或注释。要写注释或禁用规则，请用文本编辑器。」, and the file is left unchanged. To write a comment or a disabled rule, edit the file in a text editor. `route add` accepts the same `--exclusions` flag; on an existing rule `--exclusions=` clears its exclusions.
 
 **MCP equivalents** (`route_rule_add` / `route_rule_update`): if you omit `exclusions`, the rule keeps its existing exclusions. `exclusions: []` clears them. A non-empty array replaces them.
 

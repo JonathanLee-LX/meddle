@@ -39,8 +39,10 @@ Route Commands:
   meddle route active                           Show active route files
   meddle route active set <file>                Set active route file
   meddle route create <name> [--content <text>] Create a route file
-  meddle route add <file> <pattern> <target>    Add a rule to file
-  meddle route update <file> <pattern> <target> Update a rule in file
+  meddle route add <file> <pattern> <target> [--exclusions=<list>]
+                                            Add a rule to file
+  meddle route update <file> <pattern> [<target>] [--exclusions=<list>]
+                                            Update a rule in file
   meddle route delete <file> <pattern>          Delete a rule from file
 
 Read-only route files:
@@ -57,7 +59,19 @@ Examples:
   meddle route create staging --content "example.com localhost:3000"
   meddle route add dev-rules "api.test.com" "localhost:8080"
   meddle route update dev-rules "api.test.com" "localhost:9000"
+  meddle route update dev-rules "api.test.com" --exclusions=
   meddle route delete dev-rules "api.test.com"
+
+Exclusions:
+  Omit --exclusions and any !path in the pattern to keep the rule's exclusions.
+  --exclusions=            Clear exclusions (that line loses every !path).
+  --exclusions=/a,/b       Replace exclusions. A leading ! is optional.
+  "pattern !/a"            Replace exclusions. A bare "!" is an error.
+  A bare --exclusions, an unknown flag, or both forms at once exits 1
+  and does not change the file. meddle route update --help has the details.
+
+  A "#" comments out a whole line only when it is the first non-space
+  character. A "#" later on a rule line is a pattern, not a trailing comment.
 `)
     process.exit(1)
 }

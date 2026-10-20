@@ -127,6 +127,14 @@ export function useRules() {
       }
 
       const resolvedName = typeof data.name === 'string' ? data.name : trimmedName
+      // The table-view save looks up text by the current file name. Move the
+      // loaded text onto the new name before anything saves, including the
+      // window before fetchFileContent refreshes it.
+      if (resolvedName !== name) {
+        const kept = savedTextRef.current.get(name)
+        if (kept !== undefined) savedTextRef.current.set(resolvedName, kept)
+        savedTextRef.current.delete(name)
+      }
       if (activeFileName === name) {
         setActiveFileName(resolvedName)
       }
