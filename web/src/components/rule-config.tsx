@@ -48,7 +48,7 @@ import { ruleFilePaneSplit } from '@/lib/rule-file-split'
 import { SplitPane } from '@/components/split-pane'
 import { EditorEmptyState, EditorSaveButton, EditorTitleBar, PaneBar, PaneTitle } from '@/components/pane-bar'
 import { useEditorScrolled } from '@/hooks/use-editor-scrolled'
-import { getEprcTextDiagnostics, normalizeImportedRuleText, parseEprcRules, rulesToEprc } from '@/utils/eprc-parser'
+import { getEprcTextDiagnostics, normalizeImportedRuleText, parseEprcRules, rulesToEprc, rulesToEprcPreserving } from '@/utils/eprc-parser'
 import { EprcTextarea } from '@/components/eprc-textarea'
 import {
   Dialog,
@@ -865,8 +865,16 @@ export function RuleConfig(props: RuleConfigProps) {
     const serializedDraftRules = rulesToEprc(parseEprcRules(textDraftRef.current))
     if (serializedDraftRules === serializedRules) return
 
-    textDraftRef.current = serializedRules
-    setTextDraft(serializedRules)
+    // Issue #145: keep the draft's comments, blank lines and untouched rule lines.
+    let nextDraft: string
+    try {
+      nextDraft = rulesToEprcPreserving(rules, textDraftRef.current)
+    } catch {
+      // Not representable without turning a rule into a comment; saving reports it.
+      return
+    }
+    textDraftRef.current = nextDraft
+    setTextDraft(nextDraft)
   }, [activeFileName, rules, viewMode])
 
   useEffect(() => {
@@ -994,7 +1002,15 @@ export function RuleConfig(props: RuleConfigProps) {
     // 文本模式下若有未识别行，阻止保存（按钮已禁用，此处为防御性兜底）
     if (viewMode === 'text' && getEprcTextDiagnostics(textDraft).length > 0) return
     setSaving(true)
-    const ok = viewMode === 'text' ? await saveRuleFileRawContent(activeFileName, textDraft) : await saveFileContent(activeFileName, rules)
+    let ok = false
+    try {
+      ok = viewMode === 'text' ? await saveRuleFileRawContent(activeFileName, textDraft) : await saveFileContent(activeFileName, rules)
+    } catch (err) {
+      // Issue #145: e.g. a pattern that would turn into a comment line; nothing was written.
+      setSaving(false)
+      toast.error(err instanceof Error ? err.message : '规则保存失败')
+      return
+    }
     setSaving(false)
     if (ok) {
       fetchRuleFiles()

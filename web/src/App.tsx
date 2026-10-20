@@ -449,7 +449,14 @@ function App() {
           disabledReason: '请先选择一个规则文件',
           run: async () => {
             if (!store.activeFileName) return
-            const saved = await store.saveFileContent(store.activeFileName, store.rules)
+            let saved = false
+            try {
+              saved = await store.saveFileContent(store.activeFileName, store.rules)
+            } catch (err) {
+              // Issue #145: e.g. a pattern that would turn into a comment line; nothing was written.
+              toast.error(err instanceof Error ? err.message : '规则保存失败')
+              return
+            }
             if (saved) {
               await store.fetchRuleFiles()
               toast.success('规则保存成功')
