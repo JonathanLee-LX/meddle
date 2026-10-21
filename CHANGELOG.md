@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.5.0-beta.24] - 2026-10-21
 
 ### Added
 
@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Renaming a rule file in the web UI keeps the loaded text under the new name, so a table-view save immediately after the rename still preserves comments and untouched lines.
 - The built-in Agent's route-update confirmation summary and preview include `newTarget`.
 - Rule writes no longer drop other lines (#145). `meddle route add/update/delete`, the MCP `route_rule_add/update/delete` tools and the built-in Agent's route tools used to rebuild the whole rule file. That dropped comments, blank lines and disabled (`//`) rules, and the CLI also dropped every other rule's exclusions (`!path`). They now edit only the line(s) that hold the pattern. Every other line keeps its exact bytes, and the edited rule keeps its own exclusions unless new ones are given. A leading UTF-8 BOM is kept. The CLI and MCP now read rule content through the API without dropping the BOM, and so does the web UI. Saving from the web UI's table view also keeps comments, blank lines and untouched rule lines. The HTTP `PUT /api/rule-files/:name/content` endpoint and the web text editor already wrote the text exactly as given.
+- Mock auto-reload now resumes when the mocks directory is deleted and recreated, for example when a symlinked dotfiles repo is removed and re-cloned. Before, edits to the mocks file stopped taking effect until Meddle was restarted (#148).
 
 ## [0.5.0-beta.18] - 2026-10-08
 
