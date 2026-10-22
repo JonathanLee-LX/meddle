@@ -110,6 +110,42 @@ describe('useRules saveFileContent', () => {
     const [, init] = fetchMock.mock.calls[1]
     expect(JSON.parse(init.body).content).toBe('# 联调\napi.example.com !/api http://localhost:5173\n\nedit.example.com !/keep 127.0.0.1:3001\n')
   })
+
+  it('keeps the loaded text under the new name after a rename, so the next table save still preserves comments', async () => {
+    const original = '# 联调\napi.example.com !/api http://localhost:5173\n'
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(original))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'success', name: 'renamed' }), {
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ name: 'renamed', enabled: true }]), {
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'success' }), {
+        headers: { 'Content-Type': 'application/json' },
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() => useRules())
+    await act(async () => {
+      await result.current.fetchFileContent('old')
+    })
+    await act(async () => {
+      await result.current.renameRuleFile('old', 'renamed')
+    })
+    const edited = result.current.rules.map((rule) => (rule.rule === 'api.example.com' ? { ...rule, target: '127.0.0.1:9' } : rule))
+    let ok = false
+    await act(async () => {
+      ok = await result.current.saveFileContent('renamed', edited)
+    })
+
+    expect(ok).toBe(true)
+    const saveCall = fetchMock.mock.calls.find((call) => String(call[0]).endsWith('/content') && call[1]?.method === 'PUT')
+    expect(saveCall).toBeTruthy()
+    const content = JSON.parse(saveCall![1].body).content as string
+    expect(content).toContain('# 联调')
+    expect(content).toContain('api.example.com !/api 127.0.0.1:9')
+  })
 })
 
 describe('useRules — BOM and read-only rulesets (issue #145)', () => {

@@ -356,6 +356,12 @@ const CLI_CASES: Array<[string, string[], string]> = [
     ['add with exclusions in the pattern argument', ['route', 'add', 'dev', 'new.example.com !/api', '127.0.0.1:5000'], appended('new.example.com !/api 127.0.0.1:5000')],
     ['add over an existing rule keeps its exclusions', ['route', 'add', 'dev', 'edit.example.com', '127.0.0.1:3999'], withLine(EDIT_LINE, ['edit.example.com !/keep 127.0.0.1:3999'])],
     ['update keeps the rule\'s exclusions', ['route', 'update', 'dev', 'edit.example.com', '127.0.0.1:3001'], withLine(EDIT_LINE, ['edit.example.com !/keep 127.0.0.1:3001'])],
+    ['update --exclusions= clears exclusions and keeps the target', ['route', 'update', 'dev', 'edit.example.com', '--exclusions='], withLine(EDIT_LINE, ['edit.example.com 127.0.0.1:3000'])],
+    ['update --exclusions= with a new target', ['route', 'update', 'dev', 'edit.example.com', '127.0.0.1:3001', '--exclusions='], withLine(EDIT_LINE, ['edit.example.com 127.0.0.1:3001'])],
+    ['update --exclusions=/a,/b replaces exclusions', ['route', 'update', 'dev', 'edit.example.com', '--exclusions=/a,/b'], withLine(EDIT_LINE, ['edit.example.com !/a !/b 127.0.0.1:3000'])],
+    ['update --exclusions= on one pattern of a shared line', ['route', 'update', 'dev', 'multi-a.example.com', '--exclusions='], withLine(6, ['multi-a.example.com 127.0.0.1:4000', 'multi-b.example.com !/health 127.0.0.1:4000'])],
+    ['update --exclusions= on a [marker] rule', ['route', 'update', 'dev', 'cdn.example.com/[assets]', '--exclusions='], withLine(5, ['cdn.example.com/[assets] https://localhost:13001'])],
+    ['add --exclusions= clears exclusions on an existing rule', ['route', 'add', 'dev', 'edit.example.com', '127.0.0.1:3999', '--exclusions='], withLine(EDIT_LINE, ['edit.example.com 127.0.0.1:3999'])],
     ['update a [marker] rule', ['route', 'update', 'dev', 'cdn.example.com/[assets]', 'https://localhost:14001'], withLine(5, ['cdn.example.com/[assets] !/assets/legacy https://localhost:14001'])],
     ['delete a rule', ['route', 'delete', 'dev', 'edit.example.com'], withLine(EDIT_LINE, [])],
     ['delete one pattern of a shared line', ['route', 'delete', 'dev', 'multi-b.example.com'], withLine(6, ['multi-a.example.com !/health 127.0.0.1:4000'])],
@@ -369,6 +375,7 @@ const BOM_FIXTURE = `${BOM}${FIRST}\n${FIXTURE}`
 const BOM_CLI_CASES: Array<[string, string[], string]> = [
     ['BOM: add new rule', ['route', 'add', 'dev', 'new.example.com', '127.0.0.1:5000'], `${BOM_FIXTURE}new.example.com 127.0.0.1:5000\n`],
     ['BOM: update the first-line rule', ['route', 'update', 'dev', 'first.example.com', '127.0.0.1:1001'], `${BOM}first.example.com !/f 127.0.0.1:1001\n${FIXTURE}`],
+    ['BOM: update --exclusions= clears the first-line rule', ['route', 'update', 'dev', 'first.example.com', '--exclusions='], `${BOM}first.example.com 127.0.0.1:1000\n${FIXTURE}`],
     ['BOM: delete the first-line rule', ['route', 'delete', 'dev', 'first.example.com'], `${BOM}${FIXTURE}`],
 ]
 /**
@@ -388,6 +395,7 @@ const LOCKED_CLI_CASES: string[][] = [
     ['route', 'add', 'locked', 'new.example.com', '127.0.0.1:9'],
     ['route', 'add', 'locked', 'first.example.com', '127.0.0.1:9'],
     ['route', 'update', 'locked', 'first.example.com', '127.0.0.1:9'],
+    ['route', 'update', 'locked', 'first.example.com', '--exclusions='],
     ['route', 'delete', 'locked', 'first.example.com'],
 ]
 const EXIT_RULESET_READONLY = 3
@@ -482,6 +490,77 @@ describe('CLI route add / update / delete keep other lines byte-identical (issue
             await expectCliRefused(home, NEW_COMMENT_CLI_CASES, NEW_RULE_COMMENT_MESSAGE)
         }, 60_000)
 
+        it('clearing exclusions reports the result and leaves every other line byte-identical (#149)', async () => {
+            const crlf = FIXTURE.replace(/\n/g, '\r\n')
+            resetRules(home, crlf)
+            const before = ruleBytes(home)
+            const human = await runCli(['route', 'update', 'dev', 'edit.example.com', '--exclusions='], home)
+            expect(human.code, human.stderr).toBe(0)
+            expect(human.stdout).toContain('Route Rule Updated')
+            expect(human.stdout).toContain('edit.example.com -> 127.0.0.1:3000')
+            expect(human.stdout).toContain('cleared')
+            const after = readRules(home)
+            const beforeLines = before.toString('utf8').split('\n')
+            const afterLines = after.split('\n')
+            expect(afterLines).toHaveLength(beforeLines.length)
+            for (let i = 0; i < beforeLines.length; i++) {
+                if (i === EDIT_LINE) expect(afterLines[i]).toBe('edit.example.com 127.0.0.1:3000\r')
+                else expect(afterLines[i]).toBe(beforeLines[i])
+            }
+            expect(after).not.toContain('!/keep')
+
+            resetRules(home)
+            const json = await runCli(['route', 'update', 'dev', 'edit.example.com', '--exclusions=', '--json'], home)
+            expect(json.code, json.stderr).toBe(0)
+            expect(JSON.parse(json.stdout)).toMatchObject({
+                success: true,
+                file: 'dev',
+                pattern: 'edit.example.com',
+                newTarget: '127.0.0.1:3000',
+                exclusions: [],
+            })
+            expect(readRules(home)).toBe(withLine(EDIT_LINE, ['edit.example.com 127.0.0.1:3000']))
+        }, 30_000)
+
+        it('bad exclusion syntax exits non-zero and does not change the file (#149)', async () => {
+            const cases: Array<[string[], string]> = [
+                [['route', 'update', 'dev', 'edit.example.com', '127.0.0.1:1', '--exclusions'], '--exclusions='],
+                [['route', 'update', 'dev', 'edit.example.com !', '127.0.0.1:1'], '--exclusions='],
+                [['route', 'update', 'dev', 'edit.example.com !/x', '127.0.0.1:1', '--exclusions='], 'not both'],
+                [['route', 'update', 'dev', 'edit.example.com', '--exclusions=/a,,/b'], 'empty entry'],
+                [['route', 'update', 'dev', 'edit.example.com', '--exclusions=!'], 'needs a path'],
+                [['route', 'update', 'dev', 'edit.example.com', '127.0.0.1:1', '--nope'], 'Unsupported option'],
+                [['route', 'delete', 'dev', 'edit.example.com', '--exclusions='], 'does not change exclusions'],
+                [['route', 'update', 'dev', 'edit.example.com', '--exclusions', '--json'], '--exclusions='],
+            ]
+            for (const [argv, message] of cases) {
+                resetRules(home)
+                const before = ruleBytes(home)
+                const { code, stdout, stderr } = await runCli(argv, home)
+                expect(code, argv.join(' ')).not.toBe(0)
+                expect(stdout + stderr, argv.join(' ')).toContain(message)
+                expect(stdout, argv.join(' ')).not.toContain('Route Rule Updated')
+                expect(ruleBytes(home).equals(before), argv.join(' ')).toBe(true)
+            }
+            resetRules(home)
+            const json = await runCli(['route', 'update', 'dev', 'edit.example.com', '--exclusions', '--json'], home)
+            expect(json.code).toBe(1)
+            expect(JSON.parse(json.stdout)).toMatchObject({ success: false, error: { message: expect.stringContaining('--exclusions=') } })
+        }, 30_000)
+
+        it('route help documents --exclusions=', async () => {
+            const top = await runCli(['--help'], home)
+            expect(top.code).toBe(0)
+            expect(top.stdout).toContain('--exclusions=')
+            const route = await runCli(['route'], home)
+            expect(route.code).toBe(1)
+            expect(route.stdout).toContain('--exclusions=')
+            const update = await runCli(['route', 'update', '--help'], home)
+            expect(update.code).toBe(0)
+            expect(update.stdout).toContain('--exclusions=')
+            expect(update.stdout).toContain('trailing comment')
+        }, 30_000)
+
         it('a missing pattern fails and leaves the file unchanged', async () => {
             resetRules(home)
             for (const cmd of ['update', 'delete']) {
@@ -529,6 +608,16 @@ describe('CLI route add / update / delete keep other lines byte-identical (issue
         it('refuses to add a new rule starting with # or // (BOM + CRLF file bytes unchanged)', async () => {
             await expectCliRefused(home, NEW_COMMENT_CLI_CASES, NEW_RULE_COMMENT_MESSAGE)
         }, 60_000)
+
+        it('clearing exclusions through the API reports exclusions: [] (#149)', async () => {
+            resetRules(home)
+            const { code, stdout, stderr } = await runCli(['route', 'update', 'dev', 'edit.example.com', '--exclusions=', '--json'], home)
+            expect(code, stderr).toBe(0)
+            const body = JSON.parse(stdout)
+            expect(body.fileOnly).toBeUndefined()
+            expect(body).toMatchObject({ success: true, exclusions: [], newTarget: '127.0.0.1:3000' })
+            expect(readRules(home)).toBe(withLine(EDIT_LINE, ['edit.example.com 127.0.0.1:3000']))
+        }, 30_000)
 
         it('GET …/content serves the BOM bytes as stored on disk', async () => {
             resetRules(home, BOM_FIXTURE)
@@ -761,5 +850,14 @@ describe('built-in Agent route tools keep other lines byte-identical (issue #145
         expect(confirmation.diff).toContain('- edit.example.com !/keep 127.0.0.1:3000')
         expect(confirmation.diff).toContain('+ edit.example.com !/keep 127.0.0.1:3999')
         expect(confirmation.preview.exclusions).toEqual(['/keep'])
+    })
+
+    it('update confirmation shows newTarget', async () => {
+        const { ctx } = agentContext()
+        const tool = createAgentTools().get('route_rule_update')!
+        const confirmation: any = await tool.prepareConfirmation?.({ ruleFile: 'dev', pattern: 'edit.example.com', newTarget: '127.0.0.1:3001' }, { serverContext: ctx })
+        expect(confirmation.summary).toContain('edit.example.com -> 127.0.0.1:3001')
+        expect(confirmation.preview.newTarget).toBe('127.0.0.1:3001')
+        expect(confirmation.diff).toContain('+ edit.example.com !/keep 127.0.0.1:3001')
     })
 })

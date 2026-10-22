@@ -107,7 +107,8 @@ Route 命令:
   meddle route active set <file>  设置激活的路由文件
   meddle route create <name>      创建路由文件
   meddle route add <file> <pattern> <target>   添加路由规则
-  meddle route update <file> <pattern> <target> 更新路由规则
+  meddle route update <file> <pattern> [<target>] [--exclusions=]
+                              更新路由规则；--exclusions= 清空排除项
   meddle route delete <file> <pattern> 删除路由规则
 
 全局选项:
@@ -137,6 +138,7 @@ Route 命令:
   meddle route preview "https://api.example.com/v1/users"  # 预览转发目标
   meddle route preview "https://cdn.com/assets/js/app.js" --file dev-rules --json
   meddle route add dev-rules "api.test.com" "localhost:3000"
+  meddle route update dev-rules "api.test.com" --exclusions=
   meddle route active set beta-rules
 
 更多信息请访问: https://github.com/JonathanLee-LX/meddle

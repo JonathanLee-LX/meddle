@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- The CLI keeps a rule's exclusions unless the pattern argument has `!path` tokens (`"api.example.com !/health"`) or `--exclusions` is set. `--exclusions=` clears them and `--exclusions=/a,/b` replaces them (#149).
+
+### Fixed
+
+- `meddle route update` (and `route add`) can clear a rule's exclusions with `--exclusions=` (#149). The edited line loses its `!path` tokens; every other line stays byte-for-byte. Success prints `Exclusions: cleared` and `--json` includes `"exclusions":[]`. A bare `--exclusions`, an empty `!` token, an unknown flag, or combining `!path` with `--exclusions` exits 1 and leaves the file unchanged. `route delete` rejects `--exclusions` instead of ignoring it.
+- Renaming a rule file in the web UI keeps the loaded text under the new name, so a table-view save immediately after the rename still preserves comments and untouched lines.
+- The built-in Agent's route-update confirmation summary and preview include `newTarget`.
+
 ## [0.5.0-beta.24] - 2026-10-21
 
 ### Added

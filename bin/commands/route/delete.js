@@ -6,35 +6,61 @@ const output = require('../../lib/output')
 const { isProxyRunning } = require('../../lib/proxy-detect')
 const { apiGet, apiPut } = require('../../lib/api-client')
 const { getRuleFileContent, saveRuleFileContent } = require('../../lib/file-access')
-const { deleteRouteRule, splitPatternArg } = require('../../lib/rule-file-edit')
+const { deleteRouteRule } = require('../../lib/rule-file-edit')
 const { isRulesetReadonlyError, exitRulesetReadonly } = require('../../lib/ruleset-readonly')
+const { parseRouteWriteArgs, parsePatternArg } = require('../../lib/route-write-args')
 
-// Parse arguments (skip 'route' and 'delete' from argv)
+const DELETE_HELP = `
+meddle route delete <file> <pattern> [--json]
+
+Delete a rule. This command does not take --exclusions.
+`
+
 const args = process.argv.slice(4)
-const jsonFlag = args.includes('--json')
+
+function fail(message, jsonFlag) {
+  if (jsonFlag) {
+    console.log(JSON.stringify({ success: false, error: { message } }))
+    console.error(message)
+  } else {
+    output.setJsonMode(false)
+    output.error(message)
+  }
+  process.exit(1)
+}
+
+let parsed
+try {
+  parsed = parseRouteWriteArgs(args, { allowExclusions: false })
+} catch (e) {
+  fail(e.message, args.includes('--json'))
+}
+
+if (parsed.help) {
+  console.log(DELETE_HELP.trim())
+  process.exit(0)
+}
+
+const jsonFlag = parsed.json
 output.setJsonMode(jsonFlag)
 
-// Get positional arguments: file, pattern
-const positionalArgs = args.filter(a => !a.startsWith('--'))
-const fileName = positionalArgs[0]
-const pattern = positionalArgs[1]
+const fileName = parsed.positional[0]
+const pattern = parsed.positional[1]
 
 /**
  * Issue #145: remove only this pattern; every other line (comments, blank
  * lines, other rules and their `!exclusions`) keeps its exact bytes.
  */
 function applyDelete(text) {
-  const { patterns } = splitPatternArg(pattern)
+  const { patterns } = parsePatternArg(pattern)
   if (patterns.length === 0) {
-    output.error('Missing required argument: <pattern>')
-    process.exit(1)
+    fail('Missing required argument: <pattern>', jsonFlag)
   }
   let next = text
   for (const p of patterns) {
     const result = deleteRouteRule(next, { pattern: p })
     if (!result.found) {
-      output.error(`Pattern not found: ${pattern.trim()}`)
-      process.exit(1)
+      fail(`Pattern not found: ${pattern.trim()}`, jsonFlag)
     }
     next = result.content
   }
@@ -42,13 +68,13 @@ function applyDelete(text) {
 }
 
 async function run() {
-  if (!fileName) {
-    output.error('Missing required argument: <file>')
-    process.exit(1)
-  }
-  if (!pattern) {
-    output.error('Missing required argument: <pattern>')
-    process.exit(1)
+  if (!fileName) fail('Missing required argument: <file>', jsonFlag)
+  if (!pattern) fail('Missing required argument: <pattern>', jsonFlag)
+  if (parsed.positional.length > 2) fail(`Unexpected argument: ${parsed.positional[2]}`, jsonFlag)
+  try {
+    parsePatternArg(pattern)
+  } catch (e) {
+    fail(e.message, jsonFlag)
   }
 
   const running = await isProxyRunning()
@@ -76,8 +102,7 @@ async function run() {
       // Fallback to file mode
       const content = getRuleFileContent(fileName)
       if (!content) {
-        output.error(`Route file not found: ${fileName}`)
-        process.exit(1)
+        fail(`Route file not found: ${fileName}`, jsonFlag)
       }
 
       const newContent = applyDelete(content)
@@ -101,8 +126,7 @@ async function run() {
     // File mode
     const content = getRuleFileContent(fileName)
     if (!content) {
-      output.error(`Route file not found: ${fileName}`)
-      process.exit(1)
+      fail(`Route file not found: ${fileName}`, jsonFlag)
     }
 
     const newContent = applyDelete(content)
@@ -126,6 +150,5 @@ async function run() {
 
 run().catch(e => {
   if (isRulesetReadonlyError(e)) exitRulesetReadonly(e, { json: jsonFlag, ruleFile: fileName })
-  output.error(e.message)
-  process.exit(1)
+  fail(e.message, jsonFlag)
 })
