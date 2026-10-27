@@ -568,8 +568,7 @@ localWSServer.on('connection', (client, req) => {})
         if (ctx.AUTO_OPEN) {
             const proxyAddr = `127.0.0.1:${port}`
             const remotePort = process.env.MEDDLE_OPEN_CHROMEDEVTOOLS ? 9222 : undefined
-            // Promise.resolve: older builds returned boolean; a rejected launch must not take down the proxy.
-            const opened = await Promise.resolve(openBrowserWithProxy(proxyUrl, proxyAddr, ctx.meddleDir, remotePort)).catch(() => false)
+            const opened = await openBrowserWithProxy(proxyUrl, proxyAddr, ctx.meddleDir, remotePort).catch(() => false)
             if (opened) {
                 console.log(chalk.green('已启动浏览器（代理:'), proxyAddr + chalk.green(')'))
             } else {
