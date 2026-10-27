@@ -68,6 +68,59 @@ describe('browser openBrowserWithProxy', () => {
         }
     }, 8_000)
 
+    it.skipIf(process.platform !== 'linux')('treats exit 0 as opened and does not fall back', async () => {
+        const bin = tempDir('meddle-browser-handoff-')
+        const chromeLog = path.join(bin, 'chrome.log')
+        const openLog = path.join(bin, 'xdg.log')
+        writeExecutable(path.join(bin, 'google-chrome'), `#!/bin/sh\necho chrome >> "${chromeLog}"\nexit 0\n`)
+        writeExecutable(path.join(bin, 'xdg-open'), `#!/bin/sh\necho xdg >> "${openLog}"\nexit 0\n`)
+        const dir = tempDir('meddle-browser-handoff-profile-')
+        const oldPath = process.env.PATH
+        process.env.PATH = bin
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+        const started = Date.now()
+        try {
+            const result = await openBrowserWithProxy('http://127.0.0.1:9', '127.0.0.1:9', dir)
+            expect(result).toBe(true)
+            expect(Date.now() - started).toBeLessThan(1_500)
+            expect(fs.readFileSync(chromeLog, 'utf8')).toContain('chrome')
+            expect(fs.existsSync(openLog)).toBe(false)
+            expect(log.mock.calls.flat().join('\n')).not.toContain('未找到 Chrome/Edge')
+            expect(error).not.toHaveBeenCalled()
+        } finally {
+            process.env.PATH = oldPath
+            log.mockRestore()
+            error.mockRestore()
+            closeLaunchedBrowsers()
+        }
+    }, 8_000)
+
+    it.skipIf(process.platform !== 'linux')('falls back when the browser exits non-zero', async () => {
+        const bin = tempDir('meddle-browser-fail-')
+        const chromeLog = path.join(bin, 'chrome.log')
+        const openLog = path.join(bin, 'xdg.log')
+        writeExecutable(path.join(bin, 'google-chrome'), `#!/bin/sh\necho chrome >> "${chromeLog}"\nexit 1\n`)
+        writeExecutable(path.join(bin, 'xdg-open'), `#!/bin/sh\necho xdg >> "${openLog}"\nexit 0\n`)
+        const dir = tempDir('meddle-browser-fail-profile-')
+        const oldPath = process.env.PATH
+        process.env.PATH = bin
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+        try {
+            const result = await openBrowserWithProxy('http://127.0.0.1:9', '127.0.0.1:9', dir)
+            expect(result).toBe(true)
+            expect(fs.readFileSync(chromeLog, 'utf8')).toContain('chrome')
+            expect(fs.readFileSync(openLog, 'utf8')).toContain('xdg')
+            expect(log.mock.calls.flat().join('\n')).toContain('未找到 Chrome/Edge')
+        } finally {
+            process.env.PATH = oldPath
+            log.mockRestore()
+            error.mockRestore()
+            closeLaunchedBrowsers()
+        }
+    }, 8_000)
+
     it.skipIf(process.platform !== 'linux')('kills a fallback opener that does not exit', async () => {
         const bin = tempDir('meddle-browser-fallback-')
         writeExecutable(path.join(bin, 'xdg-open'), '#!/bin/sh\nwhile true; do sleep 1; done\n')

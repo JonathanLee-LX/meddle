@@ -6,9 +6,11 @@ import chalk from 'chalk'
 
 // Linux `execSync('google-chrome …')` waits until Chrome exits. Chrome does not
 // exit, so the caller — including the Vitest worker in tests/browser.spec.ts —
-// blocks forever and the test timeout never fires (#130). Spawn instead, treat
-// a process that is still alive after a short grace period as a successful
-// open, and kill anything that fails to start or that tests ask us to close.
+// blocks forever and the test timeout never fires (#130). Spawn instead. A
+// process that is still alive after a short grace period is open. Exit 0 is
+// also success: Chrome hands the URL to an existing window with the same
+// profile and quits. A non-zero exit is a failed start. Kill anything that
+// fails to start or that tests ask us to close.
 const BROWSER_GRACE_MS = 500
 const LAUNCHER_TIMEOUT_MS = 2000
 
@@ -124,7 +126,11 @@ function spawnTracked(command: string, args: string[], shell = false): ChildProc
     }
 }
 
-/** Browser binaries stay in the foreground. Still running after the grace period means opened. */
+/**
+ * Browser binaries stay in the foreground. Still running after the grace
+ * period means opened. Exit 0 also means opened: a second Chrome with the
+ * same profile hands the URL to the existing window and quits.
+ */
 function launchDetached(command: string, args: string[]): Promise<boolean> {
     return new Promise((resolve) => {
         const child = spawnTracked(command, args)
@@ -138,15 +144,25 @@ function launchDetached(command: string, args: string[]): Promise<boolean> {
             if (settled) return
             settled = true
             if (timer) clearTimeout(timer)
-            if (ok) child.unref()
-            else forget(child)
+            if (ok) {
+                // Already exited (handoff). Drop it so a later cleanup cannot
+                // signal a recycled pid. A process that is still running stays
+                // tracked so tests can close it.
+                if (child.exitCode !== null || child.signalCode !== null) {
+                    const index = launched.indexOf(child)
+                    if (index >= 0) launched.splice(index, 1)
+                }
+                child.unref()
+            } else {
+                forget(child)
+            }
             resolve(ok)
         }
         timer = setTimeout(() => {
             finish(child.exitCode === null && child.signalCode === null)
         }, BROWSER_GRACE_MS)
         child.once('error', () => finish(false))
-        child.once('exit', () => finish(false))
+        child.once('exit', (code) => finish(code === 0))
     })
 }
 
