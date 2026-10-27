@@ -538,7 +538,17 @@ describe('CLI route add / update / delete keep other lines byte-identical (issue
                 const before = ruleBytes(home)
                 const { code, stdout, stderr } = await runCli(argv, home)
                 expect(code, argv.join(' ')).not.toBe(0)
-                expect(stdout + stderr, argv.join(' ')).toContain(message)
+                if (argv.includes('--json')) {
+                    expect(JSON.parse(stdout), argv.join(' ')).toMatchObject({
+                        success: false,
+                        error: { message: expect.stringContaining(message) },
+                    })
+                    expect(stdout, argv.join(' ')).not.toContain('✗')
+                } else {
+                    expect(stderr, argv.join(' ')).toContain(message)
+                    expect(stdout, argv.join(' ')).not.toContain(message)
+                    expect(stdout.trim(), argv.join(' ')).toBe('')
+                }
                 expect(stdout, argv.join(' ')).not.toContain('Route Rule Updated')
                 expect(ruleBytes(home).equals(before), argv.join(' ')).toBe(true)
             }
@@ -551,7 +561,8 @@ describe('CLI route add / update / delete keep other lines byte-identical (issue
         it('route help documents --exclusions=', async () => {
             const top = await runCli(['--help'], home)
             expect(top.code).toBe(0)
-            expect(top.stdout).toContain('--exclusions=')
+            const addUsage = top.stdout.split('\n').find((line) => line.includes('route add'))
+            expect(addUsage).toContain('--exclusions=')
             const route = await runCli(['route'], home)
             expect(route.code).toBe(1)
             expect(route.stdout).toContain('--exclusions=')
@@ -559,6 +570,10 @@ describe('CLI route add / update / delete keep other lines byte-identical (issue
             expect(update.code).toBe(0)
             expect(update.stdout).toContain('--exclusions=')
             expect(update.stdout).toContain('trailing comment')
+            const add = await runCli(['route', 'add', '--help'], home)
+            expect(add.code).toBe(0)
+            expect(add.stdout).toMatch(/route add[^\n]*--exclusions=/)
+            expect(add.stdout).toContain('--exclusions= clears')
         }, 30_000)
 
         it('a missing pattern fails and leaves the file unchanged', async () => {

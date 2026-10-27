@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- CLI command failures now print on stderr. The `✗` message (and `Unknown command`) is not written to stdout, and the process still exits non-zero. `--json` errors are unchanged: one JSON object on stdout with `success: false` (#153).
+- `meddle --help` documents `route add --exclusions`, including the clear form `--exclusions=`. `meddle route add --help` already described the same flag (#153).
+
 ## [0.5.0-beta.25] - 2026-10-22
 
 ### Changed

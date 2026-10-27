@@ -51,11 +51,13 @@ function success(message) {
 }
 
 /**
- * Print error message
+ * Print a command failure. Human-readable text goes to stderr so stdout stays
+ * empty on error. In --json mode this is a no-op; the caller prints the
+ * `{ success: false }` object on stdout.
  */
 function error(message) {
   if (jsonMode) return
-  console.log(chalk.red('  ✗'), message)
+  console.error(chalk.red('  ✗'), message)
 }
 
 /**
