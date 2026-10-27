@@ -4,7 +4,7 @@ import { once } from 'node:events'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
-import { join, relative } from 'node:path'
+import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
 /**
@@ -215,10 +215,12 @@ describe('switching mocksFilePath at runtime (issue #118)', () => {
         // default path not created yet: reported as default (UI stays silent)
         expect(existsSync(join(home, 'mocks.json'))).toBe(false)
         expect(await api(base, 'GET', '/api/mocks-file')).toMatchObject({ path: join(home, 'mocks.json'), exists: false, custom: false })
-        // relative paths resolve against the proxy cwd (repo root in this
-        // harness); point it back into the temp home so nothing lands in the repo
+        // Relative mocksFilePath resolves against MEDDLE_HOME (#121), and the
+        // API reports the absolute path. A path that climbs out to /tmp via
+        // `../` only round-trips when the repo is nested deeply enough to
+        // reach `/`, so keep the relative path inside the temp home.
         const absolute = join(home, 'rel', 'mocks.json')
-        setMocksPathOnDisk(home, relative(repoRoot, absolute))
+        setMocksPathOnDisk(home, join('rel', 'mocks.json'))
         await api(base, 'POST', '/api/refresh-config')
         expect(Array.isArray(await list(base))).toBe(true)
         expect(await api(base, 'GET', '/api/mocks-file')).toMatchObject({ path: absolute, exists: false, custom: true })

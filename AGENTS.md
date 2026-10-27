@@ -59,7 +59,7 @@ The `v*` tag triggers CI publish to npm. Never publish without a tag.
 
 ## Quirks
 
-- `tests/browser.spec.ts` requires puppeteer and is excluded in CI (`process.env.CI`).
+- `tests/browser.spec.ts` is part of `pnpm test` (including when `CI` is set). It skips the real browser launch when Chrome is not installed. `openBrowserWithProxy` must spawn the browser detached; `execSync` / `spawnSync` on the Chrome process blocks the Vitest worker forever (#130).
 - CI installs with `--ignore-scripts` to avoid postinstall build conflicts.
 - Publish is triggered by `v*` tags via `.github/workflows/publish.yml` (needs `NPM_TOKEN` secret).
 - `cert.ts` uses `node-easy-cert` but bypasses its unreliable `ifRootCATrusted` with a custom `checkCATrusted()` (macOS: `security find-certificate`, Linux: `openssl verify`).

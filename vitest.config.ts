@@ -5,12 +5,11 @@ export default defineConfig({
     include: ['tests/**/*.spec.ts'],
     globals: true,
     testTimeout: 10000,
-    // Issue #130: a full run once hung in a worker. Bound hooks/teardown so a
-    // leaked handle fails the run instead of hanging, and in CI list the
-    // handles that keep the process alive (hanging-process reporter).
+    // Bound hooks/teardown so a leaked handle fails the run instead of hanging
+    // (#130). tests/browser.spec.ts stays in the suite: the launcher detaches
+    // Chrome instead of blocking, and skips the real launch when none is installed.
     hookTimeout: 20000,
     teardownTimeout: 10000,
     reporters: process.env.CI ? ['default', 'hanging-process', './tests/support/progress-reporter.ts'] : ['default'],
-    exclude: process.env.CI ? ['tests/browser.spec.ts'] : [],
   },
 })
