@@ -50,7 +50,7 @@ jobs:
         run: pnpm run build:web
 
       - name: Test (main)
-        # Issue #130: fail fast instead of hanging until the 6h job limit
+        # Backstop if a worker still wedges (#130). The browser-launch hang is fixed in code.
         timeout-minutes: 10
         run: pnpm test
 

@@ -549,7 +549,7 @@ localWSServer.on('connection', (client, req) => {})
     await ensureRootCA({ trustCheckAsync: true })
     await pluginBoot.bootstrapBuiltinPlugins()
     const port = await getFreePort()
-    proxyServer.listen(port, remoteAccess.bindHost, () => {
+    proxyServer.listen(port, remoteAccess.bindHost, async () => {
         const proxyUrl = `http://127.0.0.1:${port}`
         console.log(chalk.green('代理服务器已启动:'), chalk.cyan(proxyUrl))
         proxyDebug('proxy-server start on ' + chalk.green(proxyUrl))
@@ -568,7 +568,9 @@ localWSServer.on('connection', (client, req) => {})
         if (ctx.AUTO_OPEN) {
             const proxyAddr = `127.0.0.1:${port}`
             const remotePort = process.env.MEDDLE_OPEN_CHROMEDEVTOOLS ? 9222 : undefined
-            if (openBrowserWithProxy(proxyUrl, proxyAddr, ctx.meddleDir, remotePort)) {
+            // Promise.resolve: older builds returned boolean; a rejected launch must not take down the proxy.
+            const opened = await Promise.resolve(openBrowserWithProxy(proxyUrl, proxyAddr, ctx.meddleDir, remotePort)).catch(() => false)
+            if (opened) {
                 console.log(chalk.green('已启动浏览器（代理:'), proxyAddr + chalk.green(')'))
             } else {
                 console.log(chalk.yellow('浏览器并未启动，请手动打开'), chalk.cyan(proxyUrl), chalk.yellow('并设置代理'), proxyAddr)

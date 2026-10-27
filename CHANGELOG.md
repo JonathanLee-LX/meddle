@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Opening a browser on Linux no longer waits until Chrome exits. `openBrowserWithProxy` used `execSync`, which blocked the process — and the Vitest worker running `tests/browser.spec.ts` — forever, so the test timeout never fired (#130). The browser is spawned detached, a launcher that does not exit is killed, and the browser spec closes any child it started.
+
 ## [0.5.0-beta.25] - 2026-10-22
 
 ### Changed
