@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - Opening a browser on Linux no longer waits until Chrome exits. `openBrowserWithProxy` used `execSync`, which blocked the process — and the Vitest worker running `tests/browser.spec.ts` — forever, so the test timeout never fired (#130). The browser is spawned detached, a launcher that does not exit is killed, and the browser spec closes any child it started.
+- CLI command failures now print on stderr. The `✗` message (and `Unknown command`) is not written to stdout, and the process still exits non-zero. `--json` errors are unchanged: one JSON object on stdout with `success: false` (#153).
+- `meddle --help` documents `route add --exclusions`, including the clear form `--exclusions=`. `meddle route add --help` already described the same flag (#153).
 
 ## [0.5.0-beta.25] - 2026-10-22
 
