@@ -19,6 +19,11 @@ import {
 
 const DEFAULT_RULE_NAME = '默认规则'
 
+/** PUT /api/rule-files/:name/content: body was not JSON. */
+export const INVALID_RULE_CONTENT_JSON = '请求体不是合法的 JSON'
+/** PUT /api/rule-files/:name/content: `content` is missing or not a string. */
+export const INVALID_RULE_CONTENT_FIELD = 'content 必须是字符串'
+
 /** Directory the server reads/writes route-rule files from (<MEDDLE_HOME>/route-rules). */
 export function getRulesDir(ctx: Pick<ServerContext, 'meddleDir'>): string {
     return path.join(ctx.meddleDir, 'route-rules')
@@ -713,11 +718,20 @@ export function registerRuleFilesRoutes(app: Application, ctx: ServerContext): v
     })
 
     // PUT /api/rule-files/:name/content - 保存规则文件内容（锁住时拒绝）
+    // A missing or non-string `content` used to fall through to '' and empty the file.
     app.put('/api/rule-files/:name/content', (req: Request, res: Response) => {
         const name = decodeURIComponent(req.params.name as string)
+        const contentType = String(req.headers['content-type'] || '').toLowerCase()
+        if (!contentType.includes('application/json')) {
+            sendJson(res, 400, { error: INVALID_RULE_CONTENT_JSON })
+            return
+        }
+        if (req.body == null || typeof req.body !== 'object' || Array.isArray(req.body) || typeof req.body.content !== 'string') {
+            sendJson(res, 400, { error: INVALID_RULE_CONTENT_FIELD })
+            return
+        }
         try {
-            const text = typeof req.body === 'string' ? req.body : (req.body?.content ?? '')
-            writeRuleFileContent(ctx, name, text)
+            writeRuleFileContent(ctx, name, req.body.content)
             sendJson(res, 200, { status: 'success' })
         } catch (err) {
             sendError(res, err)
@@ -772,6 +786,34 @@ export function registerRuleFilesRoutes(app: Application, ctx: ServerContext): v
             sendError(res, err)
         }
     })
+
+    // express.json() rejects invalid JSON before this route runs and would
+    // otherwise answer with an HTML 400. A non-JSON content type never reaches
+    // that parser, so the route itself rejects it before any write.
+    app.use((err: any, req: Request, res: Response, next: (error?: unknown) => void) => {
+        if (isRuleFileContentPut(req) && isJsonParseFailure(err)) {
+            if (res.headersSent) {
+                next(err)
+                return
+            }
+            sendJson(res, 400, { error: INVALID_RULE_CONTENT_JSON })
+            return
+        }
+        next(err)
+    })
+}
+
+function isRuleFileContentPut(req: Request): boolean {
+    if (req.method !== 'PUT') return false
+    const pathOnly = String(req.path || req.url || '').split('?')[0]
+    return /^\/api\/rule-files\/[^/]+\/content$/.test(pathOnly)
+}
+
+function isJsonParseFailure(err: any): boolean {
+    if (!err) return false
+    const status = err.status || err.statusCode
+    if (status !== 400) return false
+    return err.type === 'entity.parse.failed' || err instanceof SyntaxError
 }
 
 function sendJson(res: Response, status: number, body: unknown): void {

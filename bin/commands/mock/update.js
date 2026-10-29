@@ -3,9 +3,9 @@
  */
 
 const output = require('../../lib/output')
-const { isProxyRunning } = require('../../lib/proxy-detect')
 const { apiPut } = require('../../lib/api-client')
 const { updateMockRule } = require('../../lib/file-access')
+const { withProxyOrFile, failCommand } = require('../../lib/proxy-or-file')
 
 // Parse arguments (skip 'mock' and 'update' from argv)
 const args = process.argv.slice(4)
@@ -69,31 +69,17 @@ async function run() {
     process.exit(1)
   }
 
-  const running = await isProxyRunning()
-
-  let result
-  let fileOnly = false
-  if (running) {
-    try {
-      result = await apiPut(`/api/mocks/${id}`, options)
-      result = result.rule || result
-    } catch (e) {
-      // Fallback to file mode
-      result = updateMockRule(id, options)
-      if (!result) {
-        output.error(`Mock rule not found: id=${id}`)
-        process.exit(1)
-      }
-      fileOnly = true
-    }
-  } else {
-    result = updateMockRule(id, options)
-    if (!result) {
-      output.error(`Mock rule not found: id=${id}`)
-      process.exit(1)
-    }
-    fileOnly = true
-  }
+  const { value: result, fileOnly } = await withProxyOrFile({
+    api: async () => {
+      const updated = await apiPut(`/api/mocks/${id}`, options)
+      return updated.rule || updated
+    },
+    file: () => {
+      const updated = updateMockRule(id, options)
+      if (!updated) throw new Error(`Mock rule not found: id=${id}`)
+      return updated
+    },
+  })
 
   if (fileOnly) output.warnFileOnlyMode()
 
@@ -114,7 +100,4 @@ async function run() {
   if (options.headers) output.kv('Headers', JSON.stringify(result.headers || {}))
 }
 
-run().catch(e => {
-  output.error(e.message)
-  process.exit(1)
-})
+run().catch((e) => failCommand(e))
