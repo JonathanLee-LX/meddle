@@ -90,27 +90,128 @@ function getMocksPath() {
 }
 
 /**
- * Load mock rules from file
+ * Offset of the first JSON syntax error. Kept in sync with
+ * core/mock-handler.ts findJsonErrorOffset (V8 often omits a position).
+ */
+function findJsonErrorOffset(t) {
+  let i = 0
+  const ws = () => { while (i < t.length && ' \t\n\r'.includes(t[i])) i++ }
+  const fail = () => { throw i }
+  const str = () => {
+    i++
+    while (i < t.length && t[i] !== '"') {
+      if (t[i] === '\\') i++
+      else if (t.charCodeAt(i) < 0x20) fail()
+      i++
+    }
+    if (i >= t.length) fail()
+    i++
+  }
+  const value = () => {
+    ws()
+    const c = t[i]
+    if (c === '{') {
+      i++; ws()
+      if (t[i] === '}') { i++; return }
+      for (;;) {
+        ws(); if (t[i] !== '"') fail(); str(); ws()
+        if (t[i] !== ':') fail(); i++; value(); ws()
+        if (t[i] === ',') { i++; continue }
+        if (t[i] === '}') { i++; return }
+        fail()
+      }
+    } else if (c === '[') {
+      i++; ws()
+      if (t[i] === ']') { i++; return }
+      for (;;) {
+        value(); ws()
+        if (t[i] === ',') { i++; continue }
+        if (t[i] === ']') { i++; return }
+        fail()
+      }
+    } else if (c === '"') str()
+    else if (/[-0-9]/.test(c || '')) {
+      const m = /^-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?/.exec(t.slice(i))
+      if (!m) fail(); i += m[0].length
+    } else {
+      for (const w of ['true', 'false', 'null']) if (t.startsWith(w, i)) { i += w.length; return }
+      fail()
+    }
+  }
+  try {
+    value(); ws()
+    return i < t.length ? i : t.length
+  } catch (at) {
+    return typeof at === 'number' ? Math.min(at, t.length) : t.length
+  }
+}
+
+/** `第 <line> 行第 <column> 列：<short message>`, same rules as core/mock-handler.ts. */
+function describeMocksParseFailure(text, err) {
+  const message = String((err && err.message) || err)
+  const body = text.replace(/^\uFEFF/, '')
+  let line = null
+  let column = null
+  const lc = /\(line (\d+) column (\d+)\)/.exec(message)
+  const pos = /at position (\d+)/.exec(message)
+  const offset = lc ? null : pos ? Number(pos[1]) : findJsonErrorOffset(body)
+  if (lc) {
+    line = Number(lc[1]); column = Number(lc[2])
+  } else {
+    const before = body.slice(0, offset == null ? body.length : offset).split('\n')
+    line = before.length
+    column = before[before.length - 1].length + 1
+  }
+  const short = message.replace(/\s*\(line \d+ column \d+\)/, '').split(/,\s*(?:\.\.\.)?"/s)[0].replace(/\s+in JSON at position \d+/, '').trim()
+  const loc = line != null ? `第 ${line} 行第 ${column} 列：` : ''
+  return `${loc}${short}`
+}
+
+/**
+ * Read mocks.json. Missing file → null. Empty / whitespace → {}.
+ * Invalid JSON throws MOCKS_FILE_INVALID and must not be treated as [].
+ * `message` refuses a write; `listMessage` is what `mock list` prints.
+ */
+function readMocksDocument(mocksPath) {
+  if (!fs.existsSync(mocksPath)) return null
+  const text = fs.readFileSync(mocksPath, 'utf8').replace(/^\uFEFF/, '')
+  if (text.trim() === '') return {}
+  try {
+    return JSON.parse(text)
+  } catch (err) {
+    const detail = describeMocksParseFailure(text, err)
+    const error = new Error(`Mock 文件格式错误，已禁止写入以免覆盖: ${mocksPath} ${detail}`)
+    error.code = 'MOCKS_FILE_INVALID'
+    error.filePath = mocksPath
+    error.detail = detail
+    error.listMessage = `Mock 文件格式错误: ${mocksPath} ${detail}`
+    throw error
+  }
+}
+
+function rulesFromDocument(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return []
+  return Array.isArray(data.rules) ? data.rules : []
+}
+
+function metaFromDocument(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return { nextId: 0, lastId: 0 }
+  return { nextId: Number(data.nextId) || 0, lastId: Number(data.lastId) || 0 }
+}
+
+/**
+ * Load mock rules from file. A corrupt file throws; it is not an empty list.
  */
 function loadMockRules() {
-  const mocksPath = getMocksPath()
-  try {
-    if (fs.existsSync(mocksPath)) {
-      const data = JSON.parse(fs.readFileSync(mocksPath, 'utf8'))
-      return data.rules || []
-    }
-  } catch (_) {}
-  return []
+  const data = readMocksDocument(getMocksPath())
+  if (data == null) return []
+  return rulesFromDocument(data)
 }
 
 function readMocksFileMeta(mocksPath) {
-  try {
-    if (fs.existsSync(mocksPath)) {
-      const data = JSON.parse(fs.readFileSync(mocksPath, 'utf8'))
-      return { nextId: Number(data.nextId) || 0, lastId: Number(data.lastId) || 0 }
-    }
-  } catch (_) {}
-  return { nextId: 0, lastId: 0 }
+  const data = readMocksDocument(mocksPath)
+  if (data == null) return { nextId: 0, lastId: 0 }
+  return metaFromDocument(data)
 }
 
 function maxRuleId(rules) {

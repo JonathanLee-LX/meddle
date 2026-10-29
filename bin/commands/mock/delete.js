@@ -3,9 +3,9 @@
  */
 
 const output = require('../../lib/output')
-const { isProxyRunning } = require('../../lib/proxy-detect')
 const { apiDelete } = require('../../lib/api-client')
 const { deleteMockRule } = require('../../lib/file-access')
+const { withProxyOrFile, failCommand } = require('../../lib/proxy-or-file')
 
 // Parse arguments (skip 'mock' and 'delete' from argv)
 const args = process.argv.slice(4)
@@ -22,29 +22,17 @@ async function run() {
     process.exit(1)
   }
 
-  const running = await isProxyRunning()
-
-  let fileOnly = false
-  if (running) {
-    try {
+  const { fileOnly } = await withProxyOrFile({
+    api: async () => {
       await apiDelete(`/api/mocks/${id}`)
-    } catch (e) {
-      // Fallback to file mode
+      return true
+    },
+    file: () => {
       const deleted = deleteMockRule(id)
-      if (!deleted) {
-        output.error(`Mock rule not found: id=${id}`)
-        process.exit(1)
-      }
-      fileOnly = true
-    }
-  } else {
-    const deleted = deleteMockRule(id)
-    if (!deleted) {
-      output.error(`Mock rule not found: id=${id}`)
-      process.exit(1)
-    }
-    fileOnly = true
-  }
+      if (!deleted) throw new Error(`Mock rule not found: id=${id}`)
+      return true
+    },
+  })
 
   if (fileOnly) output.warnFileOnlyMode()
 
@@ -59,7 +47,4 @@ async function run() {
   output.success(`id=${id}`)
 }
 
-run().catch(e => {
-  output.error(e.message)
-  process.exit(1)
-})
+run().catch((e) => failCommand(e))
