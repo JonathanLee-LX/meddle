@@ -117,4 +117,51 @@ describe('DetailPanel embedded mode (layout B / #92)', () => {
       expect(screen.getByRole('button', { name })).toBeEnabled()
     }
   })
+
+  it('drops the inner title inside the global panel and keeps actions on a wrapping bar', () => {
+    const record: ProxyRecord = {
+      id: 7,
+      method: 'POST',
+      source: 'https://api.example.com/v1/orders',
+      target: 'https://upstream.example.com/v1/orders',
+      time: '12:00:00',
+      statusCode: 201,
+      clientType: 'remote',
+      clientName: 'iPhone',
+      clientIp: '10.0.0.8',
+      applicationName: 'Mobile Safari',
+    }
+    const detail: RecordDetail = {
+      requestHeaders: {},
+      requestBody: '',
+      responseHeaders: {},
+      responseBody: '',
+      statusCode: 201,
+      statusMessage: 'Created',
+    }
+
+    render(
+      <DetailPanel
+        embedded
+        showTitle={false}
+        detail={detail}
+        loading={false}
+        selectedRecord={record}
+        onReplay={async () => undefined}
+        onCreateMock={() => undefined}
+        onJumpToRule={() => undefined}
+      />,
+    )
+
+    expect(screen.queryByTestId('detail-panel-title')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 2, name: /请求详情/ })).not.toBeInTheDocument()
+    expect(screen.getByTestId('detail-panel-header')).not.toHaveTextContent('请求详情')
+
+    const actions = screen.getByTestId('detail-panel-actions')
+    expect(actions).toHaveClass('flex-wrap')
+    expect(screen.getByTestId('detail-panel-header')).not.toContainElement(actions)
+    for (const name of ['重放', '查看规则', '创建 Mock']) {
+      expect(screen.getByRole('button', { name })).toBeEnabled()
+    }
+  })
 })

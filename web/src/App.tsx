@@ -754,6 +754,7 @@ function App() {
           return (
             <DetailPanel
               embedded
+              showTitle={false}
               detail={store.recordDetail}
               loading={store.detailLoading}
               error={store.detailError}
