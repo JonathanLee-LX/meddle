@@ -722,9 +722,11 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
 
   const headerInner = (
             <>
-            请求详情
+            <span data-testid="detail-panel-title" className="shrink-0 whitespace-nowrap">
+              请求详情
+            </span>
             {detail && (
-              <Badge className={`${getStatusColor(detail.statusCode)} border-0`}>
+              <Badge className={`${getStatusColor(detail.statusCode)} max-w-full min-w-0 shrink truncate border-0`}>
                 {detail.statusCode} {detail.statusMessage}
               </Badge>
             )}
@@ -771,7 +773,7 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
                 )}
               </Badge>
             )}
-            <div className="flex items-center gap-1.5 ml-auto">
+            <div data-testid="detail-panel-actions" className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1.5">
               {detail && onReplay && selectedRecord?.id != null && (
                 <Button
                   variant="outline"
@@ -814,14 +816,14 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
   // Embedded (TrafficWorkLayout right pane / global-panel body): never use Sheet*
   // primitives — they require Dialog context and white-screen #root otherwise.
   const header = embedded ? (
-        <div className="px-3 pt-2.5 pb-1.5" data-testid="detail-panel-header">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+        <div className="min-w-0 px-3 pt-2.5 pb-1.5" data-testid="detail-panel-header">
+          <h2 className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold text-foreground">
             {headerInner}
           </h2>
         </div>
   ) : (
-        <SheetHeader className="px-4 pt-4 pb-2">
-          <SheetTitle className="flex items-center gap-2 text-base">
+        <SheetHeader className="min-w-0 px-4 pt-4 pb-2">
+          <SheetTitle className="flex min-w-0 flex-wrap items-center gap-2 text-base">
             {headerInner}
           </SheetTitle>
         </SheetHeader>
@@ -932,7 +934,7 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
   )
 
   if (embedded) {
-    return <div className="flex h-full min-h-0 flex-col">{body}</div>
+    return <div className="flex h-full min-h-0 min-w-0 flex-col">{body}</div>
   }
 
   return (
