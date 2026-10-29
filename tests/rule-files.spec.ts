@@ -409,6 +409,7 @@ describe('rule-files', () => {
                 post: vi.fn(),
                 put: vi.fn(),
                 delete: vi.fn(),
+                use: vi.fn(),
             } as any
 
             const ruleDir = path.join(tempDir, 'route-rules')
