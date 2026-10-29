@@ -17,6 +17,7 @@ import { SplitPane } from '@/components/split-pane'
 import { EditorPaneActionsProvider } from '@/components/editor-pane-actions'
 import { pluginPaneSplit } from '@/lib/plugin-pane-split'
 import { groupPlugins, type CustomPluginFile } from '@/lib/plugin-groups'
+import { isThirdPartyPluginsEnabled } from '@/lib/third-party-plugins'
 
 const PluginGenerator = lazy(() =>
   import('@/components/plugin-generator').then((module) => ({ default: module.PluginGenerator })),
@@ -96,7 +97,7 @@ export function PluginConfig({
 
   useEffect(() => {
     fetchPlugins()
-    fetchThirdPartyPlugins()
+    if (isThirdPartyPluginsEnabled()) fetchThirdPartyPlugins()
     fetchCustomPlugins()
   }, [fetchPlugins, fetchThirdPartyPlugins])
 
@@ -435,6 +436,7 @@ export function PluginConfig({
               )}
             </PluginGroup>
 
+            {isThirdPartyPluginsEnabled() && (
             <PluginGroup
               title="第三方插件"
               extra={
@@ -465,6 +467,7 @@ export function PluginConfig({
                 ))
               )}
             </PluginGroup>
+            )}
           </div>
         </>
       }
@@ -489,7 +492,11 @@ export function PluginConfig({
         {editor.kind === 'idle' ? (
           <div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
             <p>选择左侧插件进行编辑，或点击「AI 生成」</p>
-            <p className="text-xs">自定义插件在右侧编辑代码；内置和第三方插件在右侧查看并操作</p>
+            <p className="text-xs">
+              {isThirdPartyPluginsEnabled()
+                ? '自定义插件在右侧编辑代码；内置和第三方插件在右侧查看并操作'
+                : '自定义插件在右侧编辑代码；内置插件在右侧查看并操作'}
+            </p>
           </div>
         ) : editor.kind === 'generate' ? (
           <Suspense fallback={<EditorFallback />}>
@@ -552,13 +559,13 @@ export function PluginConfig({
             onStart={() => void handleStartPlugin(editingBuiltin.id)}
             onStop={() => void handleStopPlugin(editingBuiltin.id)}
           />
-        ) : editor.kind === 'third-party' && editingThirdParty ? (
+        ) : isThirdPartyPluginsEnabled() && editor.kind === 'third-party' && editingThirdParty ? (
           <ThirdPartyDetail
             plugin={editingThirdParty}
             loading={loadingThirdParty}
             onUnload={() => void handleUnloadThirdParty(editingThirdParty.id)}
           />
-        ) : editor.kind === 'load-third-party' ? (
+        ) : isThirdPartyPluginsEnabled() && editor.kind === 'load-third-party' ? (
           <div className="flex flex-col gap-[var(--ui-section-gap)] p-[var(--ui-section-gap)]">
             <p className="text-sm text-muted-foreground">输入插件文件或目录路径后加载。</p>
             <div className="flex gap-2">

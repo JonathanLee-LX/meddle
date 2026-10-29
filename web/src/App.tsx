@@ -46,6 +46,7 @@ import type { MockRule, ProxyRecord, ResourceType } from '@/types'
 import { getPathForTab, getShellMode, getTabFromPath, type ShellTab } from '@/lib/shell-mode'
 import { TRAFFIC_NARROW_MAX_WIDTH_PX } from '@/lib/traffic-split'
 import { customPluginFilename, isCustomPlugin } from '@/lib/plugin-groups'
+import { isThirdPartyPluginsEnabled } from '@/lib/third-party-plugins'
 import { useMediaQuery } from '@/hooks/use-media-query'
 
 const RuleConfig = lazy(() =>
@@ -700,33 +701,37 @@ function App() {
             await store.fetchPlugins()
           },
         })),
-        {
-          id: 'plugins.third-party.load',
-          title: '加载第三方插件',
-          section: '插件',
-          icon: Upload,
-          keywords: ['plugin', 'plugins', 'third party', 'load', '第三方插件'],
-          run: async () => {
-            const path = window.prompt('请输入第三方插件路径')
-            if (!path?.trim()) return
-            await store.loadThirdPartyPlugin(path.trim())
-            await store.fetchThirdPartyPlugins()
-          },
-        },
-        ...store.thirdPartyPlugins.map((plugin) => ({
-          id: `plugins.third-party.unload.${plugin.id}`,
-          title: `卸载第三方插件：${plugin.name}`,
-          description: plugin.id,
-          section: '插件',
-          icon: Trash2,
-          danger: true,
-          confirm: `确定要卸载第三方插件「${plugin.name}」吗？`,
-          keywords: ['第三方插件', plugin.name, plugin.id, '卸载'],
-          run: async () => {
-            await store.unloadThirdPartyPlugin(plugin.id)
-            await store.fetchThirdPartyPlugins()
-          },
-        })),
+        ...(isThirdPartyPluginsEnabled()
+          ? [
+              {
+                id: 'plugins.third-party.load',
+                title: '加载第三方插件',
+                section: '插件',
+                icon: Upload,
+                keywords: ['plugin', 'plugins', 'third party', 'load', '第三方插件'],
+                run: async () => {
+                  const path = window.prompt('请输入第三方插件路径')
+                  if (!path?.trim()) return
+                  await store.loadThirdPartyPlugin(path.trim())
+                  await store.fetchThirdPartyPlugins()
+                },
+              },
+              ...store.thirdPartyPlugins.map((plugin) => ({
+                id: `plugins.third-party.unload.${plugin.id}`,
+                title: `卸载第三方插件：${plugin.name}`,
+                description: plugin.id,
+                section: '插件',
+                icon: Trash2,
+                danger: true,
+                confirm: `确定要卸载第三方插件「${plugin.name}」吗？`,
+                keywords: ['第三方插件', plugin.name, plugin.id, '卸载'],
+                run: async () => {
+                  await store.unloadThirdPartyPlugin(plugin.id)
+                  await store.fetchThirdPartyPlugins()
+                },
+              })),
+            ]
+          : []),
         {
           id: 'settings.theme',
           title: '主题与缩放设置',

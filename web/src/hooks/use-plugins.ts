@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import type { Plugin } from '@/types'
+import * as thirdPartyPluginsFlag from '@/lib/third-party-plugins'
 
 /**
  * Hook for managing plugins
@@ -76,6 +77,7 @@ export function usePlugins() {
   }, [])
 
   const fetchThirdPartyPlugins = useCallback(async () => {
+    if (!thirdPartyPluginsFlag.isThirdPartyPluginsEnabled()) return
     try {
       const res = await fetch('/api/plugins/third-party')
       const contentType = res.headers.get('content-type') || ''
@@ -93,6 +95,7 @@ export function usePlugins() {
   }, [])
 
   const loadThirdPartyPlugin = useCallback(async (path: string) => {
+    if (!thirdPartyPluginsFlag.isThirdPartyPluginsEnabled()) return
     try {
       await fetch('/api/plugins/third-party/load', {
         method: 'POST',
@@ -105,6 +108,7 @@ export function usePlugins() {
   }, [])
 
   const unloadThirdPartyPlugin = useCallback(async (id: string) => {
+    if (!thirdPartyPluginsFlag.isThirdPartyPluginsEnabled()) return
     try {
       await fetch(`/api/plugins/third-party/${id}/unload`, { method: 'POST' })
     } catch (err) {

@@ -93,6 +93,61 @@ describe('PluginConfig list|edit', () => {
     localStorage.removeItem(PLUGIN_LIST_STORAGE_KEY)
   })
 
+  it('hides third-party loading and does not request its endpoints', async () => {
+    const fetchThirdPartyPlugins = vi.fn(async () => undefined)
+    const loadThirdPartyPlugin = vi.fn(async () => undefined)
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/plugins/third-party')) {
+        throw new Error(`unexpected third-party request: ${url}`)
+      }
+      return {
+        ok: true,
+        json: async () => ({ plugins: [{ filename: 'demo.js', modified: Date.now() }] }),
+      }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <div style={{ height: 600 }}>
+        <PluginConfig
+          plugins={[builtin]}
+          pluginMode="on"
+          switchPluginMode={vi.fn(async () => undefined)}
+          fetchPlugins={vi.fn(async () => undefined)}
+          startPlugin={vi.fn(async () => undefined)}
+          stopPlugin={vi.fn(async () => undefined)}
+          togglePlugin={vi.fn(async () => undefined)}
+          thirdPartyPlugins={[{
+            id: 'vendor.audit',
+            name: 'Vendor Audit',
+            version: '2.0.0',
+            hooks: ['onRequest'],
+            permissions: [],
+            priority: 0,
+            state: 'running',
+            stats: null,
+          }]}
+          thirdPartySecurity={{ allowAll: false, trusted: [] }}
+          fetchThirdPartyPlugins={fetchThirdPartyPlugins}
+          loadThirdPartyPlugin={loadThirdPartyPlugin}
+          unloadThirdPartyPlugin={vi.fn(async () => undefined)}
+        />
+      </div>,
+    )
+
+    expect(screen.queryByText('第三方插件')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('plugin-config-load')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '加载' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('第三方插件路径')).not.toBeInTheDocument()
+    expect(screen.queryByText('Vendor Audit')).not.toBeInTheDocument()
+    expect(fetchThirdPartyPlugins).not.toHaveBeenCalled()
+    expect(loadThirdPartyPlugin).not.toHaveBeenCalled()
+    await screen.findByText(/内置插件在右侧查看并操作/)
+    const urls = fetchMock.mock.calls.map((call) => String(call[0]))
+    expect(urls.some((url) => url.includes('/api/plugins/third-party'))).toBe(false)
+  })
+
   it('renders the shared split and an idle editor', async () => {
     renderPlugins()
     expect(screen.getByTestId('plugin-config-layout')).toHaveAttribute('data-layout', 'list-edit')
