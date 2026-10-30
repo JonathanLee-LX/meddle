@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-10-27
+## [0.5.0] - 2026-10-30
 
 ### 从 0.4.x 升级需要注意
 
@@ -30,18 +30,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 **怎么做。** 想保留排除项：不要传 `--exclusions`，pattern 里也不要写 `!path`；MCP 不要传 `exclusions`。想清空：`meddle route update <file> <pattern> --exclusions=`，或 MCP / Agent 的 `exclusions: []`。想替换：`--exclusions=/a,/b` 或 `"pattern !/a"`。不要再依赖整份文件被重排。
 
-#### 2. 以 `//` 或 `#` 开头的规则写入会被拒绝
+#### 2. 同一行里的 `//x`、`#x` 不能被结构化写入拆开
 
-**变了什么。** 结构化写入（CLI、MCP、Agent 工具、Web 表格）会拒绝两种读回来会变成注释或禁用行的编辑。错误码都是 `RULE_LINE_SPLIT_UNSAFE`，规则文件不改（#145）。
+**变了什么。** 一行规则可以写多个 pattern。`//` 和 `#` 只有出现在一行去掉前导空白之后的第一个字符时，才表示禁用行或整行注释；写在同一行后部的 `//x`、`#x` 仍是会参与匹配的 pattern，例如 `example.com //x 10.0.0.1:80`、`example.com #x 10.0.0.1:80`。结构化写入（CLI、MCP、Agent 工具、Web 表格）如果会把这种合并行拆开，让 `//x` 或 `#x` 落到新行的开头，就拒绝这次修改，规则文件一个字节都不改（#145）。拆开之后那一行会被读成禁用规则或注释，所以命令不会自动拆。
 
-- 拆行或删掉某个 pattern 之后，剩下的 pattern 以 `//` 或 `#` 开头。例如从 `a.com //cdn.com target` 里删除 `a.com`。提示原文是：`该行剩余的 pattern 以 // 或 # 开头，拆开后会被当成注释，请用文本编辑器手动修改`。
-- 新增规则的 pattern 本身以 `#` 或 `//` 开头，例如 `#foo.com`、`//foo.com`。提示原文是：`规则不能以 // 或 # 开头，否则会被当成禁用行或注释。要写注释或禁用规则，请用文本编辑器。`
+会拒绝的典型操作：从 `a.com //x 10.0.0.1:80` 或 `a.com #x 10.0.0.1:80` 里删除、更新 `a.com`，或改这一行的排除项。提示原文是：`该行剩余的 pattern 以 // 或 # 开头，拆开后会被当成注释，请用文本编辑器手动修改`。`//x` 或 `#x` 若仍然排在另一个正常 pattern 后面（例如从 `a.com b.com //x target` 里删掉 `b.com`，还剩 `a.com //x target`），这次修改可以成功。
 
-CLI 以退出码 1 结束；MCP 返回 `isError`；Web 用 toast 显示同一段文字。`#` 只有出现在一行去掉前导空白之后的第一个字符时，才是整行注释；写在规则行后部的 `#` 仍是 pattern，不是行尾注释。文件里已经存在的 `#` 注释和 `//` 禁用行不会被这次升级删掉。
+另外，新增规则的 pattern 本身以 `#` 或 `//` 开头（例如 `#x`、`//x`、`#foo.com`、`//foo.com`）也会被拒绝。提示原文是：`规则不能以 // 或 # 开头，否则会被当成禁用行或注释。要写注释或禁用规则，请用文本编辑器。`
 
-**谁受影响。** 用命令或 Agent 添加 `#…` / `//…` 规则，或编辑同一行里含有以 `//`、`#` 开头的 pattern 的人。
+CLI 以退出码 1 结束，人读的提示在 stderr；MCP 返回 `isError`，正文是同一段提示；Web 用 toast 显示同一段文字。文件里已经存在的 `#` 注释和 `//` 禁用行不会被这次升级删掉。
 
-**怎么做。** 注释和禁用规则用规则文件的文本编辑器写。结构化接口只写真正会参与匹配的 pattern。
+**谁受影响。** 规则文件里把 `//x` 或 `#x` 和别的 pattern 写在同一行的人；用命令或 Agent 添加以 `#` 或 `//` 开头的规则的人。
+
+**怎么做。** 用规则文件的文本编辑器把合并行拆开：真正要参与匹配的 pattern 各自单独一行。如果 `//x` 或 `#x` 本来就是注释或禁用规则，把它放到单独的一行，让行首就是 `//` 或 `#`。拆开之后，再用 CLI、MCP 或表格去改那条正常规则。
 
 #### 3. `openBrowserWithProxy` 改为返回 `Promise<boolean>`
 
@@ -51,15 +52,17 @@ CLI 以退出码 1 结束；MCP 返回 `isError`；Web 用 toast 显示同一段
 
 **怎么做。** 写成 `const opened = await openBrowserWithProxy(url, proxyServer, meddleDir)`。`true` 表示已打开，`false` 表示没有可用浏览器。不要再把返回值当成同步布尔值。
 
-#### 4. CLI 命令错误改走 stderr，退出码为 1
+#### 4. CLI 的 `✗` 错误改走 stderr，退出码为 1
 
-**变了什么。** 人类可读的命令失败改到 stderr，退出码为 1，stdout 为空（#153、#155）。包括 `output.error` 打出的 `✗` 消息，以及 `Unknown command`。0.4.x 这两类都写在 stdout。
+**变了什么。** `output.error` 打出的人类可读 `✗` 消息改到 stderr，退出码为 1，这类失败的 stdout 为空（#153、#155）。0.4.x 里这些 `✗` 写在 stdout。
 
-`--json` 没有改成「改读 stderr 上的 `✗`」。`route add` / `route update` / `route delete` 失败时，stdout 是一个 JSON 对象 `{"success":false,"error":{"message":"…"}}`，退出码 1，正文里没有 `✗`。同一段 `message` 还会用 `console.error` 再写到 stderr（没有 `✗`）。相对 0.4.x，这是 route 命令的变化：当时 `--json` 下 `output.error` 是空操作，失败往往没有任何输出。仍直接调用 `output.error` 的命令（例如 `mock delete` 缺少 `<id>`）在 `--json` 下继续不打印错误正文，只以退出码 1 表示失败，和 0.4.x 相同。
+`route add` / `route update` / `route delete` 失败时，`--json` 的 stdout 是一个 JSON 对象 `{"success":false,"error":{"message":"…"}}`，退出码 1，正文里没有 `✗`。同一段 `message` 还会写到 stderr（没有 `✗`）。相对 0.4.x，这是这三个子命令的变化：当时 `--json` 下 `output.error` 是空操作，失败往往没有任何输出。
 
-**谁受影响。** 从 stdout 里抓 `✗` 或 `Unknown command` 的脚本，以及把「stdout 非空」当成 route 命令失败的脚本。
+还有两处没有改完，记在文末的 Known issues，跟踪 [https://github.com/JonathanLee-LX/meddle/issues/157](https://github.com/JonathanLee-LX/meddle/issues/157)：未知命令仍把帮助正文打到 stdout；不少命令在 `--json` 下出错时什么都不打印。
 
-**怎么做。** 以退出码判断成败。人读的错误读 stderr。route 的 `--json` 解析 stdout 上的 JSON。只读规则集被拒绝是退出码 3，见下一条。
+**谁受影响。** 从 stdout 里抓 `✗` 的脚本，以及把「stdout 非空」当成 `route add` / `update` / `delete` 失败的脚本。
+
+**怎么做。** 以退出码判断成败。人读的 `✗` 错误读 stderr。`route add` / `update` / `delete` 的 `--json` 解析 stdout 上的 JSON。只读规则集被拒绝是退出码 3，见下一条。
 
 #### 5. 规则集可以加只读锁，写入会以专用错误拒绝
 
@@ -79,7 +82,7 @@ CLI 以退出码 1 结束；MCP 返回 `isError`；Web 用 toast 显示同一段
 
 **变了什么。**
 
-- 代理读取 `settings.json` 里的 `mocksFilePath` 时：`~` 和 `~/…` 展开到用户主目录；相对路径相对于 `MEDDLE_HOME`（默认 `~/.meddle`），不再相对于启动代理时的当前目录（#121、#126）。settings 里的原文不会被自动改写。若这个相对路径按旧规则（启动目录）能找到文件、按新规则找不到，启动时警告一次，设置页和 config doctor 会给出原来的路径和现在的路径。「改用此路径」只填入输入框，还需要点「应用」。
+- 代理读取 `settings.json` 里的 `mocksFilePath` 时：`~` 和 `~/…` 展开到用户主目录；相对路径相对于 `MEDDLE_HOME`（默认 `~/.meddle`），不再相对于启动代理时的当前目录（#121、#126）。settings 里的原文不会被自动改写。若这个相对路径按旧规则（启动目录）能找到文件、按新规则找不到，启动时警告一次，设置页和设置页里的「诊断配置」会给出原来的路径和现在的路径。「改用此路径」只填入输入框，还需要点「应用」。`meddle doctor` 不在这次修正里：它仍按当前工作目录解析相对的 `mocksFilePath`，不按 `MEDDLE_HOME`，也不展开 `~`。这是已知问题，见 [https://github.com/JonathanLee-LX/meddle/issues/157](https://github.com/JonathanLee-LX/meddle/issues/157)。
 - 自定义路径指向的文件还不存在时，不再静默退回默认的 `mocks.json`。代理按空规则使用该路径，第一次保存才创建文件。修改 `mocksFilePath` 立即生效，不必重启（#118、#119）。
 - Web 保存设置改为 `PATCH /api/settings`，只提交改动的字段，避免一个旧标签页把另一个标签页刚改的 `mocksFilePath` 写回去。`POST /api/settings` 仍是整份替换（#121）。
 - `mocks.json` 解析失败时，创建 / 更新 / 开关 / 删除（API 和 Agent）在改内存之前拒绝，HTTP 409，`code` 为 `MOCKS_FILE_INVALID`，消息带完整路径和行、列。空文件或只有空白视为空列表。写盘前会再读一次磁盘，并用临时文件加 rename（#120、#122）。
@@ -122,6 +125,12 @@ CLI 以退出码 1 结束；MCP 返回 `isError`；Web 用 toast 显示同一段
 
 **怎么做。** 私有仓库先导出 `GH_TOKEN` 或 `GITHUB_TOKEN`，再执行 `meddle update`。需要 Puppeteer 时单独安装 `puppeteer-core`。代理、CLI 和 MCP 的用法不用为此改动。
 
+### Upgrading from 0.4.x
+
+- The first start writes `settings.ruleFileOrder` when that field is missing. Enabled files are listed in `activeRuleFiles` order, then the other rule files. `meddle route list` (and the rules-page tabs) follow that order afterwards, so the listing can differ from the previous directory order (#81, #82).
+- A merged rule line that contains `//x` or `#x` beside another pattern (for example `example.com //x 10.0.0.1:80` or `example.com #x 10.0.0.1:80`) is rejected by a structured add / update / delete that would split it. On its own line, `//x` or `#x` would be read as a disabled rule or a comment, so the file is left unchanged. Split the patterns onto separate lines in the text editor, then edit again. See item 2 above (#145).
+- Mock rules gain a `query` field. A rule saved from the CLI, the API, or the Web editor includes `query` (empty when unused). Existing 0.4.x rules that do not have the field keep matching as before; set `query` (CLI `--query`) when the same path should return different bodies for different query parameters (#76).
+
 ### Added
 
 - Public entry for the dashboard and the proxy. `MEDDLE_PUBLIC_URL` (for example `https://meddle.example.com` or `https://meddle.example.com:2083` when the proxy port is published through a raw TCP tunnel) is shown as 「公网入口」. Certificate and setup links use that origin, and the phone dials the public proxy port instead of the internal one. When the dashboard itself is opened from a non-local host, the Web UI infers the public entry from `window.location` (#59).
@@ -137,9 +146,9 @@ CLI 以退出码 1 结束；MCP 返回 `isError`；Web 用 toast 显示同一段
 ### Changed
 
 - Route writes edit only the line that holds the pattern. Exclusions stay unless the caller sets them: CLI `--exclusions=` clears and `--exclusions=/a,/b` or a `!path` token in the pattern replaces; MCP and Agent tools keep exclusions when the field is omitted and clear them with `[]`. See the upgrade notes for the full keep/clear/reject matrix (#145, #146, #149, #151, #153, #155). `meddle --help` documents `route add [--exclusions=]`.
-- A structured rule write whose pattern starts with `//` or `#`, or that would leave such a pattern at the start of a line, is rejected with `RULE_LINE_SPLIT_UNSAFE` and the file is left unchanged. Messages: `该行剩余的 pattern 以 // 或 # 开头，拆开后会被当成注释，请用文本编辑器手动修改` and `规则不能以 // 或 # 开头，否则会被当成禁用行或注释。要写注释或禁用规则，请用文本编辑器。` (#145).
+- A structured rule write that would split a merged line and leave `//x` or `#x` at the start of a line is refused, and the file is left unchanged. Those tokens are patterns while they sit behind another pattern (`example.com //x 10.0.0.1:80`, `example.com #x 10.0.0.1:80`); on their own line they would be read as a disabled rule or a comment. Split the line in the text editor, then edit again. Adding a new pattern that itself starts with `//` or `#` is refused the same way. Messages: `该行剩余的 pattern 以 // 或 # 开头，拆开后会被当成注释，请用文本编辑器手动修改` and `规则不能以 // 或 # 开头，否则会被当成禁用行或注释。要写注释或禁用规则，请用文本编辑器。` (#145).
 - `openBrowserWithProxy` returns `Promise<boolean>`. Callers must await it (#130, #156).
-- Human-readable CLI failures (`✗` and `Unknown command`) go to stderr and exit 1. `route` `--json` failures print one `{ "success": false, "error": { "message" } }` object on stdout (#153, #155).
+- Human-readable `✗` failures from `output.error` go to stderr and exit 1, with an empty stdout. `route add` / `route update` / `route delete` `--json` failures print one `{ "success": false, "error": { "message" } }` object on stdout and the same message on stderr (#153, #155). Help text for an unknown command still goes to stdout, and some commands still print nothing under `--json` on error; see Known issues.
 - When a mock or route command writes the file but cannot reach a live proxy, it prints `Config written to file, but could not connect to a running proxy — restart required for changes to take effect.` on stderr (including `--json`) and still exits 0. `mcp-proxy-url.json` is written on every proxy start (#85, #86).
 - `mocksFilePath`: `~` expands to the home directory, relative paths resolve against `MEDDLE_HOME`, a missing custom file is no longer replaced by the default `mocks.json`, and a change applies without restart. The Web UI saves settings with `PATCH /api/settings` (changed fields only). `POST /api/settings` remains a full replace (#118, #119, #121, #126).
 - Invalid `meddle mock add/update --headers` JSON exits 1 with `Invalid --headers JSON: …` instead of saving empty headers. `query` matching is parameter-bounded (#76).
@@ -147,10 +156,14 @@ CLI 以退出码 1 结束；MCP 返回 `isError`；Web 用 toast 显示同一段
 - `puppeteer-core` moved from `dependencies` to `devDependencies` and is no longer embedded in the deno binary (#64).
 - Private-repo `meddle update` / `meddle update --beta` and the install script send `Authorization: Bearer` from `GH_TOKEN` (preferred) or `GITHUB_TOKEN` (#79, #80).
 - The settings page shows the route-rules directory the server is actually using (`GET /api/version` adds `routeRulesDir` / `routeRulesDirDisplay`) instead of a hard-coded `~/.meddle/route-rules/` (#139, #142). The settings page shows the running app version. Custom plugins are grouped by source (#112, #113).
+- Third-party plugins are unsupported for now, and the loader is hidden (#161). `THIRD_PARTY_PLUGINS_ENABLED` is `false` by default, so the plugins page does not show 「加载第三方插件」. The page, the plugins hook, and the command palette do not call `/api/plugins/third-party` or `/load`. Those endpoints are not implemented.
 - Web UI primitives (Button, Badge, Tabs, Input) follow the shared size and color tokens. `web/src/components/ui-layout-standard.test.ts` and `button.test.tsx` lock the token and Button contracts, and `AGENTS.md` records the same rules (#70). The settings 「应用」 button is the solid primary button and shows 「应用中…」 while saving (#138, #140).
 
 ### Fixed
 
+- A corrupt `mocks.json` is no longer overwritten by the CLI (#162). `meddle mock add`, `mock update`, `mock enable`, `mock disable`, and `mock delete` exit 1, print the error on stderr, and leave the file byte-for-byte unchanged, whether or not the proxy is running. With the proxy up, the server returns **409** and `"code":"MOCKS_FILE_INVALID"`, and the CLI prints that response body (stdout stays empty, including `--json`). With the proxy down, stderr is the `✗` line `Mock 文件格式错误，已禁止写入以免覆盖: <path> 第 <line> 行第 <column> 列：<msg>`. `meddle mock list` and `meddle mock list --json` exit 1 and print `Mock 文件格式错误: <path> 第 <line> 行第 <column> 列：<msg>` on stderr instead of `[]`; stdout is empty. `meddle doctor` still uses the old check and is not covered by this fix: a parse error is still `Mock 规则文件格式错误: <JSON message>`, and JSON that parses without a `rules` array is still `Mock 文件格式错误：缺少 rules 数组`.
+- `PUT /api/rule-files/:name/content` returns **400** and no longer clears the file when the body is not JSON, when `content` is not a string, when the body is `{}`, or when the body is empty (#162). A non-JSON body answers `{"error":"请求体不是合法的 JSON"}`. Missing or non-string `content` (`{}`, `[]`, `{"content":null}`, `{"content":1}`) answers `{"error":"content 必须是字符串"}`. The file stays byte-for-byte unchanged. An empty string is valid: `{"content":""}` returns 200 and clears the file. A locked ruleset still returns 423 for a valid string `content`; an invalid body is 400 before the lock check.
+- Traffic detail layout (#161). On a wide screen (1440) the title 「请求详情」 was squeezed to one character per line; it now stays on one line, and 「重放 / 查看规则 / 创建 Mock」 wrap in the action row. On a narrow screen (390) the title appeared twice and the action buttons were cut off; the inner heading is omitted because the sheet already shows 「请求详情」, and the three actions sit on a wrapping bottom bar.
 - Opening a browser on Linux no longer waits until Chrome exits, so a detached launch cannot wedge the process or the Vitest worker that runs `tests/browser.spec.ts` (#130, #156). `CI=1` no longer skips that spec; the spec skips the real launch when Chrome is not installed. The mocks-file switch test keeps a relative `mocksFilePath` inside `MEDDLE_HOME`, so `../` does not depend on how deeply the checkout is nested (#156).
 - Rule add/update/delete no longer drops comments, blank lines, disabled rules, a leading BOM, or other rules' exclusions (#145, #146). `meddle route update --exclusions=` can clear one rule's exclusions (#149, #151). Renaming a rule file in the Web UI keeps the loaded text under the new name. The built-in Agent's route-update confirmation includes `newTarget`.
 - An unparseable mocks file is not overwritten (`MOCKS_FILE_INVALID`, HTTP 409) (#120, #122). Creating a mock never reuses an id to overwrite another rule (#115, #117). Writing a symlinked mocks file keeps the symlink and the file mode (#123, #124). Switching `mocksFilePath` takes effect without a restart (#118, #119). A stale settings tab cannot revert fields another tab already saved (#121, #126).
@@ -159,6 +172,12 @@ CLI 以退出码 1 结束；MCP 返回 `isError`；Web 用 toast 显示同一段
 - The deno binary no longer hangs on an empty HTTPS upstream body, and Node no longer leaves `OPTIONS` / `HEAD` / a timed-out HTTP/2 request pending (#72, #74). Plugin `mode=on` no longer emits `transfer-encoding` together with `content-length` (#72).
 - The first MITM certificate for a new host no longer blocks the proxy on a synchronous pure-JS RSA-2048. Key generation uses `crypto.generateKeyPairSync` (#116, #129).
 - Rule-file tab and rule-row drag handles stay hidden until hover, stay on the horizontal axis, and no longer fight the pointer (#83, #84). Deleting a plugin closes a leftover editor, and the plugin list is reachable from the keyboard (#107, #108, #110). Narrow viewports collapse the sidebar into an overlay instead of squeezing the page (#109, #114).
+
+### Known issues
+
+- An unknown command still prints its help text on stdout and exits 1. The top-level CLI writes `Unknown command: …` to stderr and then the full help to stdout; `meddle mock <unknown>` and `meddle route <unknown>` print only the subcommand help on stdout. Commands that fail only through `output.error` print nothing under `--json` (exit 1, empty stdout and stderr), including `route show`, `route preview`, `route active set`, `route create`, and `mock add` / `update` / `enable` / `disable` / `delete` when the failure is a missing argument or a missing id. `route add` / `route update` / `route delete` are the exception: their `--json` failures print `{"success":false,"error":{"message":"…"}}` on stdout. Tracked in [https://github.com/JonathanLee-LX/meddle/issues/157](https://github.com/JonathanLee-LX/meddle/issues/157).
+- `meddle doctor` still resolves a relative `mocksFilePath` against the current working directory, not `MEDDLE_HOME`, and does not expand `~`. The proxy and the settings-page 「诊断配置」 use the new resolution. Tracked in [https://github.com/JonathanLee-LX/meddle/issues/157](https://github.com/JonathanLee-LX/meddle/issues/157).
+- If mocks.json is valid JSON but has the wrong shape (e.g. a top-level array), CLI mock writes while the proxy is not running treat it as empty and overwrite the file. Back up mocks.json before hand-editing it. Tracked in #160.
 
 ## [0.5.0-beta.26] - 2026-10-27
 
