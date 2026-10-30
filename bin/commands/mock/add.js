@@ -3,9 +3,9 @@
  */
 
 const output = require('../../lib/output')
-const { isProxyRunning } = require('../../lib/proxy-detect')
 const { apiPost } = require('../../lib/api-client')
 const { addMockRule } = require('../../lib/file-access')
+const { withProxyOrFile, failCommand } = require('../../lib/proxy-or-file')
 
 // Parse arguments
 const args = process.argv.slice(3)
@@ -76,23 +76,13 @@ async function run() {
     enabled: true
   }
 
-  const running = await isProxyRunning()
-
-  let result
-  let fileOnly = false
-  if (running) {
-    try {
-      result = await apiPost('/api/mocks', rule)
-      result = result.rule || result
-    } catch (e) {
-      // Fallback to file mode
-      result = addMockRule(rule)
-      fileOnly = true
-    }
-  } else {
-    result = addMockRule(rule)
-    fileOnly = true
-  }
+  const { value: result, fileOnly } = await withProxyOrFile({
+    api: async () => {
+      const created = await apiPost('/api/mocks', rule)
+      return created.rule || created
+    },
+    file: () => addMockRule(rule),
+  })
 
   if (fileOnly) output.warnFileOnlyMode()
 
@@ -115,7 +105,4 @@ async function run() {
   }
 }
 
-run().catch(e => {
-  output.error(e.message)
-  process.exit(1)
-})
+run().catch((e) => failCommand(e))

@@ -30,6 +30,12 @@ interface DetailPanelProps {
   onReplay?: (id: number) => Promise<unknown>
   /** Jump to matching route rule in config shell (display entry point). */
   onJumpToRule?: (record: ProxyRecord) => void
+  /**
+   * The global panel already shows 「请求详情」. Omit the inner heading and
+   * park 重放 / 查看规则 / 创建 Mock on a wrapping bottom bar so they are not
+   * clipped at phone width.
+   */
+  showTitle?: boolean
 }
 
 function getStatusColor(code: number) {
@@ -690,7 +696,7 @@ function OverviewHitPane({ record, detail }: { record: ProxyRecord; detail: Reco
   )
 }
 
-export function DetailPanel({ open = false, onClose, embedded = false, detail, loading, error, selectedRecord, onCreateMock, onReplay, onJumpToRule }: DetailPanelProps) {
+export function DetailPanel({ open = false, onClose, embedded = false, detail, loading, error, selectedRecord, onCreateMock, onReplay, onJumpToRule, showTitle = true }: DetailPanelProps) {
   const [replaying, setReplaying] = useState(false)
 
   const handleCreateMock = () => {
@@ -720,11 +726,61 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
     }
   }
 
+  const actionButtons = (
+            <>
+              {detail && onReplay && selectedRecord?.id != null && (
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={handleReplay}
+                  disabled={replaying}
+                  title="使用相同的请求参数重新发送请求"
+                >
+                  <RotateCw className={`h-3.5 w-3.5 mr-1 ${replaying ? 'animate-spin' : ''}`} />
+                  {replaying ? '重放中…' : '重放'}
+                </Button>
+              )}
+              {selectedRecord && onJumpToRule && selectedRecord.source !== selectedRecord.target && !selectedRecord.mock && (
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={() => onJumpToRule(selectedRecord)}
+                  title="跳转到路由规则配置"
+                  data-testid="detail-jump-to-rule"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                  查看规则
+                </Button>
+              )}
+              {detail && onCreateMock && !selectedRecord?.mock && (
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={handleCreateMock}
+                  data-testid="detail-create-mock"
+                >
+                  <Wand2 className="h-3.5 w-3.5 mr-1" />
+                  创建 Mock
+                </Button>
+              )}
+            </>
+  )
+
+  const headerActions = (
+            <div data-testid="detail-panel-actions" className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+              {actionButtons}
+            </div>
+  )
+
   const headerInner = (
             <>
-            请求详情
+            {showTitle && (
+              <span data-testid="detail-panel-title" className="shrink-0 whitespace-nowrap">
+                请求详情
+              </span>
+            )}
             {detail && (
-              <Badge className={`${getStatusColor(detail.statusCode)} border-0`}>
+              <Badge className={`${getStatusColor(detail.statusCode)} max-w-full min-w-0 shrink truncate border-0`}>
                 {detail.statusCode} {detail.statusMessage}
               </Badge>
             )}
@@ -771,57 +827,37 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
                 )}
               </Badge>
             )}
-            <div className="flex items-center gap-1.5 ml-auto">
-              {detail && onReplay && selectedRecord?.id != null && (
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={handleReplay}
-                  disabled={replaying}
-                  title="使用相同的请求参数重新发送请求"
-                >
-                  <RotateCw className={`h-3.5 w-3.5 mr-1 ${replaying ? 'animate-spin' : ''}`} />
-                  {replaying ? '重放中…' : '重放'}
-                </Button>
-              )}
-              {selectedRecord && onJumpToRule && selectedRecord.source !== selectedRecord.target && !selectedRecord.mock && (
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={() => onJumpToRule(selectedRecord)}
-                  title="跳转到路由规则配置"
-                  data-testid="detail-jump-to-rule"
-                >
-                  <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                  查看规则
-                </Button>
-              )}
-              {detail && onCreateMock && !selectedRecord?.mock && (
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={handleCreateMock}
-                  data-testid="detail-create-mock"
-                >
-                  <Wand2 className="h-3.5 w-3.5 mr-1" />
-                  创建 Mock
-                </Button>
-              )}
-            </div>
+            {showTitle ? headerActions : null}
             </>
   )
 
+  const bottomActions = !showTitle ? (
+    <div
+      data-testid="detail-panel-actions"
+      className="flex max-w-full shrink-0 flex-wrap items-center gap-1.5 border-t px-3 py-2"
+    >
+      {actionButtons}
+    </div>
+  ) : null
+
   // Embedded (TrafficWorkLayout right pane / global-panel body): never use Sheet*
   // primitives — they require Dialog context and white-screen #root otherwise.
+  const headerRowClass = 'flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold text-foreground'
   const header = embedded ? (
-        <div className="px-3 pt-2.5 pb-1.5" data-testid="detail-panel-header">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            {headerInner}
-          </h2>
+        <div className="min-w-0 px-3 pt-2.5 pb-1.5" data-testid="detail-panel-header">
+          {showTitle ? (
+            <h2 className={headerRowClass}>
+              {headerInner}
+            </h2>
+          ) : (
+            <div className={headerRowClass}>
+              {headerInner}
+            </div>
+          )}
         </div>
   ) : (
-        <SheetHeader className="px-4 pt-4 pb-2">
-          <SheetTitle className="flex items-center gap-2 text-base">
+        <SheetHeader className="min-w-0 px-4 pt-4 pb-2">
+          <SheetTitle className="flex min-w-0 flex-wrap items-center gap-2 text-base">
             {headerInner}
           </SheetTitle>
         </SheetHeader>
@@ -928,11 +964,12 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
             选择左侧一条流量以查看详情 / 命中信息
           </div>
         )}
+        {bottomActions}
     </>
   )
 
   if (embedded) {
-    return <div className="flex h-full min-h-0 flex-col">{body}</div>
+    return <div className="flex h-full min-h-0 min-w-0 flex-col">{body}</div>
   }
 
   return (

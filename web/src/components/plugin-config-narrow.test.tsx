@@ -47,27 +47,27 @@ describe('PluginConfig at narrow widths (#109)', () => {
     vi.unstubAllGlobals()
   })
 
-  it('keeps list | editor side by side at 900px with the 第三方插件 group in the full-height list', () => {
+  it('keeps list | editor side by side at 900px with the list full height', () => {
     installViewport(900)
     renderPlugins([third])
     const list = screen.getByTestId('plugin-config-list')
-    // Side by side: a pixel-width column, not the stacked 46% strip that clipped the group.
+    // Side by side: a pixel-width column, not the stacked 46% strip that clipped the last group.
     expect(list.style.width).not.toBe('')
     expect(list).toHaveClass('md:max-h-none')
     expect(screen.getByTestId('plugin-config-layout')).toHaveClass('md:flex-row')
-    const group = within(list).getByText('第三方插件').closest('section') as HTMLElement
-    expect(group).toBeInTheDocument()
-    expect(within(group).getByTestId('plugin-config-row-third-vendor.audit')).toBeInTheDocument()
-    expect(within(group).getByTestId('plugin-config-load')).toBeInTheDocument()
+    expect(within(list).queryByText('第三方插件')).not.toBeInTheDocument()
+    expect(within(list).queryByTestId('plugin-config-load')).not.toBeInTheDocument()
+    expect(within(list).queryByTestId('plugin-config-row-third-vendor.audit')).not.toBeInTheDocument()
   })
 
-  it('stacks below 768px and still renders the 第三方插件 group', () => {
+  it('stacks below 768px and does not render the hidden third-party loader', () => {
     installViewport(700)
     renderPlugins()
     const list = screen.getByTestId('plugin-config-list')
     expect(list.style.width).toBe('')
-    expect(within(list).getByText('第三方插件')).toBeInTheDocument()
-    expect(within(list).getByText('暂无第三方插件')).toBeInTheDocument()
+    expect(within(list).queryByText('第三方插件')).not.toBeInTheDocument()
+    expect(within(list).queryByText('暂无第三方插件')).not.toBeInTheDocument()
+    expect(within(list).queryByTestId('plugin-config-load')).not.toBeInTheDocument()
   })
 
   it('switches to side by side at exactly 768px', () => {
