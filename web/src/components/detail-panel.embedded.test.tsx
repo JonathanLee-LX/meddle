@@ -164,4 +164,37 @@ describe('DetailPanel embedded mode (layout B / #92)', () => {
       expect(screen.getByRole('button', { name })).toBeEnabled()
     }
   })
+
+  it('shows the upstream error reason on the overview tab', () => {
+    const record: ProxyRecord = {
+      id: 9,
+      method: 'GET',
+      source: 'http://127.0.0.1:1/',
+      target: 'http://127.0.0.1:1/',
+      time: '12:00:00',
+      statusCode: 502,
+      duration: 12,
+    }
+    const detail: RecordDetail = {
+      requestHeaders: {},
+      requestBody: '',
+      responseHeaders: {},
+      responseBody: 'ECONNREFUSED: connect ECONNREFUSED 127.0.0.1:1',
+      statusCode: 502,
+      statusMessage: 'Bad Gateway',
+      error: 'ECONNREFUSED: connect ECONNREFUSED 127.0.0.1:1',
+    }
+
+    render(
+      <DetailPanel
+        embedded
+        detail={detail}
+        loading={false}
+        selectedRecord={record}
+      />,
+    )
+
+    expect(screen.getByTestId('detail-upstream-error')).toHaveTextContent('ECONNREFUSED')
+    expect(screen.getByText(/出错原因/)).toBeInTheDocument()
+  })
 })

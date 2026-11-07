@@ -170,6 +170,35 @@ describe('corrupt mocks.json while the proxy is running', () => {
         }
     }, 45_000)
 
+    it('wrong shape (top-level array): prints the API 409, exits 1, and does not modify the file', async () => {
+        const home = makeHome()
+        const file = join(home, 'mocks.json')
+        writeFileSync(file, JSON.stringify({ nextId: 2, rules: [rule(1, 'keep')] }, null, 2))
+        const { base, port } = await startProxy(home)
+        const original = JSON.stringify([rule(1, 'keep')], null, 2)
+        writeFileSync(file, original)
+        const before = readFileSync(file)
+
+        const probe = await fetch(`${base}/api/mocks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: 'A', urlPattern: 'a.test', body: 'a' }),
+        })
+        expect(probe.status).toBe(409)
+        const apiBody = await probe.text()
+        expect(apiBody).toContain('"code":"MOCKS_FILE_INVALID"')
+        expect(apiBody).toContain('缺少 rules 数组')
+        expect(readFileSync(file).equals(before)).toBe(true)
+
+        for (const args of MUTATIONS) {
+            const { code, stdout, stderr } = await runCli(args, home, port)
+            expect(code, `${args.join(' ')} stderr=${stderr}`).toBe(1)
+            expect(stderr.trim(), args.join(' ')).toBe(apiBody.trim())
+            expect(stdout.trim(), args.join(' ')).toBe('')
+            expect(readFileSync(file).equals(before), args.join(' ')).toBe(true)
+        }
+    }, 45_000)
+
     it('mock list and mock list --json exit 1 and never print []', async () => {
         const home = makeHome()
         const file = join(home, 'mocks.json')
@@ -231,6 +260,37 @@ describe('corrupt mocks.json while the proxy is not running', () => {
             expect(readFileSync(file).equals(before)).toBe(true)
         }
     }, 20_000)
+
+    it.each([
+        ['top-level array', (ruleOne: ReturnType<typeof rule>) => JSON.stringify([ruleOne], null, 2)],
+        ['object without rules', () => JSON.stringify({ nextId: 3 }, null, 2)],
+        ['rules is not an array', () => JSON.stringify({ nextId: 3, rules: { id: 1 } }, null, 2)],
+    ])('wrong shape %s: refuses the write, exits 1, and leaves the file byte-for-byte', async (_name, build) => {
+        const home = makeHome()
+        const file = join(home, 'mocks.json')
+        const original = build(rule(1, 'keep'))
+        writeFileSync(file, original)
+        const before = readFileSync(file)
+        const port = await reservePort()
+        const expected = writeRefusal(file, original)
+
+        for (const args of MUTATIONS) {
+            const { code, stdout, stderr } = await runCli(args, home, port)
+            expect(code, `${args.join(' ')} stderr=${stderr}`).toBe(1)
+            expect(stderr).toContain('✗')
+            expect(stderr).toContain(expected)
+            expect(stderr).toContain('缺少 rules 数组')
+            expect(stdout.trim()).toBe('')
+            expect(readFileSync(file).equals(before), args.join(' ')).toBe(true)
+        }
+
+        const listed = await runCli(['mock', 'list', '--json'], home, port)
+        expect(listed.code, listed.stderr).toBe(1)
+        expect(listed.stderr).toContain('缺少 rules 数组')
+        expect(listed.stdout.trim()).not.toBe('[]')
+        expect(listed.stdout.trim()).toBe('')
+        expect(readFileSync(file).equals(before)).toBe(true)
+    }, 30_000)
 
     it('still writes a valid file and warns that a restart is required', async () => {
         const home = makeHome()
