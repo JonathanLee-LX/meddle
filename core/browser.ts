@@ -49,14 +49,16 @@ function darwinAppExists(app: string): boolean {
     return roots.some((root) => fs.existsSync(path.join(root, `${app}.app`)))
 }
 
+/** Same availability rules as `findInstalledBrowser` (PATH on Windows/Linux, .app on macOS). */
+export function candidateAvailable(platform: Platform, app: string): boolean {
+    if (platform === 'darwin') return darwinAppExists(app)
+    return Boolean(commandOnPath(app))
+}
+
 /** Name of a browser this machine can launch (`google-chrome`, `Google Chrome`, …), or null. */
 export function findInstalledBrowser(platform: Platform = os.platform()): string | null {
     for (const app of browserCandidates(platform)) {
-        if (platform === 'darwin') {
-            if (darwinAppExists(app)) return app
-            continue
-        }
-        if (commandOnPath(app)) return app
+        if (candidateAvailable(platform, app)) return app
     }
     return null
 }
@@ -216,12 +218,6 @@ function launchFallback(platform: Platform, url: string): Promise<boolean> {
 function chromeProfileDir(meddleDir: string, proxyServer: string): string {
     const key = String(proxyServer || 'default').replace(/[^\w.-]+/g, '_')
     return path.join(meddleDir, `chrome-proxy-${key}`)
-}
-
-function candidateAvailable(platform: Platform, app: string): boolean {
-    if (platform === 'darwin') return darwinAppExists(app)
-    if (platform === 'win32') return true
-    return Boolean(commandOnPath(app))
 }
 
 export async function openBrowserWithProxy(url: string, proxyServer: string, meddleDir: string, remoteDebuggingPort?: number): Promise<boolean> {
