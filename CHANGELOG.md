@@ -178,6 +178,12 @@ The complete upgrade notes are the Chinese section 「从 0.4.x 升级需要注�
 - The first MITM certificate for a new host no longer blocks the proxy on a synchronous pure-JS RSA-2048. Key generation uses `crypto.generateKeyPairSync` (#116, #129).
 - Rule-file tab and rule-row drag handles stay hidden until hover, stay on the horizontal axis, and no longer fight the pointer (#83, #84). Deleting a plugin closes a leftover editor, and the plugin list is reachable from the keyboard (#107, #108, #110). Narrow viewports collapse the sidebar into an overlay instead of squeezing the page (#109, #114).
 
+### Known issues
+
+- An unknown command still prints its help text on stdout and exits 1. The top-level CLI writes `Unknown command: …` to stderr and then the full help to stdout; `meddle mock <unknown>` and `meddle route <unknown>` print only the subcommand help on stdout. Commands that fail only through `output.error` print nothing under `--json` (exit 1, empty stdout and stderr), including `route show`, `route preview`, `route active set`, `route create`, and `mock add` / `update` / `enable` / `disable` / `delete` when the failure is a missing argument or a missing id. `route add` / `route update` / `route delete` are the exception: their `--json` failures print `{"success":false,"error":{"message":"…"}}` on stdout. Tracked in [https://github.com/JonathanLee-LX/meddle/issues/157](https://github.com/JonathanLee-LX/meddle/issues/157).
+- `meddle doctor` still resolves a relative `mocksFilePath` against the current working directory, not `MEDDLE_HOME`, and does not expand `~`. The proxy and the settings-page 「诊断配置」 use the new resolution. Tracked in [https://github.com/JonathanLee-LX/meddle/issues/157](https://github.com/JonathanLee-LX/meddle/issues/157).
+- If mocks.json is valid JSON but has the wrong shape (e.g. a top-level array), CLI mock writes while the proxy is not running treat it as empty and overwrite the file. Back up mocks.json before hand-editing it. Tracked in [https://github.com/JonathanLee-LX/meddle/issues/160](https://github.com/JonathanLee-LX/meddle/issues/160).
+
 ## [0.5.0-beta.26] - 2026-10-27
 
 ### Changed
