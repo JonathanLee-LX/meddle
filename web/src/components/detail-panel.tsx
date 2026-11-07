@@ -657,6 +657,14 @@ function OverviewHitPane({ record, detail }: { record: ProxyRecord; detail: Reco
         <div className="font-mono">
           {detail.statusCode} {detail.statusMessage}
         </div>
+        {detail.error && (
+          <>
+            <div className="text-muted-foreground">出错原因</div>
+            <div className="break-all font-mono text-destructive" data-testid="detail-upstream-error">
+              {detail.error}
+            </div>
+          </>
+        )}
         <div className="text-muted-foreground">延迟</div>
         <div className="font-mono tabular-nums">{formatDurationMs(record.duration)}</div>
       </div>

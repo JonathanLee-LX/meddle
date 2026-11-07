@@ -828,15 +828,28 @@ async function main() {
             }
             next()
         })
-        // 单一 transport 处理所有请求；SDK 的 connect 会接管 onmessage/onclose
+        // Stateful Streamable HTTP: a stateless transport (sessionIdGenerator:
+        // undefined) cannot be reused, so initialize then tools/list threw and
+        // Express answered 500 (issue #160). One session-aware transport is
+        // enough for a single MCP HTTP process.
         transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: undefined,
+            sessionIdGenerator: () => crypto.randomUUID(),
             enableJsonResponse: true,
-            enableSseResponse: true,
         })
         await mcpServer.connect(transport)
-        app.all('/', (req, res) => {
-            transport.handleRequest(req, res, req.body)
+        app.all('/', async (req, res) => {
+            try {
+                await transport.handleRequest(req, res, req.body)
+            } catch (err) {
+                console.error('MCP HTTP request error:', err && err.message ? err.message : err)
+                if (!res.headersSent) {
+                    res.status(500).json({
+                        jsonrpc: '2.0',
+                        error: { code: -32603, message: String((err && err.message) || err) },
+                        id: null,
+                    })
+                }
+            }
         })
 
         const server = app.listen(port, host, () => {

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Valid JSON with the wrong `mocks.json` shape (for example a top-level array, or an object without a `rules` array) is no longer treated as an empty list and overwritten (#160). CLI mock writes, `mock list`, and the API refuse the same way as a corrupt file: HTTP **409** / CLI exit 1, stderr, file left byte-for-byte unchanged. Empty and whitespace-only files are still an empty list.
+- Upstream connection refused and timeout now appear in the traffic list as **502**, and the request detail includes the error reason (#160).
+- MCP Streamable HTTP (`MEDDLE_MCP_HTTP=1`) no longer returns 500 after the first request. The transport is session-aware, so initialize, tools/list, and tool calls work on the same connection (#160). Stdio is unchanged.
+
 ## [0.5.0] - 2026-10-30
 
 ### 从 0.4.x 升级需要注意
@@ -177,7 +183,6 @@ CLI 以退出码 1 结束，人读的提示在 stderr；MCP 返回 `isError`，�
 
 - An unknown command still prints its help text on stdout and exits 1. The top-level CLI writes `Unknown command: …` to stderr and then the full help to stdout; `meddle mock <unknown>` and `meddle route <unknown>` print only the subcommand help on stdout. Commands that fail only through `output.error` print nothing under `--json` (exit 1, empty stdout and stderr), including `route show`, `route preview`, `route active set`, `route create`, and `mock add` / `update` / `enable` / `disable` / `delete` when the failure is a missing argument or a missing id. `route add` / `route update` / `route delete` are the exception: their `--json` failures print `{"success":false,"error":{"message":"…"}}` on stdout. Tracked in [https://github.com/JonathanLee-LX/meddle/issues/157](https://github.com/JonathanLee-LX/meddle/issues/157).
 - `meddle doctor` still resolves a relative `mocksFilePath` against the current working directory, not `MEDDLE_HOME`, and does not expand `~`. The proxy and the settings-page 「诊断配置」 use the new resolution. Tracked in [https://github.com/JonathanLee-LX/meddle/issues/157](https://github.com/JonathanLee-LX/meddle/issues/157).
-- If mocks.json is valid JSON but has the wrong shape (e.g. a top-level array), CLI mock writes while the proxy is not running treat it as empty and overwrite the file. Back up mocks.json before hand-editing it. Tracked in #160.
 
 ## [0.5.0-beta.26] - 2026-10-27
 

@@ -45,6 +45,8 @@ export interface RecordDetail {
   responseBody: string
   statusCode: number
   statusMessage: string
+  /** Upstream failure reason when the proxy answered 502. */
+  error?: string
   inspection?: RequestInspection
 }
 

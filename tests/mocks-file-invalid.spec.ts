@@ -223,6 +223,38 @@ describe('invalid mocks JSON (issue #120)', () => {
         await expectAllWritesRefused(base, file)
     }, 30_000)
 
+    it.each([
+        ['top-level array', '[{"id":1,"name":"keep","urlPattern":"/k","enabled":true}]'],
+        ['object without rules', '{"nextId":3}'],
+        ['rules is not an array', '{"nextId":3,"rules":{"id":1}}'],
+    ])('wrong shape %s: reports invalid, refuses every write, file byte-identical', async (_n, text) => {
+        const home = makeHome()
+        const file = join(home, 'mocks.json')
+        writeFileSync(file, text, 'utf8')
+        const hash = sha(file)
+        const { base } = await startProxy(home)
+
+        expect(await list(base)).toEqual([])
+        const status = await api(base, 'GET', '/api/mocks-file')
+        expect(status).toMatchObject({ path: file, exists: true, valid: false })
+        expect(status.parseError.message).toBe('缺少 rules 数组')
+        expect(status.error).toContain(file)
+        expect(status.error).toContain('缺少 rules 数组')
+
+        const ops: Array<[string, string, unknown?]> = [
+            ['POST', '/api/mocks', { name: 'new', urlPattern: '/n' }],
+            ['PUT', '/api/mocks/1', { name: 'edited' }],
+            ['DELETE', '/api/mocks/1'],
+        ]
+        for (const [method, p, body] of ops) {
+            const r = await raw(base, method, p, body)
+            expect(r.status, `${method} ${p}`).toBe(409)
+            expect(r.body.code).toBe('MOCKS_FILE_INVALID')
+            expect(r.body.error).toContain('缺少 rules 数组')
+            expect(sha(file), `${method} ${p} must leave the file byte-identical`).toBe(hash)
+        }
+    }, 30_000)
+
     it.each([['empty', ''], ['whitespace-only', '  \n\t\n']])('%s file is an empty list, not an error', async (_n, text) => {
         const home = makeHome()
         const file = join(home, 'mocks.json')

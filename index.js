@@ -120,8 +120,39 @@ const { createPluginBootstrapRunner } = require('./dist/core/plugin-bootstrap-ru
 const { openBrowserWithProxy } = require('./dist/core/browser')
 const { handleLocalRequest } = require('./dist/core/static-server')
 const { createConfigDiagnostics } = require('./dist/core/config-diagnostics')
-const { appendProxyRecord } = require('./dist/core/proxy-record')
+const { appendProxyRecord, appendUpstreamErrorRecord } = require('./dist/core/proxy-record')
 const { createRuntimeHealthMonitor, parseWatchdogConfig } = require('./dist/core/runtime-health')
+
+function previewRequestBody(reqBody) {
+    if (!reqBody) return ''
+    try {
+        if (Buffer.isBuffer(reqBody)) {
+            const slice = reqBody.length > 65536 ? reqBody.subarray(0, 65536) : reqBody
+            return slice.toString('utf8')
+        }
+        return String(reqBody)
+    } catch (_) {
+        return ''
+    }
+}
+
+/** Send 502 and put the failed request in the traffic list (issue #160). */
+function failProxyWithUpstreamError(res, info) {
+    finishResponseWithProxyError(res, info.statusCode || 502)
+    try {
+        appendUpstreamErrorRecord(ctx, {
+            method: info.method,
+            source: info.source,
+            target: info.target,
+            startTime: info.startTime || Date.now(),
+            clientIdentity: info.clientIdentity,
+            requestHeaders: info.requestHeaders,
+            requestBody: previewRequestBody(info.reqBody),
+            err: info.err,
+            statusCode: info.statusCode || 502,
+        })
+    } catch (_) {}
+}
 const { createRateLimitedLogger } = require('./dist/core/log-rate-limit')
 
 const remoteAccess = buildRemoteAccessConfig()
@@ -426,6 +457,24 @@ const proxyServer = http.createServer(async (req, res) => {
         const url = new URL(target.startsWith('http') ? target : req.url, 'http://' + req.headers.host)
         const routeChanged = source !== url.href
         const startTime = Date.now()
+        let upstreamFailureRecorded = false
+        const failUpstream = (err) => {
+            if (upstreamFailureRecorded) {
+                finishResponseWithProxyError(res)
+                return
+            }
+            upstreamFailureRecorded = true
+            failProxyWithUpstreamError(res, {
+                method: req.method,
+                source,
+                target: url.href,
+                startTime,
+                clientIdentity,
+                requestHeaders: req.headers,
+                reqBody,
+                err,
+            })
+        }
         const proxyReq = http.request(url, { method: req.method, headers: stripProxyHeaders(req.headers) }, (proxyRes) => {
             const resChunks = []
             const pluginResponseInterception = pluginIntercept.shouldInterceptResponse()
@@ -437,7 +486,7 @@ const proxyServer = http.createServer(async (req, res) => {
                 proxyResponseSettled = true
                 pluginIntercept.emitLegacyErrorToPlugins('onBeforeResponse', err)
                 logRuntimeError(`http:proxy-response:${getErrorKey(err)}`, 'HTTP proxy response error:', getErrorMessage(err))
-                finishResponseWithProxyError(res)
+                failUpstream(err)
             }
             if (routeChanged) proxyRes.headers['x-real-url'] = url.href
             if (!intercepting) res.writeHead(proxyRes.statusCode, proxyRes.headers)
@@ -500,7 +549,7 @@ const proxyServer = http.createServer(async (req, res) => {
                 } catch (err) {
                     pluginIntercept.emitLegacyErrorToPlugins('onBeforeResponse', err)
                     logRuntimeError(`http:response-handler:${getErrorKey(err)}`, 'HTTP proxy response handling error:', getErrorMessage(err))
-                    finishResponseWithProxyError(res)
+                    failUpstream(err)
                 }
             })
         })
@@ -516,14 +565,22 @@ const proxyServer = http.createServer(async (req, res) => {
             } else {
                 logRuntimeError(`http:proxy-request:${getErrorKey(err)}`, 'HTTP proxy error:', getErrorMessage(err))
             }
-            finishResponseWithProxyError(res)
+            failUpstream(err)
         })
         proxyReq.write(reqBody)
         proxyReq.end()
         } catch (err) {
             pluginIntercept.emitLegacyErrorToPlugins('onBeforeResponse', err)
             logRuntimeError(`http:request-handler:${getErrorKey(err)}`, 'HTTP proxy request failed:', getErrorMessage(err))
-            finishResponseWithProxyError(res)
+            failProxyWithUpstreamError(res, {
+                method: req.method,
+                source,
+                target: source,
+                startTime: Date.now(),
+                clientIdentity,
+                requestHeaders: req.headers,
+                err,
+            })
         }
     })
 })
@@ -690,6 +747,24 @@ proxyServer.on('connect', async (req, socket, head) => {
 
                         const routeChanged = source !== target
                         const startTime = Date.now()
+                        let upstreamFailureRecorded = false
+                        const failUpstream = (err) => {
+                            if (upstreamFailureRecorded) {
+                                finishResponseWithProxyError(res)
+                                return
+                            }
+                            upstreamFailureRecorded = true
+                            failProxyWithUpstreamError(res, {
+                                method: req.method,
+                                source,
+                                target,
+                                startTime,
+                                clientIdentity: requestClientIdentity,
+                                requestHeaders: req.headers,
+                                reqBody,
+                                err,
+                            })
+                        }
                         try {
                             const proxyRes = await makeProxyRequest(target, req.method, stripProxyHeaders(req.headers), reqBody)
                             const resChunks = []
@@ -702,7 +777,7 @@ proxyServer.on('connect', async (req, socket, head) => {
                                 proxyResponseSettled = true
                                 pluginIntercept.emitLegacyErrorToPlugins('onBeforeResponse', err)
                                 logRuntimeError(`https:upstream-stream:${originHost}:${getErrorKey(err)}`, '[proxy] upstream stream %s: %s', originHost + req.url, getErrorMessage(err))
-                                finishResponseWithProxyError(res)
+                                failUpstream(err)
                             }
                             if (routeChanged) proxyRes.headers['x-real-url'] = target
                             if (!intercepting) res.writeHead(proxyRes.statusCode, cleanHeadersForH2(proxyRes.headers))
@@ -766,7 +841,7 @@ proxyServer.on('connect', async (req, socket, head) => {
                                 } catch (err) {
                                     pluginIntercept.emitLegacyErrorToPlugins('onBeforeResponse', err)
                                     logRuntimeError(`https:response-handler:${originHost}:${getErrorKey(err)}`, '[proxy] upstream response handling %s: %s', originHost + req.url, getErrorMessage(err))
-                                    finishResponseWithProxyError(res)
+                                    failUpstream(err)
                                 }
                             })
                         } catch (err) {
@@ -780,12 +855,20 @@ proxyServer.on('connect', async (req, socket, head) => {
                                 logRuntimeError(`https:upstream:${originHost}:${getErrorKey(err)}`, '[proxy] upstream %s: %s', originHost + req.url, getErrorMessage(err))
                             }
                             pluginIntercept.emitLegacyErrorToPlugins('onBeforeResponse', err)
-                            finishResponseWithProxyError(res)
+                            failUpstream(err)
                         }
                         } catch (err) {
                             pluginIntercept.emitLegacyErrorToPlugins('onBeforeResponse', err)
                             logRuntimeError(`https:request-handler:${originHost}:${getErrorKey(err)}`, '[proxy] HTTPS request handling %s: %s', originHost + req.url, getErrorMessage(err))
-                            finishResponseWithProxyError(res)
+                            failProxyWithUpstreamError(res, {
+                                method: req.method,
+                                source,
+                                target: source,
+                                startTime: Date.now(),
+                                clientIdentity: requestClientIdentity,
+                                requestHeaders: req.headers,
+                                err,
+                            })
                         }
                     })
                 })
