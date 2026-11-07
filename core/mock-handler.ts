@@ -53,15 +53,29 @@ export function formatMocksParseError(filePath: string, err: MocksParseError): s
     return `Mock 文件格式错误，已禁止写入以免覆盖: ${filePath} ${loc}${err.message}`
 }
 
+/** Valid mocks.json is an object with a `rules` array. Empty / whitespace files skip this. */
+export const MOCKS_MISSING_RULES_MESSAGE = '缺少 rules 数组'
+
+export function mocksDocumentShapeError(data: unknown): string | null {
+    if (!data || typeof data !== 'object' || Array.isArray(data) || !Array.isArray((data as { rules?: unknown }).rules)) {
+        return MOCKS_MISSING_RULES_MESSAGE
+    }
+    return null
+}
+
 /**
  * Parse mocks file text. Issue #120: empty / whitespace-only text is an empty
  * rule list (not an error); anything else that fails JSON.parse returns a
- * parse error with 1-based line/column.
+ * parse error with 1-based line/column. Issue #160: JSON that parses but is
+ * not `{ rules: [...] }` is the same class of error (do not treat as []).
  */
 export function parseMocksFileText(text: string): { data: any; error: null } | { data: null; error: MocksParseError } {
     if (text.replace(/^\uFEFF/, '').trim() === '') return { data: {}, error: null }
     try {
-        return { data: JSON.parse(text.replace(/^\uFEFF/, '')), error: null }
+        const data = JSON.parse(text.replace(/^\uFEFF/, ''))
+        const shape = mocksDocumentShapeError(data)
+        if (shape) return { data: null, error: { line: null, column: null, message: shape } }
+        return { data, error: null }
     } catch (e: any) {
         const message = String(e?.message || e)
         let line: number | null = null

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Valid JSON with the wrong `mocks.json` shape (for example a top-level array, or an object without a `rules` array) is no longer treated as an empty list and overwritten (#160). CLI mock writes, `mock list`, and the API refuse the same way as a corrupt file: HTTP **409** / CLI exit 1, stderr, file left byte-for-byte unchanged. Empty and whitespace-only files are still an empty list.
+- Upstream connection refused and timeout now appear in the traffic list as **502**, and the request detail includes the error reason (#160).
+- MCP Streamable HTTP (`MEDDLE_MCP_HTTP=1`) no longer returns 500 after the first request. The transport is session-aware, so initialize, tools/list, and tool calls work on the same connection (#160). Stdio is unchanged.
 - CLI `--json` failures that went through `output.error` now print `{"success":false,"error":{"message"}}` on stdout and the same message on stderr (no `✗`). Unknown commands print the help text on stderr. `meddle mock add --help` shows usage. `meddle doctor` resolves `mocksFilePath` the same way the proxy does (`~` and `MEDDLE_HOME`). `meddle status` keeps printing the rest of the status when mocks.json is unreadable. An empty route file is no longer reported as missing. Illegal JSON on APIs such as `POST /api/mocks` returns `400` JSON instead of an HTML stack. Chrome fallback says 「Chrome 启动失败」 when a browser was found but exited non-zero, and 「未找到 Chrome/Edge」 when Windows/Linux have no Chrome/Edge on PATH (not every Windows name). Each `--open` uses its own Chrome profile directory. The CA trust menu is skipped when stdin is not a TTY or the process is headless/supervised. Documented `/api/config` paths are aliases of `/api/settings` and `/api/config-doctor`. Web: command-palette shortcut label follows the platform (Ctrl+K on Linux), the 390 request-detail drawer resize handle sits above the action bar while other global panels keep the bottom-right corner, the 1440 detail header stays on one row, invalid mock regexes are refused, and ThemeProvider no longer PATCHes settings on every page load ([#157](https://github.com/JonathanLee-LX/meddle/issues/157)).
 
 ## [0.5.0] - 2026-10-30
@@ -174,10 +177,6 @@ The complete upgrade notes are the Chinese section 「从 0.4.x 升级需要注�
 - The deno binary no longer hangs on an empty HTTPS upstream body, and Node no longer leaves `OPTIONS` / `HEAD` / a timed-out HTTP/2 request pending (#72, #74). Plugin `mode=on` no longer emits `transfer-encoding` together with `content-length` (#72).
 - The first MITM certificate for a new host no longer blocks the proxy on a synchronous pure-JS RSA-2048. Key generation uses `crypto.generateKeyPairSync` (#116, #129).
 - Rule-file tab and rule-row drag handles stay hidden until hover, stay on the horizontal axis, and no longer fight the pointer (#83, #84). Deleting a plugin closes a leftover editor, and the plugin list is reachable from the keyboard (#107, #108, #110). Narrow viewports collapse the sidebar into an overlay instead of squeezing the page (#109, #114).
-
-### Known issues
-
-- If mocks.json is valid JSON but has the wrong shape (e.g. a top-level array), CLI mock writes while the proxy is not running treat it as empty and overwrite the file. Back up mocks.json before hand-editing it. Tracked in [https://github.com/JonathanLee-LX/meddle/issues/160](https://github.com/JonathanLee-LX/meddle/issues/160).
 
 ## [0.5.0-beta.26] - 2026-10-27
 

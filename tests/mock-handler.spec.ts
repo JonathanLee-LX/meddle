@@ -2,7 +2,12 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { createMockHandler, dedupeMockRulesById } from '../core/mock-handler'
+import {
+    createMockHandler,
+    dedupeMockRulesById,
+    MOCKS_MISSING_RULES_MESSAGE,
+    parseMocksFileText,
+} from '../core/mock-handler'
 
 function makeCtx(overrides: any = {}) {
     const tmpDir = overrides.meddleDir || os.tmpdir()
@@ -24,6 +29,35 @@ function makeCtx(overrides: any = {}) {
         ...overrides,
     }
 }
+
+describe('parseMocksFileText shape (issue #160)', () => {
+    it('accepts an object with a rules array', () => {
+        const parsed = parseMocksFileText(JSON.stringify({ nextId: 1, rules: [] }))
+        expect(parsed.error).toBeNull()
+        expect(parsed.data.rules).toEqual([])
+    })
+
+    it('treats empty and whitespace files as an empty document', () => {
+        expect(parseMocksFileText('').error).toBeNull()
+        expect(parseMocksFileText('  \n\t').error).toBeNull()
+    })
+
+    it.each([
+        ['top-level array', '[{"id":1}]'],
+        ['object without rules', '{"nextId":3}'],
+        ['rules is not an array', '{"rules":{}}'],
+        ['top-level string', '"nope"'],
+        ['null', 'null'],
+    ])('%s is a shape error, not an empty list', (_name, text) => {
+        const parsed = parseMocksFileText(text)
+        expect(parsed.data).toBeNull()
+        expect(parsed.error).toEqual({
+            line: null,
+            column: null,
+            message: MOCKS_MISSING_RULES_MESSAGE,
+        })
+    })
+})
 
 describe('mock-handler createMockHandler', () => {
     let tmpDir: string

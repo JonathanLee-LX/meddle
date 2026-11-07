@@ -565,6 +565,8 @@ export interface ProxyRecordDetail {
     statusMessage?: string;
     method: string;
     url: string;
+    /** Upstream failure reason when the proxy answered 502 (connection refused, timeout, …). */
+    error?: string;
     inspection?: RequestInspection;
 }
 

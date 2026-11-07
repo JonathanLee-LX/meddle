@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { appendProxyRecord } from '../core/proxy-record'
+import { appendProxyRecord, appendUpstreamErrorRecord, formatUpstreamError } from '../core/proxy-record'
 
 function makeCtx(overrides: any = {}) {
     return {
@@ -11,6 +11,40 @@ function makeCtx(overrides: any = {}) {
         ...overrides,
     }
 }
+
+describe('formatUpstreamError', () => {
+    it('includes the code when the message does not', () => {
+        const err = Object.assign(new Error('connect failed'), { code: 'ECONNREFUSED' })
+        expect(formatUpstreamError(err)).toBe('ECONNREFUSED: connect failed')
+    })
+
+    it('does not duplicate a code already in the message', () => {
+        const err = Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:9'), { code: 'ECONNREFUSED' })
+        expect(formatUpstreamError(err)).toBe('connect ECONNREFUSED 127.0.0.1:9')
+    })
+})
+
+describe('appendUpstreamErrorRecord', () => {
+    it('appends a 502 with the error on both the list entry and the detail', () => {
+        const ctx = makeCtx({ recordIdSeq: 7, MAX_RECORD_SIZE: 10, MAX_DETAIL_SIZE: 10 })
+        const err = Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:1'), { code: 'ECONNREFUSED' })
+        appendUpstreamErrorRecord(ctx, {
+            method: 'GET',
+            source: 'http://down.test/',
+            target: 'http://127.0.0.1:1/',
+            startTime: Date.now() - 20,
+            err,
+        })
+        expect(ctx.recordIdSeq).toBe(8)
+        expect(ctx.proxyRecordArr).toHaveLength(1)
+        expect(ctx.proxyRecordArr[0].statusCode).toBe(502)
+        const detail = ctx.proxyRecordDetailMap.get(7)
+        expect(detail?.statusCode).toBe(502)
+        expect(detail?.statusMessage).toBe('Bad Gateway')
+        expect(detail?.error).toContain('ECONNREFUSED')
+        expect(detail?.responseBody).toContain('ECONNREFUSED')
+    })
+})
 
 describe('appendProxyRecord', () => {
     it('appends log records and details', () => {

@@ -107,7 +107,7 @@ export interface MocksFileStatus {
      * file when it is custom — same rule as the server-side startup warning.
      */
     custom: boolean
-    /** Issue #120: false when the file exists but is not valid JSON; every write is then refused. */
+    /** Issue #120 / #160: false when the file exists but is not valid mocks JSON (parse or shape); every write is then refused. */
     valid: boolean
     /** Parse failure (1-based line/column) when `valid` is false, else null. */
     parseError: { line: number | null; column: number | null; message: string } | null
