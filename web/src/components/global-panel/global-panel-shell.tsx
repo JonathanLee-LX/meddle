@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { confirmAgentAction, streamAgentMessage, type AgentChatResponse } from '@/lib/agent-api'
 import { getCommandPaletteShortcutLabel } from '@/components/save-shortcut/save-shortcut-label'
 import { cn } from '@/lib/utils'
+import { globalPanelResizeHandleOffsetClass } from './global-panel-resize'
 import type { CommandAction, GlobalPanelRoute } from './types'
 import { useCommandSearch } from './use-command-search'
 import { useGlobalPanel } from './use-global-panel'
@@ -808,7 +809,10 @@ export function GlobalPanelShell({ commands, renderPanel }: GlobalPanelShellProp
                   aria-label="调整面板尺寸"
                   title="拖拽调整面板尺寸"
                   data-testid="global-panel-resize"
-                  className="absolute bottom-12 right-1 h-6 w-6 cursor-nwse-resize rounded-tl-md text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+                  className={cn(
+                    'absolute h-6 w-6 cursor-nwse-resize rounded-tl-md text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground',
+                    globalPanelResizeHandleOffsetClass(route.id),
+                  )}
                   onPointerDown={startResize}
                 >
                   <span className="pointer-events-none absolute bottom-1 right-1 h-3 w-3 border-b border-r border-current" />
