@@ -41,7 +41,7 @@ async function run() {
     } catch (e) {
       // Fallback to file mode
       content = getRuleFileContent(fileName)
-      if (!content) {
+      if (content == null) {
         output.error(`Route file not found: ${fileName}`)
         process.exit(1)
       }
@@ -52,7 +52,7 @@ async function run() {
     }
   } else {
     content = getRuleFileContent(fileName)
-    if (!content) {
+    if (content == null) {
       output.error(`Route file not found: ${fileName}`)
       process.exit(1)
     }

@@ -123,7 +123,7 @@ async function run() {
       // Issue #137: a locked ruleset is a final answer, never a cue to write the file directly.
       if (isRulesetReadonlyError(e)) exitRulesetReadonly(e, { json: jsonFlag, ruleFile: fileName })
       const content = getRuleFileContent(fileName)
-      if (!content) fail(`Route file not found: ${fileName}`, jsonFlag)
+      if (content == null) fail(`Route file not found: ${fileName}`, jsonFlag)
       const newContent = applyAdd(content, plan)
       saveRuleFileContent(fileName, newContent)
       output.warnFileOnlyMode()
@@ -133,7 +133,7 @@ async function run() {
   }
 
   const content = getRuleFileContent(fileName)
-  if (!content) fail(`Route file not found: ${fileName}`, jsonFlag)
+  if (content == null) fail(`Route file not found: ${fileName}`, jsonFlag)
   const newContent = applyAdd(content, plan)
   saveRuleFileContent(fileName, newContent)
   output.warnFileOnlyMode()

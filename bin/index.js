@@ -60,12 +60,12 @@ if (command === 'mock' || command === 'route' || command === 'session') {
   require('../index.js')
 } else {
   console.error(`Unknown command: ${command}`)
-  showHelp()
+  showHelp(process.stderr)
   process.exit(1)
 }
 
-function showHelp() {
-  console.log(`
+function showHelp(stream = process.stdout) {
+  stream.write(`
 Meddle - 开发代理工具
 
 用法:
@@ -144,5 +144,5 @@ Route 命令:
   meddle route active set beta-rules
 
 更多信息请访问: https://github.com/JonathanLee-LX/meddle
-  `)
+`)
 }

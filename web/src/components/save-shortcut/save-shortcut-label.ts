@@ -19,3 +19,7 @@ export function getSaveShortcutLabel(nav?: Navigator) {
 export function getSaveShortcutAria(nav?: Navigator) {
   return isApplePlatform(nav) ? 'Meta+S' : 'Control+S'
 }
+
+export function getCommandPaletteShortcutLabel(nav?: Navigator) {
+  return isApplePlatform(nav) ? '⌘K' : 'Ctrl+K'
+}

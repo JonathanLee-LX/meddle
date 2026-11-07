@@ -106,6 +106,42 @@ describe('checkCATrusted', () => {
     });
 });
 
+describe('shouldPromptCaTrust', () => {
+    let shouldPromptCaTrust: typeof import('../cert').shouldPromptCaTrust
+
+    beforeEach(async () => {
+        vi.unstubAllEnvs()
+        const mod = await import('../cert')
+        shouldPromptCaTrust = mod.shouldPromptCaTrust
+    })
+
+    afterEach(() => {
+        vi.unstubAllEnvs()
+    })
+
+    it('skips the menu in headless, MCP, and supervised starts', () => {
+        vi.stubEnv('MEDDLE_HEADLESS', '1')
+        expect(shouldPromptCaTrust()).toBe(false)
+        vi.unstubAllEnvs()
+        vi.stubEnv('MEDDLE_MCP', '1')
+        expect(shouldPromptCaTrust()).toBe(false)
+        vi.unstubAllEnvs()
+        vi.stubEnv('MEDDLE_SUPERVISED', '1')
+        expect(shouldPromptCaTrust()).toBe(false)
+    })
+
+    it('skips the menu when stdin is not a TTY', () => {
+        const stdin = process.stdin as NodeJS.ReadStream & { isTTY?: boolean }
+        const previous = stdin.isTTY
+        stdin.isTTY = false
+        try {
+            expect(shouldPromptCaTrust()).toBe(false)
+        } finally {
+            stdin.isTTY = previous
+        }
+    })
+})
+
 describe('ensureRootCA async trust check', () => {
     let ensureRootCA: typeof import('../cert').ensureRootCA;
     let crtMgr: typeof import('../cert').crtMgr;

@@ -17,4 +17,17 @@ function resolveMeddleHome() {
     return path.resolve(os.homedir(), '.meddle')
 }
 
-module.exports = { resolveMeddleHome }
+/**
+ * Same rules as core/mock-handler.resolveConfiguredMocksPath: `~` expands to
+ * the user home directory; a relative path is resolved against MEDDLE_HOME.
+ */
+function resolveConfiguredMocksPath(raw, meddleDir, homeDir = os.homedir()) {
+    const v = typeof raw === 'string' ? raw.trim() : ''
+    if (!v) return null
+    let p = v
+    if (p === '~') p = homeDir
+    else if (p.startsWith('~/') || p.startsWith('~\\')) p = path.join(homeDir, p.slice(2))
+    return path.resolve(meddleDir, p)
+}
+
+module.exports = { resolveMeddleHome, resolveConfiguredMocksPath }

@@ -22,6 +22,22 @@ async function run() {
   let activeRoutes = 0
   let health = null
 
+  let mocksError = null
+
+  function readMocksFromFile() {
+    try {
+      const mocks = loadMockRules()
+      mockCount = mocks.length
+      activeMocks = mocks.filter(m => m.enabled).length
+    } catch (err) {
+      mocksError = err && err.code === 'MOCKS_FILE_INVALID'
+        ? 'Mock 规则文件格式错误'
+        : (err && err.message ? String(err.message) : String(err))
+      mockCount = 0
+      activeMocks = 0
+    }
+  }
+
   if (running) {
     try {
       // Get mock rules from API
@@ -36,19 +52,13 @@ async function run() {
       health = await apiGet('/api/health')
     } catch (_) {
       // Fallback to file access
-      const mocks = loadMockRules()
-      mockCount = mocks.length
-      activeMocks = mocks.filter(m => m.enabled).length
-
+      readMocksFromFile()
       routeFiles = listRuleFiles()
       activeRoutes = routeFiles.filter(f => f.enabled).length
     }
   } else {
     // File mode
-    const mocks = loadMockRules()
-    mockCount = mocks.length
-    activeMocks = mocks.filter(m => m.enabled).length
-
+    readMocksFromFile()
     routeFiles = listRuleFiles()
     activeRoutes = routeFiles.filter(f => f.enabled).length
   }
@@ -61,7 +71,9 @@ async function run() {
       proxyUrl: url,
       running,
       health,
-      mocks: { total: mockCount, active: activeMocks },
+      mocks: mocksError
+        ? { total: mockCount, active: activeMocks, error: mocksError }
+        : { total: mockCount, active: activeMocks },
       routes: { files: routeFiles.length, activeFiles: activeRoutes, totalRules: totalRouteRules, totalExclusions }
     })
     return
@@ -81,8 +93,12 @@ async function run() {
   }
 
   output.section('Mock Rules')
-  output.kv('Total', mockCount)
-  output.kv('Active', activeMocks)
+  if (mocksError) {
+    output.warning(mocksError)
+  } else {
+    output.kv('Total', mockCount)
+    output.kv('Active', activeMocks)
+  }
 
   output.section('Route Rules')
   output.kv('Files', routeFiles.length)

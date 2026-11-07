@@ -61,6 +61,7 @@ describe('ThemeProvider accent color', () => {
     )
 
     await waitFor(() => expect(document.documentElement.dataset.accent).toBe('auto'))
+    expect(updateSettings).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', { name: 'auto:light' }))
 

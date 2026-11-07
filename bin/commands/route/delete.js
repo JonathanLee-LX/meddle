@@ -101,7 +101,7 @@ async function run() {
       if (isRulesetReadonlyError(e)) exitRulesetReadonly(e, { json: jsonFlag, ruleFile: fileName })
       // Fallback to file mode
       const content = getRuleFileContent(fileName)
-      if (!content) {
+      if (content == null) {
         fail(`Route file not found: ${fileName}`, jsonFlag)
       }
 
@@ -125,7 +125,7 @@ async function run() {
   } else {
     // File mode
     const content = getRuleFileContent(fileName)
-    if (!content) {
+    if (content == null) {
       fail(`Route file not found: ${fileName}`, jsonFlag)
     }
 

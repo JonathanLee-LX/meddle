@@ -17,7 +17,7 @@ http://localhost:8989
 | Mock Rules | `/api/mocks/*` |
 | Route Rules | `/api/rules/*`, `/api/rule-files/*` |
 | Logs | `/api/logs/*` |
-| Config | `/api/config/*` |
+| Config | `/api/settings`, `/api/config` (alias), `/api/config-doctor` |
 | Refactor | `/api/refactor/*` |
 
 ---
@@ -646,17 +646,19 @@ Get log detail.
 
 ## Config API
 
+The live settings endpoints are `GET` / `POST` / `PATCH /api/settings` and `GET /api/config-doctor`. The paths below are aliases for older docs and clients.
+
 ### GET /api/config
 
-Get system settings.
+Get system settings. Alias of `GET /api/settings`.
 
 ### PUT /api/config
 
-Update system settings.
+Replace system settings. Alias of `POST /api/settings`.
 
 ### POST /api/config/diagnose
 
-Run configuration diagnostics.
+Run configuration diagnostics. Alias of `GET /api/config-doctor`.
 
 **Response:**
 ```json

@@ -7,7 +7,7 @@
 const fs = require('fs')
 const path = require('path')
 const chalk = require('chalk')
-const { resolveMeddleHome } = require('./lib/meddle-home')
+const { resolveMeddleHome, resolveConfiguredMocksPath } = require('./lib/meddle-home')
 
 const meddleDir = resolveMeddleHome()
 const settingsPath = path.resolve(meddleDir, 'settings.json')
@@ -183,10 +183,14 @@ function checkMocksFile(settings) {
   
   let mocksPath = defaultMocksPath
   
-  // 检查自定义路径
+  // Same resolution as the proxy: ~ expands, relative paths use MEDDLE_HOME.
   if (settings && settings.mocksFilePath) {
-    mocksPath = settings.mocksFilePath
-    printInfo(`使用自定义路径: ${mocksPath}`)
+    const resolved = resolveConfiguredMocksPath(settings.mocksFilePath, meddleDir)
+    mocksPath = resolved || defaultMocksPath
+    printInfo(`使用自定义路径: ${settings.mocksFilePath}`)
+    if (resolved && resolved !== settings.mocksFilePath) {
+      printInfo(`解析后路径: ${resolved}`)
+    }
   } else {
     printInfo(`使用默认路径: ${mocksPath}`)
   }

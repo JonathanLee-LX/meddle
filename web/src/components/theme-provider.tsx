@@ -61,6 +61,7 @@ export function ThemeProvider({
   })
 
   const [loaded, setLoaded] = React.useState(false)
+  const persistedRef = React.useRef<{ theme: Theme; accentColor: AccentColor } | null>(null)
 
   // 用于外部调用的缩放函数
   const setZoom = React.useCallback((zoom: number) => {
@@ -72,11 +73,15 @@ export function ThemeProvider({
   // 初始化时从服务器加载设置
   React.useEffect(() => {
     loadSettings().then(settings => {
-      setThemeState(settings.theme || defaultTheme)
-      setAccentColorState(settings.accentColor || 'auto')
+      const nextTheme = settings.theme || defaultTheme
+      const nextAccent = settings.accentColor || 'auto'
+      persistedRef.current = { theme: nextTheme, accentColor: nextAccent }
+      setThemeState(nextTheme)
+      setAccentColorState(nextAccent)
       setZoom(settingsFontSizeToZoom(settings.fontSize))
       setLoaded(true)
     }).catch(() => {
+      persistedRef.current = { theme: defaultTheme, accentColor: 'auto' }
       setLoaded(true)
     })
   }, [defaultTheme, setZoom])
@@ -101,8 +106,10 @@ export function ThemeProvider({
     root.classList.remove("light", "dark")
     root.classList.add(resolvedTheme)
     root.dataset.accent = accentColor
-    
-    // 保存到文件系统
+
+    const last = persistedRef.current
+    if (last && last.theme === theme && last.accentColor === accentColor) return
+    persistedRef.current = { theme, accentColor }
     updateSettings({ theme, accentColor }).catch(console.error)
   }, [theme, resolvedTheme, accentColor, loaded])
 

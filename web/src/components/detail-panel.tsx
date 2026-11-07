@@ -775,7 +775,7 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
   )
 
   const headerActions = (
-            <div data-testid="detail-panel-actions" className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+            <div data-testid="detail-panel-actions" className="ml-auto flex shrink-0 flex-nowrap items-center justify-end gap-1.5">
               {actionButtons}
             </div>
   )
@@ -850,7 +850,7 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
 
   // Embedded (TrafficWorkLayout right pane / global-panel body): never use Sheet*
   // primitives — they require Dialog context and white-screen #root otherwise.
-  const headerRowClass = 'flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold text-foreground'
+  const headerRowClass = 'flex min-w-0 flex-nowrap items-center gap-2 text-sm font-semibold text-foreground'
   const header = embedded ? (
         <div className="min-w-0 px-3 pt-2.5 pb-1.5" data-testid="detail-panel-header">
           {showTitle ? (
@@ -865,7 +865,7 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
         </div>
   ) : (
         <SheetHeader className="min-w-0 px-4 pt-4 pb-2">
-          <SheetTitle className="flex min-w-0 flex-wrap items-center gap-2 text-base">
+          <SheetTitle className="flex min-w-0 flex-nowrap items-center gap-2 text-base">
             {headerInner}
           </SheetTitle>
         </SheetHeader>
