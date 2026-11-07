@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { confirmAgentAction, streamAgentMessage, type AgentChatResponse } from '@/lib/agent-api'
+import { getCommandPaletteShortcutLabel } from '@/components/save-shortcut/save-shortcut-label'
 import { cn } from '@/lib/utils'
 import type { CommandAction, GlobalPanelRoute } from './types'
 import { useCommandSearch } from './use-command-search'
@@ -450,7 +451,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
           className="h-9 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
         />
         <Badge variant="outline" className="hidden shrink-0 text-[11px] font-normal sm:inline-flex">
-          ⌘K
+          {getCommandPaletteShortcutLabel()}
         </Badge>
       </div>
       <div ref={commandScrollRef} className="min-h-0 flex-1 overflow-y-auto">
@@ -806,7 +807,8 @@ export function GlobalPanelShell({ commands, renderPanel }: GlobalPanelShellProp
                   type="button"
                   aria-label="调整面板尺寸"
                   title="拖拽调整面板尺寸"
-                  className="absolute bottom-0 right-0 h-6 w-6 cursor-nwse-resize rounded-tl-md text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+                  data-testid="global-panel-resize"
+                  className="absolute bottom-12 right-1 h-6 w-6 cursor-nwse-resize rounded-tl-md text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
                   onPointerDown={startResize}
                 >
                   <span className="pointer-events-none absolute bottom-1 right-1 h-3 w-3 border-b border-r border-current" />

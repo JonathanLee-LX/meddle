@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getSaveShortcutAria, getSaveShortcutLabel } from './save-shortcut-label'
+import { getCommandPaletteShortcutLabel, getSaveShortcutAria, getSaveShortcutLabel } from './save-shortcut-label'
 
 function nav(platform: string, userAgent = platform, hinted?: string): Navigator {
   return {
@@ -20,5 +20,10 @@ describe('save shortcut label', () => {
     expect(getSaveShortcutLabel(nav('Win32'))).toBe('Ctrl+S')
     expect(getSaveShortcutAria(nav('Linux x86_64'))).toBe('Control+S')
     expect(getSaveShortcutLabel(nav('MacIntel', 'Mac', 'Windows'))).toBe('Ctrl+S')
+  })
+
+  it('labels the command palette shortcut for the current platform', () => {
+    expect(getCommandPaletteShortcutLabel(nav('MacIntel'))).toBe('⌘K')
+    expect(getCommandPaletteShortcutLabel(nav('Linux x86_64'))).toBe('Ctrl+K')
   })
 })

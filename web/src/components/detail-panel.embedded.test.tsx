@@ -110,8 +110,8 @@ describe('DetailPanel embedded mode (layout B / #92)', () => {
     expect(screen.getByRole('heading', { level: 2, name: /请求详情/ })).toContainElement(title)
 
     const actions = screen.getByTestId('detail-panel-actions')
-    expect(actions).toHaveClass('flex-wrap')
-    expect(screen.getByRole('heading', { level: 2 })).toHaveClass('flex-wrap')
+    expect(actions).toHaveClass('flex-nowrap')
+    expect(screen.getByRole('heading', { level: 2 })).toHaveClass('flex-nowrap')
 
     for (const name of ['重放', '查看规则', '创建 Mock']) {
       expect(screen.getByRole('button', { name })).toBeEnabled()

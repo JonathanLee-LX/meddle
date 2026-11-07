@@ -186,6 +186,12 @@ export function MockEditorPanel({
       setError('请填写 URL 匹配')
       return
     }
+    try {
+      new RegExp(form.urlPattern)
+    } catch {
+      setError('URL 匹配不是合法的正则表达式')
+      return
+    }
 
     if (form.bodyType === 'inline' && form.body.trim()) {
       const result = validateContent(form.body)

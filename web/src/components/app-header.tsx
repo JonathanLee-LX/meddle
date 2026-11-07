@@ -8,6 +8,7 @@ import { AIConfigBadge } from '@/components/ai-settings'
 import { useTheme } from '@/components/theme-provider'
 import { SessionSwitcher } from '@/components/session-switcher'
 import { SHELL_NAV, type ShellNavItem, type ShellTab } from '@/lib/shell-mode'
+import { getCommandPaletteShortcutLabel } from '@/components/save-shortcut/save-shortcut-label'
 import { cn } from '@/lib/utils'
 import { Activity, ClipboardList, FileText, Globe, Moon, Sun, Settings, Monitor, PanelLeftClose, PanelLeftOpen, Plug, QrCode, Search } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -314,7 +315,7 @@ export function AppHeader({ onCommandClick }: AppHeaderProps) {
         >
           <Search className="size-4 shrink-0" aria-hidden />
           <span className="min-w-0 flex-1 truncate">搜索操作…</span>
-          <Badge variant="secondary">⌘K</Badge>
+          <Badge variant="secondary">{getCommandPaletteShortcutLabel()}</Badge>
         </button>
 
         <div data-testid="app-shell-utilities" className="ml-auto flex shrink-0 items-center gap-2">

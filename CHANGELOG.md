@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- CLI `--json` failures that went through `output.error` now print `{"success":false,"error":{"message"}}` on stdout and the same message on stderr (no `✗`). Unknown commands print the help text on stderr. `meddle mock add --help` shows usage. `meddle doctor` resolves `mocksFilePath` the same way the proxy does (`~` and `MEDDLE_HOME`). `meddle status` keeps printing the rest of the status when mocks.json is unreadable. An empty route file is no longer reported as missing. Illegal JSON on APIs such as `POST /api/mocks` returns `400` JSON instead of an HTML stack. Chrome fallback says 「Chrome 启动失败」 when a browser was found but exited non-zero; each `--open` uses its own Chrome profile directory. The CA trust menu is skipped when stdin is not a TTY or the process is headless/supervised. Documented `/api/config` paths are aliases of `/api/settings` and `/api/config-doctor`. Web: command-palette shortcut label follows the platform (Ctrl+K on Linux), the 390 drawer resize handle sits above the action bar, the 1440 detail header stays on one row, invalid mock regexes are refused, and ThemeProvider no longer PATCHes settings on every page load ([#157](https://github.com/JonathanLee-LX/meddle/issues/157)).
+
 ## [0.5.0] - 2026-10-30
 
 ### 从 0.4.x 升级需要注意
@@ -127,9 +131,7 @@ CLI 以退出码 1 结束，人读的提示在 stderr；MCP 返回 `isError`，�
 
 ### Upgrading from 0.4.x
 
-- The first start writes `settings.ruleFileOrder` when that field is missing. Enabled files are listed in `activeRuleFiles` order, then the other rule files. `meddle route list` (and the rules-page tabs) follow that order afterwards, so the listing can differ from the previous directory order (#81, #82).
-- A merged rule line that contains `//x` or `#x` beside another pattern (for example `example.com //x 10.0.0.1:80` or `example.com #x 10.0.0.1:80`) is rejected by a structured add / update / delete that would split it. On its own line, `//x` or `#x` would be read as a disabled rule or a comment, so the file is left unchanged. Split the patterns onto separate lines in the text editor, then edit again. See item 2 above (#145).
-- Mock rules gain a `query` field. A rule saved from the CLI, the API, or the Web editor includes `query` (empty when unused). Existing 0.4.x rules that do not have the field keep matching as before; set `query` (CLI `--query`) when the same path should return different bodies for different query parameters (#76).
+The complete upgrade notes are the Chinese section 「从 0.4.x 升级需要注意」 above (route exclusions, `//x`/`#x` split refusal, async `openBrowserWithProxy`, CLI `✗` on stderr, ruleset locks, `mocksFilePath` resolution, file-only write warnings, mock `--headers`/`query`, HTTPS empty-body / HTTP/2, and private-repo tokens). This English list previously restated a subset of those items; the Chinese section is the source of truth.
 
 ### Added
 
@@ -175,9 +177,7 @@ CLI 以退出码 1 结束，人读的提示在 stderr；MCP 返回 `isError`，�
 
 ### Known issues
 
-- An unknown command still prints its help text on stdout and exits 1. The top-level CLI writes `Unknown command: …` to stderr and then the full help to stdout; `meddle mock <unknown>` and `meddle route <unknown>` print only the subcommand help on stdout. Commands that fail only through `output.error` print nothing under `--json` (exit 1, empty stdout and stderr), including `route show`, `route preview`, `route active set`, `route create`, and `mock add` / `update` / `enable` / `disable` / `delete` when the failure is a missing argument or a missing id. `route add` / `route update` / `route delete` are the exception: their `--json` failures print `{"success":false,"error":{"message":"…"}}` on stdout. Tracked in [https://github.com/JonathanLee-LX/meddle/issues/157](https://github.com/JonathanLee-LX/meddle/issues/157).
-- `meddle doctor` still resolves a relative `mocksFilePath` against the current working directory, not `MEDDLE_HOME`, and does not expand `~`. The proxy and the settings-page 「诊断配置」 use the new resolution. Tracked in [https://github.com/JonathanLee-LX/meddle/issues/157](https://github.com/JonathanLee-LX/meddle/issues/157).
-- If mocks.json is valid JSON but has the wrong shape (e.g. a top-level array), CLI mock writes while the proxy is not running treat it as empty and overwrite the file. Back up mocks.json before hand-editing it. Tracked in #160.
+- If mocks.json is valid JSON but has the wrong shape (e.g. a top-level array), CLI mock writes while the proxy is not running treat it as empty and overwrite the file. Back up mocks.json before hand-editing it. Tracked in [https://github.com/JonathanLee-LX/meddle/issues/160](https://github.com/JonathanLee-LX/meddle/issues/160).
 
 ## [0.5.0-beta.26] - 2026-10-27
 
