@@ -2,36 +2,13 @@
  * meddle route - Route rule subcommand router
  */
 
+const output = require('../../lib/output')
+
 const args = process.argv.slice(3)
 const subcommand = args[0]
+const jsonFlag = args.includes('--json')
 
-switch (subcommand) {
-  case 'list':
-    require('./list.js')
-    break
-  case 'show':
-    require('./show.js')
-    break
-  case 'preview':
-    require('./preview.js')
-    break
-  case 'active':
-    require('./active.js')
-    break
-  case 'create':
-    require('./create.js')
-    break
-  case 'add':
-    require('./add.js')
-    break
-  case 'update':
-    require('./update.js')
-    break
-  case 'delete':
-    require('./delete.js')
-    break
-  default:
-    console.log(`
+const ROUTE_HELP = `
 Route Commands:
   meddle route list [--json]                    List all route files
   meddle route show <file> [--json]             Show rules in a file
@@ -72,6 +49,59 @@ Exclusions:
 
   A "#" comments out a whole line only when it is the first non-space
   character. A "#" later on a rule line is a pattern, not a trailing comment.
-`)
-    process.exit(1)
+`
+
+function printHelp(stream = process.stdout) {
+  stream.write(ROUTE_HELP.trimStart())
+}
+
+function failUnknown(name) {
+  const message = `Unknown command: route ${name}`
+  if (jsonFlag) {
+    output.setJsonMode(true)
+    output.error(message)
+  } else {
+    console.error(message)
+    printHelp(process.stderr)
+  }
+  process.exit(1)
+}
+
+switch (subcommand) {
+  case 'list':
+    require('./list.js')
+    break
+  case 'show':
+    require('./show.js')
+    break
+  case 'preview':
+    require('./preview.js')
+    break
+  case 'active':
+    require('./active.js')
+    break
+  case 'create':
+    require('./create.js')
+    break
+  case 'add':
+    require('./add.js')
+    break
+  case 'update':
+    require('./update.js')
+    break
+  case 'delete':
+    require('./delete.js')
+    break
+  case '--help':
+  case '-h':
+  case 'help':
+    printHelp()
+    process.exit(0)
+    break
+  default:
+    if (!subcommand) {
+      printHelp()
+      process.exit(1)
+    }
+    failUnknown(subcommand)
 }

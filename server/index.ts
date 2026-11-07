@@ -12,6 +12,9 @@ import { registerAgentRoutes } from './agent/routes'
 import { registerHealthRoutes } from './health'
 import { registerSessionsRoutes } from './sessions'
 import { registerAppInfoRoutes } from './app-info'
+import { registerJsonParseErrorHandler } from './json-parse-error'
+
+export { INVALID_JSON_BODY, isJsonParseFailure, registerJsonParseErrorHandler } from './json-parse-error'
 
 // RuleMap and ExcludeMap types from helpers
 export type RuleMap = Record<string, string>;
@@ -223,6 +226,8 @@ export function createApp(serverContext: ServerContext): Application {
     registerUiTokenRoute(app, serverContext)
     registerAgentRoutes(app, serverContext)
     registerSessionsRoutes(app, serverContext)
+
+    registerJsonParseErrorHandler(app)
 
     // Export helper references for backward compatibility
     ;(app as unknown as { serverContext: ServerContext }).serverContext = serverContext

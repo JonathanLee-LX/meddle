@@ -146,7 +146,7 @@ async function run() {
       if (isRulesetReadonlyError(e)) exitRulesetReadonly(e, { json: jsonFlag, ruleFile: fileName })
       // Fallback to file mode
       const content = getRuleFileContent(fileName)
-      if (!content) fail(`Route file not found: ${fileName}`, jsonFlag)
+      if (content == null) fail(`Route file not found: ${fileName}`, jsonFlag)
       const newContent = applyUpdate(content, plan)
       saveRuleFileContent(fileName, newContent)
       output.warnFileOnlyMode()
@@ -156,7 +156,7 @@ async function run() {
   }
 
   const content = getRuleFileContent(fileName)
-  if (!content) fail(`Route file not found: ${fileName}`, jsonFlag)
+  if (content == null) fail(`Route file not found: ${fileName}`, jsonFlag)
   const newContent = applyUpdate(content, plan)
   saveRuleFileContent(fileName, newContent)
   output.warnFileOnlyMode()

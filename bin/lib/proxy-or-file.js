@@ -77,7 +77,10 @@ async function withProxyOrFile({ api, file }) {
  */
 function failCommand(err) {
   const message = err && err.message ? String(err.message) : String(err)
-  if (isApiHttpError(err) || (err && err.rawStderr) || output.isJsonMode()) console.error(message)
+  // HTTP / raw-stderr failures print the body as-is (no JSON wrapper, no `✗`).
+  // Other failures go through output.error, which emits `{success:false}` on
+  // stdout when --json is set.
+  if (isApiHttpError(err) || (err && err.rawStderr)) console.error(message)
   else output.error(message)
   process.exit(1)
 }

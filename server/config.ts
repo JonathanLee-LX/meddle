@@ -96,8 +96,7 @@ export function registerConfigRoutes(app: Application, ctx: ServerContext): void
         res.end()
     })
 
-    // API: 获取系统设置
-    app.get('/api/settings', (_req: Request, res: Response) => {
+    const sendCurrentSettings = (_req: Request, res: Response) => {
         res.setHeader('Content-Type', 'application/json')
         try {
             if (fs.existsSync(ctx.settingsPath)) {
@@ -124,7 +123,11 @@ export function registerConfigRoutes(app: Application, ctx: ServerContext): void
             res.write(JSON.stringify({ error: (error as Error).message }))
         }
         res.end()
-    })
+    }
+
+    // API: 获取系统设置. `/api/config` is the documented alias (#157).
+    app.get('/api/settings', sendCurrentSettings)
+    app.get('/api/config', sendCurrentSettings)
 
     function writeSettingsAndApply(settings: Record<string, unknown>): void {
         const previousMocksPath = ctx.getMockFilePath()
@@ -139,8 +142,7 @@ export function registerConfigRoutes(app: Application, ctx: ServerContext): void
         if (ctx.getMockFilePath() !== previousMocksPath) reloadMocksFromSettings(ctx)
     }
 
-    // API: 保存系统设置（整份替换；旧客户端 / 迁移使用）
-    app.post('/api/settings', (req: Request, res: Response) => {
+    const replaceSettings = (req: Request, res: Response) => {
         res.setHeader('Content-Type', 'application/json')
         try {
             const next = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? { ...req.body } : req.body
@@ -153,7 +155,11 @@ export function registerConfigRoutes(app: Application, ctx: ServerContext): void
             sendSettingsError(res, error)
         }
         res.end()
-    })
+    }
+
+    // API: 保存系统设置（整份替换；旧客户端 / 迁移使用）
+    app.post('/api/settings', replaceSettings)
+    app.put('/api/config', replaceSettings)
 
     // API: 只更新提交的字段（issue #121）。旧标签页保存某一项设置时，
     // 不会把别处改过的字段（如 mocksFilePath）改回它手里的旧值。
@@ -178,8 +184,7 @@ export function registerConfigRoutes(app: Application, ctx: ServerContext): void
         res.end()
     })
 
-    // API: 配置文件健康检查
-    app.get('/api/config-doctor', (_req: Request, res: Response) => {
+    const sendConfigDoctor = (_req: Request, res: Response) => {
         res.setHeader('Content-Type', 'application/json')
         try {
             const result = ctx.performConfigDiagnostics()
@@ -189,5 +194,9 @@ export function registerConfigRoutes(app: Application, ctx: ServerContext): void
             res.write(JSON.stringify({ error: (error as Error).message }))
         }
         res.end()
-    })
+    }
+
+    // API: 配置文件健康检查. `/api/config/diagnose` is the documented alias (#157).
+    app.get('/api/config-doctor', sendConfigDoctor)
+    app.post('/api/config/diagnose', sendConfigDoctor)
 }

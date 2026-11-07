@@ -16,6 +16,7 @@ import {
     RULESET_READONLY_STATUS,
     setRuleFileReadonly,
 } from './ruleset-lock'
+import { isJsonParseFailure } from './json-parse-error'
 
 const DEFAULT_RULE_NAME = '默认规则'
 
@@ -807,13 +808,6 @@ function isRuleFileContentPut(req: Request): boolean {
     if (req.method !== 'PUT') return false
     const pathOnly = String(req.path || req.url || '').split('?')[0]
     return /^\/api\/rule-files\/[^/]+\/content$/.test(pathOnly)
-}
-
-function isJsonParseFailure(err: any): boolean {
-    if (!err) return false
-    const status = err.status || err.statusCode
-    if (status !== 400) return false
-    return err.type === 'entity.parse.failed' || err instanceof SyntaxError
 }
 
 function sendJson(res: Response, status: number, body: unknown): void {

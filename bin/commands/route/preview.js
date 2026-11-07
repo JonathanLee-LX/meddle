@@ -57,7 +57,7 @@ async function run() {
         const content = await fetch(`${baseUrl}/api/rule-files/${encodeURIComponent(ruleFileArg)}/content`)
           .then(r => r.ok ? r.text() : null)
           .catch(() => null)
-        if (!content) {
+        if (content == null) {
           output.error(`Rule file not found: ${ruleFileArg}`)
           process.exit(1)
         }
@@ -91,7 +91,7 @@ async function run() {
       if (ruleFileArg) {
         // Use specified rule file
         const content = getRuleFileContent(ruleFileArg)
-        if (!content) {
+        if (content == null) {
           output.error(`Rule file not found: ${ruleFileArg}`)
           process.exit(1)
         }

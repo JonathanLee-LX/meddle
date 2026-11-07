@@ -2,28 +2,13 @@
  * meddle mock - Mock rule subcommand router
  */
 
+const output = require('../../lib/output')
+
 const args = process.argv.slice(3)
 const subcommand = args[0]
+const jsonFlag = args.includes('--json')
 
-switch (subcommand) {
-  case 'list':
-    require('./list.js')
-    break
-  case 'add':
-    require('./add.js')
-    break
-  case 'update':
-    require('./update.js')
-    break
-  case 'delete':
-    require('./delete.js')
-    break
-  case 'enable':
-  case 'disable':
-    require('./toggle.js')
-    break
-  default:
-    console.log(`
+const MOCK_HELP = `
 Mock Commands:
   meddle mock list [--json]           List all mock rules
   meddle mock add [options]           Add a mock rule
@@ -49,6 +34,51 @@ Examples:
   meddle mock add --name "Policy A" --pattern "/ops/.*/policy" --query "window_key=A" --body '{"key":"A"}' --cors
   meddle mock update 1 --status 404 --headers '{"X-Debug":"1"}'
   meddle mock delete 1
-`)
-    process.exit(1)
+`
+
+function printHelp(stream = process.stdout) {
+  stream.write(MOCK_HELP.trimStart())
+}
+
+function failUnknown(name) {
+  const message = `Unknown command: mock ${name}`
+  if (jsonFlag) {
+    output.setJsonMode(true)
+    output.error(message)
+  } else {
+    console.error(message)
+    printHelp(process.stderr)
+  }
+  process.exit(1)
+}
+
+switch (subcommand) {
+  case 'list':
+    require('./list.js')
+    break
+  case 'add':
+    require('./add.js')
+    break
+  case 'update':
+    require('./update.js')
+    break
+  case 'delete':
+    require('./delete.js')
+    break
+  case 'enable':
+  case 'disable':
+    require('./toggle.js')
+    break
+  case '--help':
+  case '-h':
+  case 'help':
+    printHelp()
+    process.exit(0)
+    break
+  default:
+    if (!subcommand) {
+      printHelp()
+      process.exit(1)
+    }
+    failUnknown(subcommand)
 }

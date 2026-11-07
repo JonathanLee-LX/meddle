@@ -210,3 +210,24 @@ describe('legacy relative mocksFilePath notice (issue #121 migration)', () => {
         expect(detectLegacyMocksPath('m.json', d, d)).toBeNull()
     })
 })
+
+describe('documented /api/config aliases (#157)', () => {
+    it('GET /api/config and POST /api/config/diagnose match the live settings endpoints', async () => {
+        const home = tmp('meddle-config-alias-')
+        writeFileSync(join(home, 'settings.json'), JSON.stringify({ theme: 'dark', fontSize: 'medium' }), 'utf8')
+        const base = await startProxy(home)
+        const viaAlias = await call(base, 'GET', '/api/config')
+        const viaSettings = await call(base, 'GET', '/api/settings')
+        expect(viaAlias).toEqual(viaSettings)
+        expect(viaAlias.theme).toBe('dark')
+
+        const diagnose = await fetch(`${base}/api/config/diagnose`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+        })
+        expect(diagnose.ok).toBe(true)
+        const doctor = await diagnose.json()
+        expect(doctor).toEqual(await call(base, 'GET', '/api/config-doctor'))
+    }, 30_000)
+})

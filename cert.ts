@@ -136,6 +136,13 @@ function openCertForUser(rootCAPath: string): void {
     }
 }
 
+/** Skip the interactive CA menu when stdin is not a TTY or a headless/supervised start. */
+export function shouldPromptCaTrust(): boolean {
+    if (process.env.MEDDLE_HEADLESS || process.env.MEDDLE_MCP || process.env.MEDDLE_SUPERVISED) return false
+    if (!process.stdin.isTTY || !process.stdout.isTTY) return false
+    return true
+}
+
 async function trustRootCA(): Promise<void> {
     const platform = os.platform();
     const rootCAPath = crtMgr.getRootCAFilePath();
@@ -248,7 +255,7 @@ export async function ensureRootCA(opts: { trustCheckAsync?: boolean } = {}): Pr
     const runTrustCheck = (): void => {
         try {
             const isTrusted = checkCATrusted();
-            if (!isTrusted && !process.env.MEDDLE_HEADLESS && !process.env.MEDDLE_MCP) {
+            if (!isTrusted && shouldPromptCaTrust()) {
                 trustRootCA();
             }
         } catch (err) {

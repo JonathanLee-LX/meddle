@@ -52,11 +52,16 @@ function success(message) {
 
 /**
  * Print a command failure. Human-readable text goes to stderr so stdout stays
- * empty on error. In --json mode this is a no-op; the caller prints the
- * `{ success: false }` object on stdout.
+ * empty on error. In --json mode stdout is one `{ success: false }` object and
+ * the same message is copied to stderr without a `✗` prefix.
  */
 function error(message) {
-  if (jsonMode) return
+  if (jsonMode) {
+    const text = String(message)
+    console.log(JSON.stringify({ success: false, error: { message: text } }))
+    console.error(text)
+    return
+  }
   console.error(chalk.red('  ✗'), message)
 }
 

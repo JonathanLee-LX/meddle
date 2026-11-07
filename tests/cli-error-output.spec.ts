@@ -56,7 +56,9 @@ describe('CLI error output (#153)', () => {
     const unknown = await runCli(['not-a-command'])
     expect(unknown.code).not.toBe(0)
     expect(unknown.stderr).toContain('Unknown command: not-a-command')
+    expect(unknown.stderr).toContain('Meddle - 开发代理工具')
     expect(unknown.stdout).not.toContain('Unknown command')
+    expect(unknown.stdout).not.toContain('Meddle - 开发代理工具')
   })
 
   it('keeps --json errors as JSON on stdout', async () => {

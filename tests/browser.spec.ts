@@ -112,7 +112,8 @@ describe('browser openBrowserWithProxy', () => {
             expect(result).toBe(true)
             expect(fs.readFileSync(chromeLog, 'utf8')).toContain('chrome')
             expect(fs.readFileSync(openLog, 'utf8')).toContain('xdg')
-            expect(log.mock.calls.flat().join('\n')).toContain('未找到 Chrome/Edge')
+            expect(log.mock.calls.flat().join('\n')).toContain('Chrome 启动失败')
+            expect(log.mock.calls.flat().join('\n')).not.toContain('未找到 Chrome/Edge')
         } finally {
             process.env.PATH = oldPath
             log.mockRestore()
@@ -138,6 +139,44 @@ describe('browser openBrowserWithProxy', () => {
         } finally {
             process.env.PATH = oldPath
             error.mockRestore()
+            closeLaunchedBrowsers()
+        }
+    }, 8_000)
+
+    it.skipIf(process.platform !== 'linux')('says Chrome was not found when PATH has only a fallback opener', async () => {
+        const bin = tempDir('meddle-browser-missing-')
+        const openLog = path.join(bin, 'xdg.log')
+        writeExecutable(path.join(bin, 'xdg-open'), `#!/bin/sh\necho xdg >> "${openLog}"\nexit 0\n`)
+        const dir = tempDir('meddle-browser-missing-profile-')
+        const oldPath = process.env.PATH
+        process.env.PATH = bin
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+        try {
+            const result = await openBrowserWithProxy('http://127.0.0.1:9', '127.0.0.1:9', dir)
+            expect(result).toBe(true)
+            expect(log.mock.calls.flat().join('\n')).toContain('未找到 Chrome/Edge')
+            expect(log.mock.calls.flat().join('\n')).not.toContain('Chrome 启动失败')
+        } finally {
+            process.env.PATH = oldPath
+            log.mockRestore()
+            closeLaunchedBrowsers()
+        }
+    }, 8_000)
+
+    it.skipIf(process.platform !== 'linux')('isolates Chrome profiles by proxy port', async () => {
+        const bin = tempDir('meddle-browser-profile-port-')
+        writeExecutable(path.join(bin, 'google-chrome'), '#!/bin/sh\nexit 0\n')
+        const dir = tempDir('meddle-browser-profiles-')
+        const oldPath = process.env.PATH
+        process.env.PATH = bin
+        try {
+            await openBrowserWithProxy('http://127.0.0.1:9', '127.0.0.1:9001', dir)
+            await openBrowserWithProxy('http://127.0.0.1:9', '127.0.0.1:9002', dir)
+            expect(fs.existsSync(path.join(dir, 'chrome-proxy-127.0.0.1_9001'))).toBe(true)
+            expect(fs.existsSync(path.join(dir, 'chrome-proxy-127.0.0.1_9002'))).toBe(true)
+            expect(fs.existsSync(path.join(dir, 'chrome-proxy'))).toBe(false)
+        } finally {
+            process.env.PATH = oldPath
             closeLaunchedBrowsers()
         }
     }, 8_000)

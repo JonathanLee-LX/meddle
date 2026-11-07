@@ -213,9 +213,20 @@ function launchFallback(platform: Platform, url: string): Promise<boolean> {
     return launchExiting('xdg-open', [url])
 }
 
+function chromeProfileDir(meddleDir: string, proxyServer: string): string {
+    const key = String(proxyServer || 'default').replace(/[^\w.-]+/g, '_')
+    return path.join(meddleDir, `chrome-proxy-${key}`)
+}
+
+function candidateAvailable(platform: Platform, app: string): boolean {
+    if (platform === 'darwin') return darwinAppExists(app)
+    if (platform === 'win32') return true
+    return Boolean(commandOnPath(app))
+}
+
 export async function openBrowserWithProxy(url: string, proxyServer: string, meddleDir: string, remoteDebuggingPort?: number): Promise<boolean> {
     const platform = os.platform()
-    const userDataDir = path.join(meddleDir, 'chrome-proxy')
+    const userDataDir = chromeProfileDir(meddleDir, proxyServer)
     fs.mkdirSync(userDataDir, { recursive: true })
     profiles.push(userDataDir)
 
@@ -226,12 +237,18 @@ export async function openBrowserWithProxy(url: string, proxyServer: string, med
     ]
     if (remoteDebuggingPort) argList.push(`--remote-debugging-port=${remoteDebuggingPort}`)
 
+    let sawInstalledBrowser = false
     for (const app of browserCandidates(platform)) {
+        if (!candidateAvailable(platform, app)) continue
+        sawInstalledBrowser = true
         if (await launchCandidate(platform, app, argList, url)) return true
     }
 
     if (await launchFallback(platform, url)) {
-        console.log(chalk.yellow('未找到 Chrome/Edge，已用默认浏览器打开，请手动设置代理:', proxyServer))
+        const reason = sawInstalledBrowser
+            ? 'Chrome 启动失败，已用默认浏览器打开，请手动设置代理:'
+            : '未找到 Chrome/Edge，已用默认浏览器打开，请手动设置代理:'
+        console.log(chalk.yellow(reason), proxyServer)
         return true
     }
     console.error(chalk.red('浏览器并未启动:'), 'no supported browser found')
