@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { RuleConfig } from './rule-config'
@@ -64,6 +64,26 @@ describe('RuleConfig file creation', () => {
     expect(createRuleFile).not.toHaveBeenCalled()
     expect(screen.queryByRole('textbox', { name: '新规则文件名称' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '创建规则文件' })).toBeInTheDocument()
+  })
+
+  it('keeps 添加规则 labeled and moves secondary actions to named icon buttons', async () => {
+    const user = userEvent.setup()
+    renderRuleConfig()
+
+    const add = screen.getByRole('button', { name: '添加规则' })
+    const filter = screen.getByRole('button', { name: '筛选' })
+    const fromFile = screen.getByRole('button', { name: '从文件加载' })
+    const textImport = screen.getByRole('button', { name: '文本导入' })
+    expect(add).toHaveTextContent('添加规则')
+    expect(screen.getByRole('button', { name: '保存' })).toHaveTextContent('保存')
+    expect(filter).not.toHaveTextContent('筛选')
+    expect(fromFile).not.toHaveTextContent('从文件加载')
+    expect(textImport).not.toHaveTextContent('文本导入')
+    expect(within(screen.getByTestId('rule-editor-title-bar')).getByRole('heading', { name: '默认规则' })).toBeInTheDocument()
+
+    await user.hover(fromFile)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('从文件加载')
+    expect(fromFile).not.toHaveAttribute('aria-describedby')
   })
 
   it('accepts typed rule text in the import dialog', async () => {

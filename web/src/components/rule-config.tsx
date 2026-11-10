@@ -46,6 +46,7 @@ import { supportsOpenFilePicker } from '@/types/file-system-access'
 import { FEATURE_FLAGS } from '@/lib/feature-flags'
 import { ruleFilePaneSplit } from '@/lib/rule-file-split'
 import { SplitPane } from '@/components/split-pane'
+import { IconButton } from '@/components/icon-button'
 import { EditorEmptyState, EditorSaveButton, EditorTitleBar, PaneBar, PaneTitle } from '@/components/pane-bar'
 import { useEditorScrolled } from '@/hooks/use-editor-scrolled'
 import { getEprcTextDiagnostics, normalizeImportedRuleText, parseEprcRules, rulesToEprc, rulesToEprcPreserving } from '@/utils/eprc-parser'
@@ -1445,16 +1446,16 @@ export function RuleConfig(props: RuleConfigProps) {
           data-testid="rule-editor-title-bar"
           scrolled={editorScroll.scrolled}
           title={
-            activeFileName && activeReadonly ? (
+            activeFileName ? (
               <span className="inline-flex min-w-0 max-w-full items-center gap-2">
-                <span className="min-w-0 truncate">{`编辑规则 · ${activeFileName}`}</span>
-                <Badge variant="outline" data-slot="ruleset-readonly-badge" className="text-muted-foreground">
-                  <Lock aria-hidden="true" />
-                  只读
-                </Badge>
+                <span className="min-w-0 truncate">{activeFileName}</span>
+                {activeReadonly ? (
+                  <Badge variant="outline" data-slot="ruleset-readonly-badge" className="text-muted-foreground">
+                    <Lock aria-hidden="true" />
+                    只读
+                  </Badge>
+                ) : null}
               </span>
-            ) : activeFileName ? (
-              `编辑规则 · ${activeFileName}`
             ) : (
               '编辑规则'
             )
@@ -1532,15 +1533,14 @@ export function RuleConfig(props: RuleConfigProps) {
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
               {viewMode !== 'text' && (
-                <Button
+                <IconButton
                   variant={showFilters ? 'selected' : 'outline'}
-                  size="sm"
+                  aria-pressed={showFilters}
+                  label="筛选"
                   onClick={() => setShowFilters((v) => !v)}
-                  title="显示/隐藏筛选器"
                 >
-                  <Filter data-icon="inline-start" />
-                  筛选
-                </Button>
+                  <Filter />
+                </IconButton>
               )}
               {viewMode === 'table' && (
                 <>
@@ -1564,30 +1564,24 @@ export function RuleConfig(props: RuleConfigProps) {
                     className="hidden"
                     onChange={handleImportInputChange}
                   />
-                  <LockedHint locked={activeReadonly}>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleImportFile}
-                      aria-disabled={activeReadonly || undefined}
-                      className={activeReadonly ? LOCKED_CONTROL_CLASS : undefined}
-                    >
-                      <FolderOpen data-icon="inline-start" />
-                      从文件加载
-                    </Button>
-                  </LockedHint>
-                  <LockedHint locked={activeReadonly}>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleImportText}
-                      aria-disabled={activeReadonly || undefined}
-                      className={activeReadonly ? LOCKED_CONTROL_CLASS : undefined}
-                    >
-                      <ClipboardPaste data-icon="inline-start" />
-                      文本导入
-                    </Button>
-                  </LockedHint>
+                  <IconButton
+                    label="从文件加载"
+                    tooltip={activeReadonly ? RULESET_LOCKED_HINT : undefined}
+                    onClick={() => void handleImportFile()}
+                    aria-disabled={activeReadonly || undefined}
+                    className={activeReadonly ? LOCKED_CONTROL_CLASS : undefined}
+                  >
+                    <FolderOpen />
+                  </IconButton>
+                  <IconButton
+                    label="文本导入"
+                    tooltip={activeReadonly ? RULESET_LOCKED_HINT : undefined}
+                    onClick={handleImportText}
+                    aria-disabled={activeReadonly || undefined}
+                    className={activeReadonly ? LOCKED_CONTROL_CLASS : undefined}
+                  >
+                    <ClipboardPaste />
+                  </IconButton>
                 </>
               )}
             </div>

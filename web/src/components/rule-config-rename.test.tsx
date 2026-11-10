@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { RuleConfig } from './rule-config'
@@ -33,7 +33,7 @@ describe('RuleConfig file rename', () => {
     const user = userEvent.setup()
     const { fetchFileContent, renameRuleFile } = renderRuleConfig()
 
-    await user.dblClick(screen.getByText('旧名称'))
+    await user.dblClick(within(screen.getByRole('tab', { name: /旧名称/ })).getByText('旧名称'))
     const input = screen.getByRole('textbox', { name: '重命名规则文件 旧名称' })
     await user.clear(input)
     await user.type(input, '新名称{Enter}')
@@ -46,11 +46,12 @@ describe('RuleConfig file rename', () => {
     const user = userEvent.setup()
     const { renameRuleFile } = renderRuleConfig()
 
-    await user.dblClick(screen.getByText('旧名称'))
+    await user.dblClick(within(screen.getByRole('tab', { name: /旧名称/ })).getByText('旧名称'))
     const input = screen.getByRole('textbox', { name: '重命名规则文件 旧名称' })
     await user.type(input, '{Escape}')
 
     expect(renameRuleFile).not.toHaveBeenCalled()
-    expect(screen.getByText('旧名称')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /旧名称/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '旧名称' })).toBeInTheDocument()
   })
 })

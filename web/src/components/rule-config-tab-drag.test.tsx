@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { RuleConfig } from './rule-config'
@@ -88,7 +88,7 @@ describe('RuleConfig rule-file tab drag handle', () => {
       />,
     )
 
-    await user.dblClick(screen.getByText('alpha'))
+    await user.dblClick(within(screen.getByRole('tab', { name: /alpha/ })).getByText('alpha'))
     expect(screen.getByRole('textbox', { name: '重命名规则文件 alpha' })).toBeInTheDocument()
   })
 
