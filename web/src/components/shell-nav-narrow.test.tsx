@@ -153,7 +153,7 @@ describe('ShellNav narrow viewport (#109)', () => {
     // Direct child of the (relative) icon button, not of the glyph.
     expect(badge.parentElement).toBe(button)
     expect(button).toHaveClass('relative')
-    expect(badge).toHaveClass('absolute', '-top-1', '-right-1', 'h-[16px]', 'min-w-[16px]', 'text-[10px]')
+    expect(badge).toHaveClass('absolute', '-top-1', '-right-1', 'h-[calc(16/14*1rem)]', 'min-w-[calc(16/14*1rem)]', 'text-[calc(10/14*1rem)]')
     expect(badge).not.toContainElement(button.querySelector('svg'))
     expect(badge).toHaveTextContent('12')
     // Stays inside the rail; the rail clips horizontally so it cannot spill onto content.

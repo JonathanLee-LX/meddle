@@ -76,7 +76,7 @@ export function LogFilter({
               <X />
             </Button>
           )}
-          <Badge variant="secondary" className="shrink-0 text-[10px]">
+          <Badge variant="secondary" className="shrink-0 text-[calc(10/14*1rem)]">
             {filterText || resourceTypeFilter !== 'all' || clientSourceFilter !== 'all' ? `${filteredCount} / ${totalCount}` : `${totalCount} 条`}
           </Badge>
           <Button

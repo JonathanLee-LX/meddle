@@ -4,7 +4,7 @@ import type { ProxyRecord } from '@/types'
 
 /** Dense table badge (~14px) — aligns with wireframe b.png hit column. */
 const hitBadgeBaseClassName =
-  'inline-flex h-[14px] min-w-[28px] items-center justify-center rounded-sm border px-1 text-[9px] leading-none'
+  'inline-flex h-[calc(14/14*1rem)] min-w-[calc(28/14*1rem)] items-center justify-center rounded-sm border px-1 text-[calc(9/14*1rem)] leading-none'
 
 const hitBadgeKindClassName: Record<TrafficHitKind, string> = {
   mock: 'border-border bg-muted font-semibold text-foreground',

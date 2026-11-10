@@ -25,11 +25,14 @@ const settings = {
 }
 
 function ThemeHarness() {
-  const { accentColor, resolvedTheme, setAccentColor } = useTheme()
+  const { accentColor, resolvedTheme, setAccentColor, zoom, setZoom } = useTheme()
   return (
-    <button onClick={() => setAccentColor('rose')}>
-      {accentColor}:{resolvedTheme}
-    </button>
+    <div>
+      <button onClick={() => setAccentColor('rose')}>
+        {accentColor}:{resolvedTheme}
+      </button>
+      <button onClick={() => setZoom(1.5)}>zoom:{zoom}</button>
+    </div>
   )
 }
 
@@ -93,11 +96,25 @@ describe('ThemeProvider accent color', () => {
       </ThemeProvider>,
     )
 
-    expect(screen.getByRole('button')).toHaveTextContent('auto:light')
+    expect(screen.getByRole('button', { name: /auto:/ })).toHaveTextContent('auto:light')
     matches = true
     act(() => {
       listener?.()
     })
-    expect(screen.getByRole('button')).toHaveTextContent('auto:dark')
+    expect(screen.getByRole('button', { name: /auto:/ })).toHaveTextContent('auto:dark')
+  })
+
+  it('exposes zoom and writes --app-scale when setZoom runs', async () => {
+    const user = userEvent.setup()
+    render(
+      <ThemeProvider>
+        <ThemeHarness />
+      </ThemeProvider>,
+    )
+
+    expect(screen.getByRole('button', { name: /zoom:/ })).toHaveTextContent('zoom:1')
+    await user.click(screen.getByRole('button', { name: /zoom:/ }))
+    expect(screen.getByRole('button', { name: /zoom:/ })).toHaveTextContent('zoom:1.5')
+    expect(document.documentElement.style.getPropertyValue('--app-scale')).toBe('1.5')
   })
 })

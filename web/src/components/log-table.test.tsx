@@ -1,18 +1,43 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
-import { LogTable } from './log-table'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { LogTable, scaledLogRowHeight } from './log-table'
 
-const { scrollToOffsetMock } = vi.hoisted(() => ({
-  scrollToOffsetMock: vi.fn(),
-}))
+const { scrollToOffsetMock, measureMock, useVirtualizerMock, zoomState } = vi.hoisted(() => {
+  const zoomState = { zoom: 1 }
+  const scrollToOffsetMock = vi.fn()
+  const measureMock = vi.fn()
+  const useVirtualizerMock = vi.fn((opts: { estimateSize: () => number }) => ({
+    getVirtualItems: () => [{ index: 0, key: 0, size: opts.estimateSize(), start: 0 }],
+    getTotalSize: () => opts.estimateSize(),
+    scrollToOffset: scrollToOffsetMock,
+    measure: measureMock,
+  }))
+  return { scrollToOffsetMock, measureMock, useVirtualizerMock, zoomState }
+})
 
 vi.mock('@tanstack/react-virtual', () => ({
-  useVirtualizer: () => ({
-    getVirtualItems: () => [{ index: 0, key: 0, size: 22, start: 0 }],
-    getTotalSize: () => 22,
-    scrollToOffset: scrollToOffsetMock,
+  useVirtualizer: (opts: { estimateSize: () => number }) => useVirtualizerMock(opts),
+}))
+
+vi.mock('@/components/theme-provider', () => ({
+  useTheme: () => ({
+    zoom: zoomState.zoom,
+    setZoom: vi.fn(),
+    theme: 'light',
+    resolvedTheme: 'light',
+    accentColor: 'auto',
+    setTheme: vi.fn(),
+    setAccentColor: vi.fn(),
+    toggleTheme: vi.fn(),
   }),
 }))
+
+beforeEach(() => {
+  zoomState.zoom = 1
+  scrollToOffsetMock.mockClear()
+  measureMock.mockClear()
+  useVirtualizerMock.mockClear()
+})
 
 describe('LogTable application source', () => {
   it('switches time order without requiring a sorted copy', () => {
@@ -288,5 +313,33 @@ describe('LogTable application source', () => {
       expect.stringContaining('User-Agent 推断'),
     )
     expect(document.querySelector('[data-application-icon="safari"]')).toBeInTheDocument()
+  })
+})
+
+describe('LogTable zoom row height', () => {
+  it('scales the virtualizer estimate and remeasures when zoom changes', () => {
+    const props = {
+      records: [{ id: 1, method: 'GET', source: 'https://a.example', target: 'a', time: '10:00:00' }],
+      selectedRecordId: null,
+      onSelect: vi.fn(),
+      autoScroll: false,
+    }
+
+    const { rerender } = render(<LogTable {...props} />)
+    expect(useVirtualizerMock.mock.calls.at(-1)?.[0].estimateSize()).toBe(22)
+    expect(measureMock).toHaveBeenCalled()
+
+    measureMock.mockClear()
+    zoomState.zoom = 1.5
+    rerender(<LogTable {...props} />)
+
+    expect(useVirtualizerMock.mock.calls.at(-1)?.[0].estimateSize()).toBe(33)
+    expect(measureMock).toHaveBeenCalled()
+  })
+
+  it('keeps the 100% row height constant at 22', () => {
+    expect(scaledLogRowHeight(1)).toBe(22)
+    expect(scaledLogRowHeight(0.75)).toBe(16.5)
+    expect(scaledLogRowHeight(1.5)).toBe(33)
   })
 })

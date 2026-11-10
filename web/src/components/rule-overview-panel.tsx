@@ -324,7 +324,7 @@ export function RuleOverviewPanel({ rules, activeFileName, onLocateRule, onSelec
                   <TableCell className="break-all font-mono text-xs">
                     {winner.rawRule}
                     {shadowed.length > 0 && (
-                      <Badge variant="default" className="ml-2 px-1 py-0 text-[10px]" title="同名规则最终生效的定义">
+                      <Badge variant="default" className="ml-2 px-1 py-0 text-[calc(10/14*1rem)]" title="同名规则最终生效的定义">
                         生效
                       </Badge>
                     )}
@@ -347,7 +347,7 @@ export function RuleOverviewPanel({ rules, activeFileName, onLocateRule, onSelec
                         {record.rawRule}
                         <Badge
                           variant="destructive"
-                          className="px-1 py-0 text-[10px]"
+                          className="px-1 py-0 text-[calc(10/14*1rem)]"
                           title={`已被 ${winner.file} 中的同名规则覆盖，实际不生效`}
                         >
                           已被覆盖
@@ -409,10 +409,10 @@ export function RuleOverviewPanel({ rules, activeFileName, onLocateRule, onSelec
                   >
                     <span className="flex flex-wrap items-center gap-2 font-medium">
                       {file.name}
-                      <Badge variant={file.enabled ? 'default' : 'secondary'} className="px-1 py-0 text-[10px]">
+                      <Badge variant={file.enabled ? 'default' : 'secondary'} className="px-1 py-0 text-[calc(10/14*1rem)]">
                         {file.enabled ? '启用' : '禁用'}
                       </Badge>
-                      <Badge variant="secondary" className="px-1 py-0 text-[10px]">
+                      <Badge variant="secondary" className="px-1 py-0 text-[calc(10/14*1rem)]">
                         {file.rules.length}
                       </Badge>
                     </span>
@@ -436,7 +436,7 @@ export function RuleOverviewPanel({ rules, activeFileName, onLocateRule, onSelec
                     title="点击定位到该规则"
                   >
                     <TableCell>
-                      <Badge variant={entry.enabled ? 'default' : 'secondary'} className="px-1 py-0 text-[10px]">
+                      <Badge variant={entry.enabled ? 'default' : 'secondary'} className="px-1 py-0 text-[calc(10/14*1rem)]">
                         {entry.enabled ? '启用' : '禁用'}
                       </Badge>
                     </TableCell>

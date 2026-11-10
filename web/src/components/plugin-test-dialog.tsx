@@ -127,7 +127,7 @@ function HeaderDiffView({
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-muted-foreground">{row.displayKey}</span>
-              <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal">
+              <Badge variant="outline" className="h-5 px-1.5 text-[calc(10/14*1rem)] font-normal">
                 {row.status === 'unchanged'
                   ? '未变'
                   : row.status === 'changed'

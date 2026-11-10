@@ -170,7 +170,7 @@ export function ShellNav({ activeTab, onTabChange, mockEnabledCount = 0 }: Shell
             // Pinned to the 32px icon button's top-right corner (−4px each way), so it
             // never sits on the glyph and stays inside the gap to the next button.
             aria-hidden
-            className="pointer-events-none absolute -top-1 -right-1 h-[16px] min-w-[16px] px-1 text-[10px] leading-none"
+            className="pointer-events-none absolute -top-1 -right-1 h-[calc(16/14*1rem)] min-w-[calc(16/14*1rem)] px-1 text-[calc(10/14*1rem)] leading-none"
           >
             {badgeNum(badgeText)}
           </Badge>
@@ -186,7 +186,7 @@ export function ShellNav({ activeTab, onTabChange, mockEnabledCount = 0 }: Shell
             variant="secondary"
             data-testid={showBadge ? 'shell-nav-mock-badge' : 'shell-nav-mock-badge-slot'}
             aria-hidden
-            className={cn('h-5 px-1.5 text-[10px]', !showBadge && 'invisible')}
+            className={cn('h-5 px-1.5 text-[calc(10/14*1rem)]', !showBadge && 'invisible')}
           >
             {badgeNum(showBadge ? badgeText : null)}
           </Badge>
