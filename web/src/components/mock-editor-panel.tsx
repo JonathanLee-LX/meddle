@@ -395,7 +395,10 @@ export function MockEditorPanel({
         </div>
         <div
           data-testid="mock-body-editor-frame"
-          className={cn('relative group overflow-hidden', editorFillsPane ? 'min-h-[150px] flex-1' : undefined)}
+          className={cn(
+            'relative group overflow-hidden',
+            editorFillsPane ? 'min-h-[150px] flex-1' : 'shrink-0',
+          )}
           style={editorFillsPane ? undefined : { height: `${editorHeight}px` }}
         >
           <MonacoEditor

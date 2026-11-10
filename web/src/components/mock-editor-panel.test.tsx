@@ -78,6 +78,7 @@ describe('MockEditorPanel actions', () => {
     fireEvent.mouseUp(document)
 
     expect(frame).toHaveStyle({ height: '340px' })
+    expect(frame).toHaveClass('shrink-0')
     expect(frame).not.toHaveClass('flex-1')
 
     fireEvent.doubleClick(handle)
