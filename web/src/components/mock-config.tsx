@@ -334,7 +334,7 @@ export function MockConfig({
           }
         />
           <EditorPaneActionsProvider host={actionsHost}>
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-hidden">
             {editor.kind === 'idle' ? (
               <div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
                 <p>选择左侧规则进行编辑，或点击「新增规则」</p>

@@ -104,8 +104,9 @@ export function MockEditorPanel({
   const [validationError, setValidationError] = useState<string | null>(null)
   const [fixing, setFixing] = useState(false)
   const [formatting, setFormatting] = useState(false)
-  const [editorHeight, setEditorHeight] = useState(300)
+  const [editorHeight, setEditorHeight] = useState<number | null>(null)
   const isAIReady = isAIConfigValid(getAIConfig())
+  const editorFillsPane = editorHeight == null
 
   const validateBody = useCallback((body: string) => {
     if (!body.trim()) {
@@ -128,7 +129,8 @@ export function MockEditorPanel({
   const handleEditorResize = useCallback((event: ReactMouseEvent) => {
     event.preventDefault()
     const startY = event.clientY
-    const startHeight = editorHeight
+    const frame = event.currentTarget.parentElement
+    const startHeight = editorHeight ?? Math.round(frame?.getBoundingClientRect().height || 150)
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaY = moveEvent.clientY - startY
@@ -143,6 +145,11 @@ export function MockEditorPanel({
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
   }, [editorHeight])
+
+  const restoreEditorFill = useCallback((event: ReactMouseEvent) => {
+    event.preventDefault()
+    setEditorHeight(null)
+  }, [])
 
   const formatBody = async () => {
     if (!form.body.trim() || formatting) return
@@ -350,7 +357,7 @@ export function MockEditorPanel({
 
         <MockHeadersEditor value={headersText} onChange={setHeadersText} />
 
-        <div className="app-field-group">
+        <div className="app-field-group shrink-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Label>响应内容</Label>
             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -385,29 +392,42 @@ export function MockEditorPanel({
               </Button>
             </div>
           </div>
-          <div className="relative group" style={{ height: `${editorHeight}px` }}>
-            <MonacoEditor
-              value={form.body}
-              onChange={(value) => updateField('body', value)}
-              placeholder="支持 JSON、HTML、JS、CSS 等响应内容"
-              height="flex"
-            />
-            <div
-              className="absolute bottom-0 left-0 right-0 h-4 cursor-ns-resize flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-border/50 to-transparent"
-              onMouseDown={handleEditorResize}
-            >
-              <GripVertical className="h-4 w-4 text-muted-foreground" />
-            </div>
-          </div>
-          {validationError && (
-            <div className="flex items-start gap-2 p-2 rounded-md bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900">
-              <span className="text-xs text-red-600 dark:text-red-400 font-medium">语法错误：</span>
-              <span className="text-xs text-red-600 dark:text-red-400 flex-1">{validationError}</span>
-            </div>
-          )}
         </div>
+        <div
+          data-testid="mock-body-editor-frame"
+          className={cn(
+            'relative group overflow-hidden',
+            editorFillsPane ? 'min-h-[150px] flex-1' : 'shrink-0',
+          )}
+          style={editorFillsPane ? undefined : { height: `${editorHeight}px` }}
+        >
+          <MonacoEditor
+            value={form.body}
+            onChange={(value) => updateField('body', value)}
+            placeholder="支持 JSON、HTML、JS、CSS 等响应内容"
+            height="flex"
+          />
+          <div
+            data-testid="mock-body-editor-resize"
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="调整响应内容编辑器高度"
+            title="拖拽调整高度，双击恢复撑满"
+            className="absolute bottom-0 left-0 right-0 h-4 cursor-ns-resize flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-border/50 to-transparent"
+            onMouseDown={handleEditorResize}
+            onDoubleClick={restoreEditorFill}
+          >
+            <GripVertical className="h-4 w-4 text-muted-foreground" />
+          </div>
+        </div>
+        {validationError && (
+          <div className="flex items-start gap-2 p-2 rounded-md bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900">
+            <span className="text-xs text-red-600 dark:text-red-400 font-medium">语法错误：</span>
+            <span className="text-xs text-red-600 dark:text-red-400 flex-1">{validationError}</span>
+          </div>
+        )}
 
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <Checkbox checked={form.enabled} onCheckedChange={(checked) => updateField('enabled', !!checked)} />
           <Label className="text-sm">启用此规则</Label>
         </div>

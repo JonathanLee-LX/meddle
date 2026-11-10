@@ -14,6 +14,7 @@ type ThemeProviderState = {
   theme: Theme
   resolvedTheme: "light" | "dark"
   accentColor: AccentColor
+  zoom: number
   setTheme: (theme: Theme) => void
   setAccentColor: (accentColor: AccentColor) => void
   toggleTheme: () => void
@@ -62,12 +63,16 @@ export function ThemeProvider({
 
   const [loaded, setLoaded] = React.useState(false)
   const persistedRef = React.useRef<{ theme: Theme; accentColor: AccentColor } | null>(null)
+  const [zoom, setZoomState] = React.useState(() => {
+    if (typeof window === 'undefined') return 1
+    return settingsFontSizeToZoom(getCachedSettings().fontSize)
+  })
 
   // 用于外部调用的缩放函数
-  const setZoom = React.useCallback((zoom: number) => {
+  const setZoom = React.useCallback((nextZoom: number) => {
     // 缩放 rem-based UI，避免 CSS zoom/transform 影响 Radix Select 弹层定位。
-    const root = window.document.documentElement
-    root.style.setProperty('--app-scale', String(zoom))
+    setZoomState(nextZoom)
+    window.document.documentElement.style.setProperty('--app-scale', String(nextZoom))
   }, [])
 
   // 初始化时从服务器加载设置
@@ -134,12 +139,13 @@ export function ThemeProvider({
       theme,
       resolvedTheme,
       accentColor,
+      zoom,
       setTheme,
       setAccentColor,
       toggleTheme,
       setZoom,
     }),
-    [theme, resolvedTheme, accentColor, setTheme, setAccentColor, toggleTheme, setZoom]
+    [theme, resolvedTheme, accentColor, zoom, setTheme, setAccentColor, toggleTheme, setZoom]
   )
 
   return (

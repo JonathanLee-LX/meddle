@@ -606,7 +606,7 @@ function SortableRuleFileTab({
           {file.name}
         </span>
       )}
-      <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-normal text-muted-foreground">
+      <Badge variant="outline" className="px-1.5 py-0 text-[calc(10/14*1rem)] font-normal text-muted-foreground">
         {file.ruleCount}
       </Badge>
       {canDelete && (

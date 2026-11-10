@@ -94,7 +94,7 @@ export function RoutePreview({ rules, activeFileName, embedded = false, onReveal
           </p>
         </div>
         {activeFileName && (
-          <Badge variant="outline" className="text-[11px] font-normal">
+          <Badge variant="outline" className="text-[calc(11/14*1rem)] font-normal">
             <FileText className="h-3 w-3 mr-1" />
             {activeFileName}
           </Badge>
@@ -137,7 +137,7 @@ export function RoutePreview({ rules, activeFileName, embedded = false, onReveal
               {result.matched ? '已命中规则' : '未命中规则'}
             </Badge>
             {result.matchedRule && (
-              <Badge variant="outline" className="text-[11px] font-normal">
+              <Badge variant="outline" className="text-[calc(11/14*1rem)] font-normal">
                 {result.matchedRule.kind}
               </Badge>
             )}

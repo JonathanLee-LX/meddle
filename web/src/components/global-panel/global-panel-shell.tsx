@@ -147,7 +147,7 @@ function MarkdownContent({ content }: { content: string }) {
       blocks.push(
         <div key={`code-${index}`} className="overflow-hidden rounded-md border bg-muted/45">
           {language && (
-            <div className="border-b bg-background/45 px-3 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+            <div className="border-b bg-background/45 px-3 py-1 text-[calc(11/14*1rem)] uppercase tracking-wide text-muted-foreground">
               {language}
             </div>
           )}
@@ -164,7 +164,7 @@ function MarkdownContent({ content }: { content: string }) {
       const level = heading[1].length
       const headingClassName = cn(
         'font-semibold leading-6 text-foreground',
-        level <= 2 ? 'mt-2 text-sm' : 'text-[13px]'
+        level <= 2 ? 'mt-2 text-sm' : 'text-[calc(13/14*1rem)]'
       )
       const headingContent = renderInlineMarkdown(heading[2])
       blocks.push(
@@ -451,7 +451,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
           placeholder="搜索命令，或直接描述你想让 AI 完成的操作…"
           className="h-9 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
         />
-        <Badge variant="outline" className="hidden shrink-0 text-[11px] font-normal sm:inline-flex">
+        <Badge variant="outline" className="hidden shrink-0 text-[calc(11/14*1rem)] font-normal sm:inline-flex">
           {getCommandPaletteShortcutLabel()}
         </Badge>
       </div>
@@ -585,7 +585,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
           <div className="space-y-4 p-3">
             {groupedCommands.map(([section, sectionCommands]) => (
               <div key={section} className="space-y-1">
-                <div className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                <div className="px-2 py-1 text-[calc(11/14*1rem)] font-medium uppercase tracking-wide text-muted-foreground">
                   {section}
                 </div>
                 {sectionCommands.map((command) => {
@@ -627,7 +627,7 @@ function CommandPalette({ commands }: { commands: CommandAction[] }) {
                         )}
                       </div>
                       {command.shortcut && (
-                        <Badge variant="secondary" className="shrink-0 text-[10px] font-normal">
+                        <Badge variant="secondary" className="shrink-0 text-[calc(10/14*1rem)] font-normal">
                           {command.shortcut}
                         </Badge>
                       )}

@@ -606,7 +606,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                 <div className="space-y-2">
                   {ruleFiles.map((rf) => (
                     <div key={rf.name} className="flex items-center gap-2 rounded-md border px-3 py-2.5 text-sm">
-                      <Badge variant={rf.enabled ? 'default' : 'secondary'} className="text-[10px]">
+                      <Badge variant={rf.enabled ? 'default' : 'secondary'} className="text-[calc(10/14*1rem)]">
                         {rf.enabled ? '已启用' : '未启用'}
                       </Badge>
                       <span className="flex-1 truncate text-xs">{rf.name}.txt</span>

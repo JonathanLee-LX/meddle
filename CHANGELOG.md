@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Web zoom (`--app-scale`) now scales traffic-table type, row height, and column min-widths. Dense badges in the log table, hit column, command palette, rule overview, and related Badge call sites use rem instead of hardcoded px. The virtualizer remasures when the scale changes.
+- Mock 「响应内容」 editor fills remaining pane height by default (minimum 150px) instead of a fixed 300px. Dragging the handle keeps a custom height; double-click restores fill. The editor pane uses a single outer overflow layer so the form does not stack a second scrollbar.
 - Deleting a route-table row, an AI model, or a device name, and clearing the traffic log, now asks in a confirm dialog first. Closing it, 取消, or Escape leaves the data in place. Only the 删除 or 清空 button applies the change, and a failed confirm stays open instead of looking successful.
 
 ## [0.5.1] - 2026-11-10

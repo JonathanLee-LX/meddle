@@ -6,17 +6,21 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ArrowDown, ArrowUp, Inbox } from 'lucide-react'
 import { ApplicationIcon } from '@/components/application-icon'
+import { useTheme } from '@/components/theme-provider'
 import { cn } from '@/lib/utils'
 import type { ProxyRecord } from '@/types'
 import { TrafficHitBadge } from '@/components/traffic-hit-badge'
 
 type TimeSortOrder = 'asc' | 'desc'
 
-const tableBadgeClassName = 'h-[16px] px-[4px] py-0 font-mono text-[10px] leading-none'
+const tableBadgeClassName = 'h-[calc(16/14*1rem)] px-[calc(4/14*1rem)] py-0 font-mono text-[calc(10/14*1rem)] leading-none'
 const headerCellClassName = 'flex h-7 shrink-0 items-center px-1.5 leading-none'
-/** Dense B-layout row height (~20–22px → ~28–32 rows @ ~700px). */
+/** Dense B-layout row height at 100% zoom (~20–22px → ~28–32 rows @ ~700px). */
 export const LOG_ROW_HEIGHT = 22
-const LIVE_EDGE_THRESHOLD_PX = LOG_ROW_HEIGHT
+
+export function scaledLogRowHeight(zoom: number) {
+  return LOG_ROW_HEIGHT * zoom
+}
 
 interface LogTableProps {
   records: ProxyRecord[]
@@ -95,6 +99,8 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
   const lastCountRef = useRef(records.length)
   const followLiveEdgeRef = useRef(true)
   const [timeSortOrder, setTimeSortOrder] = useState<TimeSortOrder>('desc')
+  const { zoom } = useTheme()
+  const rowHeight = scaledLogRowHeight(zoom)
 
   const virtualizer = useVirtualizer({
     count: records.length,
@@ -102,9 +108,15 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
       const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]')
       return viewport as HTMLElement | null
     },
-    estimateSize: () => LOG_ROW_HEIGHT,
+    estimateSize: () => rowHeight,
     overscan: 10,
   })
+  const virtualizerRef = useRef(virtualizer)
+  virtualizerRef.current = virtualizer
+
+  useEffect(() => {
+    virtualizerRef.current.measure()
+  }, [rowHeight])
 
   const virtualItems = virtualizer.getVirtualItems()
 
@@ -121,14 +133,14 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
 
     const updateFollowState = () => {
       followLiveEdgeRef.current = timeSortOrder === 'desc'
-        ? viewport.scrollTop <= LIVE_EDGE_THRESHOLD_PX
-        : viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= LIVE_EDGE_THRESHOLD_PX
+        ? viewport.scrollTop <= rowHeight
+        : viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= rowHeight
     }
 
     updateFollowState()
     viewport.addEventListener('scroll', updateFollowState, { passive: true })
     return () => viewport.removeEventListener('scroll', updateFollowState)
-  }, [timeSortOrder])
+  }, [rowHeight, timeSortOrder])
 
   useEffect(() => {
     if (autoScroll && followLiveEdgeRef.current && records.length > lastCountRef.current) {
@@ -144,15 +156,15 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
 
   return (
     <div className="meddle-thin-scroll relative flex min-h-0 flex-1 overflow-x-auto">
-      <div className="flex min-h-0 min-w-[960px] flex-1 flex-col">
+      <div className="flex min-h-0 min-w-[calc(960/14*1rem)] flex-1 flex-col">
         {/* Header - Sticky */}
-        <div className="z-10 flex h-7 shrink-0 items-stretch border-b bg-muted/70 text-[11px] font-medium backdrop-blur supports-[backdrop-filter]:bg-muted/90">
+        <div className="z-10 flex h-7 shrink-0 items-stretch border-b bg-muted/70 text-[calc(11/14*1rem)] font-medium backdrop-blur supports-[backdrop-filter]:bg-muted/90">
           <div className={cn(headerCellClassName, 'w-16')}>方法</div>
           <div className={cn(headerCellClassName, 'w-14')}>状态</div>
           <div className={cn(headerCellClassName, 'w-24')}>来源</div>
           <div className={cn(headerCellClassName, 'w-44')}>应用</div>
-          <div className={cn(headerCellClassName, 'min-w-[200px] flex-1')}>源地址</div>
-          <div className={cn(headerCellClassName, 'min-w-[200px] flex-1')}>目标地址</div>
+          <div className={cn(headerCellClassName, 'min-w-[calc(200/14*1rem)] flex-1')}>源地址</div>
+          <div className={cn(headerCellClassName, 'min-w-[calc(200/14*1rem)] flex-1')}>目标地址</div>
           <div className={cn(headerCellClassName, 'w-14')}>协议</div>
           <div className={cn(headerCellClassName, 'w-16')}>耗时</div>
           <div className={cn(headerCellClassName, 'w-24')}>
@@ -160,7 +172,7 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
               variant="ghost"
               size="xs"
               onClick={toggleTimeSortOrder}
-              className="-ml-1 h-6 px-1.5 text-[11px]"
+              className="-ml-1 h-6 px-1.5 text-[calc(11/14*1rem)]"
               title={timeSortOrder === 'desc' ? '倒序（新→旧），点击切换为正序' : '正序（旧→新），点击切换为倒序'}
             >
               时间
@@ -199,7 +211,7 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
                     <div
                       key={record.id ?? virtualRow.index}
                       className={cn(
-                        'absolute flex w-full items-center cursor-pointer border-b border-border/40 text-[11px] transition-colors',
+                        'absolute flex w-full items-center cursor-pointer border-b border-border/40 text-[calc(11/14*1rem)] transition-colors',
                         isSelected ? 'bg-accent' : 'hover:bg-muted/50',
                       )}
                       onClick={() => record.id != null && onSelect(record.id)}
@@ -237,7 +249,7 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
                             <ApplicationIcon record={record} compact />
                             <span className="truncate">{record.applicationName}</span>
                             {isInferredApplication(record) && (
-                              <span className="shrink-0 rounded border px-1 text-[9px] leading-4 text-muted-foreground">
+                              <span className="shrink-0 rounded border px-1 text-[calc(9/14*1rem)] leading-4 text-muted-foreground">
                                 推断
                               </span>
                             )}
@@ -248,7 +260,7 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
                           </span>
                         )}
                       </div>
-                      <div className="flex h-full min-w-[200px] flex-1 items-center truncate px-2 font-mono" title={record.source}>
+                      <div className="flex h-full min-w-[calc(200/14*1rem)] flex-1 items-center truncate px-2 font-mono" title={record.source}>
                         {record._fromPluginTest && (
                           <Badge variant="secondary" className={cn(tableBadgeClassName, 'mr-1')}>
                             插件测试
@@ -256,7 +268,7 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
                         )}
                         {record.source}
                       </div>
-                      <div className="flex h-full min-w-[200px] flex-1 items-center truncate px-2 font-mono" title={record.target}>
+                      <div className="flex h-full min-w-[calc(200/14*1rem)] flex-1 items-center truncate px-2 font-mono" title={record.target}>
                         {record.target}
                       </div>
                       <div className="flex h-full w-14 items-center px-2">
@@ -266,10 +278,10 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
                           </Badge>
                         )}
                       </div>
-                      <div className="flex h-full w-16 items-center px-2 font-mono text-[10px] text-muted-foreground">
+                      <div className="flex h-full w-16 items-center px-2 font-mono text-[calc(10/14*1rem)] text-muted-foreground">
                         {record.duration != null && formatDuration(record.duration)}
                       </div>
-                      <div className="flex h-full w-24 items-center px-1.5 font-mono text-[10px] text-muted-foreground">{record.time}</div>
+                      <div className="flex h-full w-24 items-center px-1.5 font-mono text-[calc(10/14*1rem)] text-muted-foreground">{record.time}</div>
                       <div className="flex h-full w-14 items-center px-1.5">
                         <TrafficHitBadge record={record} />
                       </div>
