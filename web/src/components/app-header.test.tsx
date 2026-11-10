@@ -1,6 +1,7 @@
 import type { ComponentProps } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen, fireEvent } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { AppHeader, SHELL_NAV_COLLAPSED_KEY, ShellNav } from './app-header'
 import { MemoryRouter } from 'react-router-dom'
 
@@ -51,6 +52,19 @@ describe('AppHeader', () => {
     expect(utilities).not.toContainElement(command)
     fireEvent.click(command)
     expect(onCommandClick).toHaveBeenCalledOnce()
+  })
+
+  it('names the theme control and shows 切换主题 on hover', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <AppHeader onCommandClick={vi.fn()} />
+      </MemoryRouter>,
+    )
+
+    const theme = screen.getByRole('button', { name: '当前主题: light，点击切换' })
+    await user.hover(theme)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('切换主题')
   })
 })
 

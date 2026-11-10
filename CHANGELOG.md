@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Settings and request detail use shared HelpHint, IconButton, and TooltipTab controls (#166). The accent-color note and the hit explanation open from a “?” on hover, keyboard focus, or a touch tap, and Escape closes them. Replay, view-rule, and the header theme control are icon buttons with an accessible name and a tooltip. 「创建 Mock」 keeps its visible label. Settings sub-tabs show a tooltip only while their text label is hidden.
+- 设置页和请求详情改用公共的 HelpHint、IconButton、TooltipTab（#166）。强调色说明和命中说明收进「?」，悬停、键盘焦点或触屏点按打开，Escape 关闭。重放、查看规则和顶栏主题按钮改为带可访问名称和提示的图标按钮。「创建 Mock」仍显示文字。设置子 Tab 只在文字被隐藏时显示同样名称的提示。
+
 ### Fixed
 
 - 390px layout (#166). The traffic empty state stays in the visible pane instead of centering in the wide table track. Rule pattern, exclusion, and target fields keep a rem minimum width; the rule header and rows share one scroller so the vertical bar stays on the visible edge. The Mock list uses fixed columns so 「状态」 and 「延迟」 are not cropped, and the row can scroll to the action cell. Below 640px the Mock editor adds a section-gap of bottom padding under 「启用此规则」, and the response editor still fills leftover height down to 150px with one outer scrollbar. Settings sub-tabs keep an accessible name when the label is hidden.

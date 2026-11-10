@@ -7,10 +7,12 @@ import {
 } from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { HelpHint } from '@/components/help-hint'
+import { IconButton } from '@/components/icon-button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Loader2, Wand2, RotateCw, Activity, XCircle, ArrowRight, ArrowDown, Clock, CornerDownRight, Flag, Route, ShieldCheck, ChevronDown, ChevronRight, Monitor, Server, ExternalLink } from 'lucide-react'
+import { Loader2, RotateCw, FileText, Sparkles, Activity, XCircle, ArrowRight, ArrowDown, Clock, CornerDownRight, Flag, Route, ShieldCheck, ChevronDown, ChevronRight, Monitor, Server } from 'lucide-react'
 import { getTrafficHitSummary } from '@/lib/traffic-hit'
 import { diffLines } from 'diff'
 import { ApplicationIcon } from '@/components/application-icon'
@@ -670,11 +672,11 @@ function OverviewHitPane({ record, detail }: { record: ProxyRecord; detail: Reco
       </div>
 
       <div>
-        <h4 className="mb-1.5 text-xs font-semibold text-muted-foreground">
+        <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
           命中规则 / Mock
+          <HelpHint label="命中说明">{hit.description}</HelpHint>
         </h4>
-        <div className="mb-1 text-sm font-semibold">{hit.title}</div>
-        <p className="mb-2 text-xs text-muted-foreground">{hit.description}</p>
+        <div className="mb-2 text-sm font-semibold">{hit.title}</div>
         {/* At most ONE equal-width code box for hit display (wireframe B). */}
         <pre
           className="meddle-thin-scroll w-full overflow-x-auto rounded border bg-muted/30 px-2 py-1.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all"
@@ -737,28 +739,27 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
   const actionButtons = (
             <>
               {detail && onReplay && selectedRecord?.id != null && (
-                <Button
+                <IconButton
                   variant="outline"
-                  size="xs"
+                  size="icon-sm"
                   onClick={handleReplay}
                   disabled={replaying}
-                  title="使用相同的请求参数重新发送请求"
+                  aria-busy={replaying}
+                  label={replaying ? '重放中…' : '重放'}
                 >
-                  <RotateCw className={`h-3.5 w-3.5 mr-1 ${replaying ? 'animate-spin' : ''}`} />
-                  {replaying ? '重放中…' : '重放'}
-                </Button>
+                  <RotateCw className={replaying ? 'animate-spin' : undefined} />
+                </IconButton>
               )}
               {selectedRecord && onJumpToRule && selectedRecord.source !== selectedRecord.target && !selectedRecord.mock && (
-                <Button
+                <IconButton
                   variant="outline"
-                  size="xs"
+                  size="icon-sm"
                   onClick={() => onJumpToRule(selectedRecord)}
-                  title="跳转到路由规则配置"
+                  label="查看规则"
                   data-testid="detail-jump-to-rule"
                 >
-                  <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                  查看规则
-                </Button>
+                  <FileText />
+                </IconButton>
               )}
               {detail && onCreateMock && !selectedRecord?.mock && (
                 <Button
@@ -767,7 +768,7 @@ export function DetailPanel({ open = false, onClose, embedded = false, detail, l
                   onClick={handleCreateMock}
                   data-testid="detail-create-mock"
                 >
-                  <Wand2 className="h-3.5 w-3.5 mr-1" />
+                  <Sparkles />
                   创建 Mock
                 </Button>
               )}
