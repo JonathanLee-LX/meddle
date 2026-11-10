@@ -58,6 +58,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog'
 
 interface RuleConfigProps {
   rules: RuleItem[]
@@ -661,6 +662,7 @@ export function RuleConfig(props: RuleConfigProps) {
   } = props
 
   const [saving, setSaving] = useState(false)
+  const [pendingDeleteIndex, setPendingDeleteIndex] = useState<number | null>(null)
 
   // Issue #137: ruleset lock. The icon flips at once (optimistic override),
   // the list title bar reads 「保存中…」 then 「已保存」, and a failed save rolls back.
@@ -1103,6 +1105,19 @@ export function RuleConfig(props: RuleConfigProps) {
     [activeReadonly, setRules],
   )
 
+  const requestDeleteRule = useCallback(
+    (index: number) => {
+      if (activeReadonly) return
+      setPendingDeleteIndex(index)
+    },
+    [activeReadonly],
+  )
+
+  const confirmDeleteRule = useCallback(() => {
+    if (pendingDeleteIndex == null || activeReadonly) return
+    deleteRule(pendingDeleteIndex)
+  }, [activeReadonly, deleteRule, pendingDeleteIndex])
+
   const addRule = useCallback(() => {
     if (activeReadonly) return
     setRuleRowIds((prev) => [createRuleRowId(), ...prev])
@@ -1289,7 +1304,7 @@ export function RuleConfig(props: RuleConfigProps) {
     (index: number) => (field: 'rule' | 'target' | 'exclusions', value: string | string[]) => updateRule(index, field, value),
     [updateRule],
   )
-  const createDeleteRuleCallback = useCallback((index: number) => () => deleteRule(index), [deleteRule])
+  const createDeleteRuleCallback = useCallback((index: number) => () => requestDeleteRule(index), [requestDeleteRule])
   const createMoveToTopCallback = useCallback((index: number) => () => moveToTop(index), [moveToTop])
 
   return (
@@ -1878,6 +1893,16 @@ export function RuleConfig(props: RuleConfigProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDeleteDialog
+        open={pendingDeleteIndex != null && Boolean(rules[pendingDeleteIndex])}
+        onOpenChange={(next) => {
+          if (!next) setPendingDeleteIndex(null)
+        }}
+        title="删除规则"
+        description={`确定删除规则「${rules[pendingDeleteIndex ?? -1]?.rule || '未填写'}」吗？只从当前表格移除这一行。`}
+        confirmLabel="删除"
+        onConfirm={confirmDeleteRule}
+      />
     </>
   )
 }

@@ -51,6 +51,7 @@ import { SAVE_SHORTCUT_PRIORITY } from '@/components/save-shortcut/save-shortcut
 import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
 import { fetchAppInfo } from '@/lib/app-version'
 import { toast } from '@/components/ui/toast'
+import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog'
 import { BreakablePath, MocksFileInvalidNote, MocksFileLegacyPathNote, MocksFileMissingNote } from '@/components/mocks-file-missing-note'
 import { formatMocksParseLocation, isRelativeMocksPathInput, isMocksFileInvalid, shouldShowMocksFileMissing, useMocksFileStatus } from '@/hooks/use-mocks-file-status'
 
@@ -142,6 +143,8 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
   const { status: mocksFile, refresh: refreshMocksFile } = useMocksFileStatus()
   const [ruleFiles, setRuleFiles] = useState<Array<{ name: string; enabled: boolean; ruleCount: number }>>([])
   const [clientAliases, setClientAliases] = useState<Record<string, string>>({})
+  const [pendingAliasIp, setPendingAliasIp] = useState<string | null>(null)
+  const [pendingModelId, setPendingModelId] = useState<string | null>(null)
   const [newClientIp, setNewClientIp] = useState('')
   const [newClientName, setNewClientName] = useState('')
 
@@ -820,13 +823,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                     variant="ghost"
                     size="icon-sm"
                     className="text-muted-foreground hover:text-destructive"
-                    onClick={() => {
-                      setClientAliases((current) => {
-                        const next = { ...current }
-                        delete next[ip]
-                        return next
-                      })
-                    }}
+                    onClick={() => setPendingAliasIp(ip)}
                     title="删除设备名称"
                     aria-label="删除设备名称"
                   >
@@ -934,7 +931,7 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                             使用
                           </Button>
                         )}
-                        <Button variant="ghost" size="icon-sm" onClick={() => setAiConfig(deleteModel(aiConfig, model.id))} className="text-destructive" aria-label="删除模型">
+                        <Button variant="ghost" size="icon-sm" onClick={() => setPendingModelId(model.id)} className="text-destructive" aria-label="删除模型">
                           <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
@@ -1182,6 +1179,39 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
           </div>
         </TabsContent>
       </Tabs>
+      <ConfirmDeleteDialog
+        open={pendingAliasIp != null && pendingAliasIp in clientAliases}
+        onOpenChange={(next) => {
+          if (!next) setPendingAliasIp(null)
+        }}
+        title="删除设备名称"
+        description={`确定删除设备名称「${pendingAliasIp ? clientAliases[pendingAliasIp] || '未命名' : ''}」（${pendingAliasIp ?? ''}）吗？只从当前列表移除，保存后才会写入设置。`}
+        confirmLabel="删除"
+        onConfirm={() => {
+          const ip = pendingAliasIp
+          if (!ip) return
+          setClientAliases((current) => {
+            if (!Object.prototype.hasOwnProperty.call(current, ip)) return current
+            const next = { ...current }
+            delete next[ip]
+            return next
+          })
+        }}
+      />
+      <ConfirmDeleteDialog
+        open={pendingModelId != null && Boolean(aiConfig.models?.some((model) => model.id === pendingModelId))}
+        onOpenChange={(next) => {
+          if (!next) setPendingModelId(null)
+        }}
+        title="删除模型"
+        description={`确定删除模型「${aiConfig.models?.find((model) => model.id === pendingModelId)?.name || '未命名'}」吗？只从当前配置移除，保存后才会写入设置。`}
+        confirmLabel="删除"
+        onConfirm={() => {
+          const modelId = pendingModelId
+          if (!modelId) return
+          setAiConfig((current) => deleteModel(current, modelId))
+        }}
+      />
     </>
   )
 

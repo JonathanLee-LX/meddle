@@ -264,7 +264,7 @@ export function PluginCodeEditor({
                 <>
                   <Code2 className="h-5 w-5" />
                   {filename}
-                  {isDirty && <Badge variant="outline" className="text-orange-600 border-orange-300">未保存</Badge>}
+                  {isDirty && <Badge variant="warning">未保存</Badge>}
                 </>
               }
               description="查看和编辑插件源码，保存后需热加载才能生效"
@@ -372,7 +372,7 @@ export function PluginCodeEditor({
         <EditorPaneActions className="px-6 py-3 flex justify-between items-center gap-2">
           <div className={inPaneBar ? 'contents' : 'flex items-center gap-2'}>
             {plainHeading && isDirty ? (
-              <Badge variant="outline" className="text-orange-600 border-orange-300">未保存</Badge>
+              <Badge variant="warning">未保存</Badge>
             ) : null}
             <Button
               variant="ghost"

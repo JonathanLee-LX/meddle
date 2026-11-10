@@ -232,7 +232,7 @@ function normalizeLogStats(value: unknown): LogRateLimitStats | null {
 function StatusBadge({ status }: { status: HealthStatus }) {
   const icon = status === 'ok' ? <CheckCircle2 /> : status === 'degraded' ? <AlertTriangle /> : <XCircle />
   return (
-    <Badge variant={status === 'critical' ? 'destructive' : status === 'degraded' ? 'secondary' : 'default'}>
+    <Badge variant={status === 'critical' ? 'destructive' : status === 'degraded' ? 'warning' : 'success'}>
       {icon}
       {STATUS_LABEL[status]}
     </Badge>
@@ -582,7 +582,7 @@ export function HealthPanel() {
                         {item.key}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={item.level === 'error' ? 'destructive' : item.level === 'warn' ? 'secondary' : 'outline'}>
+                        <Badge variant={item.level === 'error' ? 'destructive' : item.level === 'warn' ? 'warning' : 'outline'}>
                           {item.level}
                         </Badge>
                       </TableCell>
