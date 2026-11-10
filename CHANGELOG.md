@@ -7,11 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-10
+
+### 从 0.5.1 升级需要注意
+
+0.5.2 是补丁版。配置目录、默认端口、命令和标志都没变。这一版只改 Web 界面。
+
+### Upgrading from 0.5.1
+
+0.5.2 is a patch release. The config directory, default port, commands, and flags are unchanged. This release only changes the Web UI.
+
 ### Fixed
 
-- Web zoom (`--app-scale`) now scales traffic-table type, row height, and column min-widths. Dense badges in the log table, hit column, command palette, rule overview, and related Badge call sites use rem instead of hardcoded px. The virtualizer remasures when the scale changes.
-- Mock 「响应内容」 editor fills remaining pane height by default (minimum 150px) instead of a fixed 300px. Dragging the handle keeps a custom height; double-click restores fill. The editor pane uses a single outer overflow layer so the form does not stack a second scrollbar.
-- Deleting a route-table row, an AI model, or a device name, and clearing the traffic log, now asks in a confirm dialog first. Closing it, 取消, or Escape leaves the data in place. Only the 删除 or 清空 button applies the change, and a failed confirm stays open instead of looking successful.
+- Web zoom (`--app-scale`) now scales traffic-table type, row height, and column min-widths. Dense badges in the log table, hit column, command palette, rule overview, and related Badge call sites use rem instead of hardcoded px. The virtualizer remasures when the scale changes (#167).
+- Mock 「响应内容」 editor fills remaining pane height by default (minimum 150px) instead of a fixed 300px. Dragging the handle keeps a custom height; double-click restores fill. The editor pane uses a single outer overflow layer so the form does not stack a second scrollbar (#167).
+- Badge and status colors meet WCAG AA. Filled badges use a soft accent background with dark text instead of white on `--primary`. Shared success, warning, and error tokens cover 2xx, health 「正常」, 4xx, and 5xx in light and dark. `--primary` and `--destructive` values are unchanged (#168).
+- Deleting a route-table row, an AI model, or a device name, and clearing the traffic log, now asks in a confirm dialog first. Closing it, 取消, or Escape leaves the data in place. Only the 删除 or 清空 button applies the change, and a failed confirm stays open instead of looking successful (#169).
 
 ## [0.5.1] - 2026-11-10
 
