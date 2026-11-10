@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Rules and Mock pages disclose secondary actions and short field notes on demand (#166). The rules editor heading shows the rule-file name. 「筛选」「从文件加载」and「文本导入」are icon buttons with an accessible name and tooltip; 「添加规则」and「保存」keep their labels. Mock「代码格式化」and「AI修复」are icon buttons. 「URL 匹配」and「Query 匹配」keep the label, and the parenthetical note opens from a “?”.
+- 规则页和 Mock 页把次要操作和字段旁注收进按需提示（#166）。规则编辑标题只显示规则文件名。「筛选」「从文件加载」「文本导入」改为带可访问名称和提示的图标按钮；「添加规则」和「保存」仍显示文字。Mock 的「代码格式化」和「AI修复」改为图标按钮。「URL 匹配」「Query 匹配」保留标签，括号里的说明改从「?」打开。
 - Settings and request detail use shared HelpHint, IconButton, and TooltipTab controls (#166). The accent-color note and the hit explanation open from a “?” on hover, keyboard focus, or a touch tap, and Escape closes them. Replay, view-rule, and the header theme control are icon buttons with an accessible name and a tooltip. 「创建 Mock」 keeps its visible label. Settings sub-tabs show a tooltip only while their text label is hidden.
 - 设置页和请求详情改用公共的 HelpHint、IconButton、TooltipTab（#166）。强调色说明和命中说明收进「?」，悬停、键盘焦点或触屏点按打开，Escape 关闭。重放、查看规则和顶栏主题按钮改为带可访问名称和提示的图标按钮。「创建 Mock」仍显示文字。设置子 Tab 只在文字被隐藏时显示同样名称的提示。
 

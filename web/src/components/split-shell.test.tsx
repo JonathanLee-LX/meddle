@@ -74,7 +74,8 @@ describe('rules page shell (issue #111)', () => {
     expectSharedBar(screen.getByRole('heading', { name: '规则文件' }).closest('[data-slot="pane-bar"]')!)
     const bar = screen.getByTestId('rule-editor-title-bar')
     expectSharedBar(bar)
-    expect(within(bar).getByRole('heading', { name: '编辑规则 · default' })).toBeInTheDocument()
+    expect(within(bar).getByRole('heading', { name: 'default' })).toBeInTheDocument()
+    expect(within(bar).getByRole('heading')).not.toHaveTextContent('编辑规则')
     expect(within(bar).getByRole('button', { name: '保存' })).toHaveAttribute('data-variant', 'default')
   })
 

@@ -50,6 +50,41 @@ describe('MockEditorPanel actions', () => {
     host.remove()
   })
 
+  it('names match fields without the parenthetical and keeps format actions as icon buttons', async () => {
+    const user = userEvent.setup()
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    render(
+      <EditorPaneActionsProvider host={host}>
+        <MockEditorPanel
+          createMock={vi.fn(async () => null)}
+          updateMock={vi.fn(async () => true)}
+          initialData={{ urlPattern: '/cart', query: 'a=1', body: '{"ok":true}' }}
+        />
+      </EditorPaneActionsProvider>,
+    )
+
+    expect(screen.getByRole('textbox', { name: 'URL 匹配' })).toHaveValue('/cart')
+    expect(screen.getByRole('textbox', { name: 'Query 匹配' })).toHaveValue('a=1')
+    expect(screen.queryByText('URL 匹配（支持正则）')).not.toBeInTheDocument()
+    expect(screen.queryByText('Query 匹配（可选）')).not.toBeInTheDocument()
+
+    const urlHint = screen.getByRole('button', { name: 'URL 匹配说明' })
+    await user.hover(urlHint)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('支持正则')
+
+    const queryHint = screen.getByRole('button', { name: 'Query 匹配说明' })
+    await user.hover(queryHint)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('可选')
+
+    const format = screen.getByRole('button', { name: '代码格式化' })
+    const fix = screen.getByRole('button', { name: 'AI修复' })
+    expect(format).not.toHaveTextContent('代码格式化')
+    expect(fix).not.toHaveTextContent('AI修复')
+    expect(within(host).getByRole('button', { name: '保存' })).toHaveTextContent('保存')
+    host.remove()
+  })
+
   it('fills remaining height by default, then keeps a dragged height until double-click restores fill', () => {
     const host = document.createElement('div')
     document.body.appendChild(host)

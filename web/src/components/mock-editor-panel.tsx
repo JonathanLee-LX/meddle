@@ -1,8 +1,9 @@
 import { useCallback, useId, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type UIEvent } from 'react'
 import { Code, GripVertical, Loader2, Save, TriangleAlert, Wand2 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { HelpHint } from '@/components/help-hint'
+import { IconButton } from '@/components/icon-button'
 import { consumeMocksWriteRefusedInvalid } from '@/hooks/use-mocks'
-import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -74,6 +75,8 @@ export function MockEditorPanel({
 }: MockEditorPanelProps) {
   const fileInvalid = fileInvalidLocation != null
   const methodId = useId()
+  const urlPatternId = useId()
+  const queryId = useId()
   // Keep the last location while the notice collapses so its text does not vanish mid-animation.
   const lastInvalidLocation = useRef<string | null>(null)
   if (fileInvalidLocation != null) lastInvalidLocation.current = fileInvalidLocation
@@ -321,8 +324,12 @@ export function MockEditorPanel({
         </div>
 
         <div className="app-field-group">
-          <Label>URL 匹配（支持正则）</Label>
+          <div className="flex items-center gap-1.5">
+            <Label htmlFor={urlPatternId}>URL 匹配</Label>
+            <HelpHint label="URL 匹配说明" side="right">支持正则</HelpHint>
+          </div>
           <Input
+            id={urlPatternId}
             value={form.urlPattern}
             onChange={(event) => updateField('urlPattern', event.target.value)}
             placeholder="如：/api/console/user/corp/.*"
@@ -331,8 +338,12 @@ export function MockEditorPanel({
         </div>
 
         <div className="app-field-group">
-          <Label>Query 匹配（可选）</Label>
+          <div className="flex items-center gap-1.5">
+            <Label htmlFor={queryId}>Query 匹配</Label>
+            <HelpHint label="Query 匹配说明" side="right">可选</HelpHint>
+          </div>
           <Input
+            id={queryId}
             value={form.query || ''}
             onChange={(event) => updateField('query', event.target.value)}
             placeholder="如：window_key=A"
@@ -371,29 +382,32 @@ export function MockEditorPanel({
                 </span>
               )}
               {form.body.trim() && (
-                <Button
+                <IconButton
                   type="button"
                   variant="outline"
-                  size="xs"
-                  onClick={fixBodyErrors}
-                  disabled={fixing || !isAIReady}
-                  title={!isAIReady ? 'AI 未配置或未启用' : '使用 AI 修复响应内容'}
+                  size="icon-xs"
+                  onClick={() => void fixBodyErrors()}
+                  disabled={fixing}
+                  aria-disabled={!isAIReady || undefined}
+                  aria-busy={fixing || undefined}
+                  className={!isAIReady ? 'opacity-50' : undefined}
+                  label={fixing ? '修复中…' : 'AI修复'}
+                  tooltip={!isAIReady ? 'AI 未配置或未启用' : undefined}
                 >
-                  {fixing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Wand2 className="mr-1 h-3 w-3" />}
-                  {fixing ? '修复中…' : 'AI修复'}
-                </Button>
+                  {fixing ? <Loader2 className="animate-spin" /> : <Wand2 />}
+                </IconButton>
               )}
-              <Button
+              <IconButton
                 type="button"
                 variant="ghost"
-                size="xs"
-                onClick={formatBody}
+                size="icon-xs"
+                onClick={() => void formatBody()}
                 disabled={formatting || !form.body.trim()}
-                title="格式化响应内容"
+                aria-busy={formatting || undefined}
+                label={formatting ? '格式化中…' : '代码格式化'}
               >
-                {formatting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Code className="mr-1 h-3 w-3" />}
-                {formatting ? '格式化中…' : '代码格式化'}
-              </Button>
+                {formatting ? <Loader2 className="animate-spin" /> : <Code />}
+              </IconButton>
             </div>
           </div>
         </div>
