@@ -275,7 +275,7 @@ export function MockConfig({
                         <TableCell>
                           <Badge
                             variant={
-                              rule.statusCode >= 400 ? 'destructive' : rule.statusCode >= 300 ? 'secondary' : 'default'
+                              rule.statusCode >= 500 ? 'destructive' : rule.statusCode >= 400 ? 'warning' : rule.statusCode >= 300 ? 'secondary' : 'success'
                             }
                           >
                             {rule.statusCode}

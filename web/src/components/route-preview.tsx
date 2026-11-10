@@ -133,7 +133,7 @@ export function RoutePreview({ rules, activeFileName, embedded = false, onReveal
       {result && (
         <div className={embedded ? 'min-h-0 flex-1 space-y-3 overflow-auto rounded-md border bg-muted/20 p-3' : 'space-y-3 rounded-md border bg-muted/20 p-3'}>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className={result.matched ? 'bg-green-100 text-green-800 border-green-200' : 'bg-blue-100 text-blue-800 border-blue-200'}>
+            <Badge variant={result.matched ? 'success' : 'secondary'}>
               {result.matched ? '已命中规则' : '未命中规则'}
             </Badge>
             {result.matchedRule && (
