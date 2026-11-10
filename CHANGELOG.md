@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Deleting a route-table row, an AI model, or a device name, and clearing the traffic log, now asks in a confirm dialog first. Closing it, 取消, or Escape leaves the data in place. Only the 删除 or 清空 button applies the change, and a failed confirm stays open instead of looking successful.
+
 ## [0.5.1] - 2026-11-10
 
 ### 从 0.5.0 升级需要注意
