@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Web zoom (`--app-scale`) now scales traffic-table type, row height, and column min-widths. Dense badges in the log table, hit column, command palette, rule overview, and related Badge call sites use rem instead of hardcoded px. The virtualizer remasures when the scale changes.
+- Mock 「响应内容」 editor fills remaining pane height by default (minimum 150px) instead of a fixed 300px. Dragging the handle keeps a custom height; double-click restores fill. The editor pane uses a single outer overflow layer so the form does not stack a second scrollbar.
+
 ## [0.5.1] - 2026-11-10
 
 ### 从 0.5.0 升级需要注意
