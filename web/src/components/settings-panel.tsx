@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsContent, TabsList } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Switch } from '@/components/ui/switch'
@@ -52,7 +52,10 @@ import { useSaveShortcut } from '@/components/save-shortcut/use-save-shortcut'
 import { fetchAppInfo } from '@/lib/app-version'
 import { toast } from '@/components/ui/toast'
 import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog'
+import { HelpHint } from '@/components/help-hint'
+import { TooltipTab } from '@/components/tooltip-tab'
 import { BreakablePath, MocksFileInvalidNote, MocksFileLegacyPathNote, MocksFileMissingNote } from '@/components/mocks-file-missing-note'
+import { useMediaQuery } from '@/hooks/use-media-query'
 import { formatMocksParseLocation, isRelativeMocksPathInput, isMocksFileInvalid, shouldShowMocksFileMissing, useMocksFileStatus } from '@/hooks/use-mocks-file-status'
 
 interface SettingsPanelProps {
@@ -127,6 +130,8 @@ const normalizeZoomScale = (value?: string) => {
 export function SettingsPanel({ open = false, onOpenChange, embedded = false }: SettingsPanelProps) {
   const { theme, accentColor, setTheme, setAccentColor, setZoom } = useTheme()
   const [activeTab, setActiveTab] = useState<SettingsTab>('preferences')
+  // Below `sm` the tab label is `hidden`; the tooltip carries the same name.
+  const compactTabs = useMediaQuery('(max-width: 639px)')
 
   // AI 配置状态
   const [aiConfig, setAiConfig] = useState<AIConfig>(() => getAIConfig())
@@ -481,22 +486,22 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
           aria-label="设置分类"
           className="h-full w-14 shrink-0 self-stretch justify-start gap-1 rounded-none border-r bg-muted/25 p-2 group-data-[orientation=vertical]/tabs:!h-full sm:w-44 sm:p-3"
         >
-          <TabsTrigger value="preferences" aria-label="偏好设置" className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
+          <TooltipTab value="preferences" label="偏好设置" showTooltip={compactTabs} className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
             <Settings aria-hidden="true" />
             <span className="hidden sm:inline">偏好设置</span>
-          </TabsTrigger>
-          <TabsTrigger value="config" aria-label="配置文件" className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
+          </TooltipTab>
+          <TooltipTab value="config" label="配置文件" showTooltip={compactTabs} className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
             <FileText aria-hidden="true" />
             <span className="hidden sm:inline">配置文件</span>
-          </TabsTrigger>
-          <TabsTrigger value="clients" aria-label="客户端" className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
+          </TooltipTab>
+          <TooltipTab value="clients" label="客户端" showTooltip={compactTabs} className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
             <Smartphone aria-hidden="true" />
             <span className="hidden sm:inline">客户端</span>
-          </TabsTrigger>
-          <TabsTrigger value="ai" aria-label="AI 配置" className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
+          </TooltipTab>
+          <TooltipTab value="ai" label="AI 配置" showTooltip={compactTabs} className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
             <Sparkles aria-hidden="true" />
             <span className="hidden sm:inline">AI 配置</span>
-          </TabsTrigger>
+          </TooltipTab>
         </TabsList>
 
         {/* 偏好设置 */}
@@ -534,9 +539,11 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
           </div>
 
           <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-1.5">
               <Label className="text-sm">强调色</Label>
-              <p className="text-xs text-muted-foreground">统一按钮、状态、选中项和焦点样式。自动模式会根据明暗主题选择合适的颜色。</p>
+              <HelpHint label="强调色说明">
+                统一按钮、状态、选中项和焦点样式。自动模式会根据明暗主题选择合适的颜色。
+              </HelpHint>
             </div>
             <ToggleGroup
               type="single"

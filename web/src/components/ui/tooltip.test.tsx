@@ -22,6 +22,7 @@ describe('TooltipTrigger describe', () => {
     const trigger = renderTip()
     expect(await screen.findByRole('tooltip')).toHaveTextContent('删除后不可恢复')
     expect(trigger).toHaveAccessibleDescription('删除后不可恢复')
+    expect(document.querySelector('[data-slot="tooltip-content"]')).toHaveClass('z-[120]')
   })
 
   it('drops only the tooltip description when describe={false}', async () => {

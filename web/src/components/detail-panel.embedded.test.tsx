@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { DetailPanel } from './detail-panel'
 import type { ProxyRecord, RecordDetail } from '@/types'
@@ -196,5 +197,56 @@ describe('DetailPanel embedded mode (layout B / #92)', () => {
 
     expect(screen.getByTestId('detail-upstream-error')).toHaveTextContent('ECONNREFUSED')
     expect(screen.getByText(/出错原因/)).toBeInTheDocument()
+  })
+
+  it('keeps replay and view-rule as named icon buttons and the hit note in a hint', async () => {
+    const user = userEvent.setup()
+    const record: ProxyRecord = {
+      id: 7,
+      method: 'GET',
+      source: 'http://api.example.com/foo',
+      target: 'http://127.0.0.1:3000/foo',
+      time: '12:00:00',
+      statusCode: 200,
+    }
+    const detail: RecordDetail = {
+      requestHeaders: { host: 'api.example.com' },
+      requestBody: '',
+      responseHeaders: {},
+      responseBody: '',
+      statusCode: 200,
+      statusMessage: 'OK',
+    }
+    const help = '源地址与目标地址不同，请求路径被规则改写后转发。'
+
+    render(
+      <DetailPanel
+        embedded
+        detail={detail}
+        loading={false}
+        selectedRecord={record}
+        onReplay={async () => undefined}
+        onCreateMock={() => undefined}
+        onJumpToRule={() => undefined}
+      />,
+    )
+
+    const replay = screen.getByRole('button', { name: '重放' })
+    const viewRule = screen.getByRole('button', { name: '查看规则' })
+    const createMock = screen.getByRole('button', { name: '创建 Mock' })
+    expect(replay).not.toHaveTextContent('重放')
+    expect(viewRule).not.toHaveTextContent('查看规则')
+    expect(createMock).toHaveTextContent('创建 Mock')
+    expect(screen.queryByText(help)).not.toBeInTheDocument()
+    expect(screen.getByText('命中 Rule · 转发改写')).toBeInTheDocument()
+
+    await user.hover(replay)
+    expect(await screen.findByRole('tooltip', { name: '重放' })).toBeInTheDocument()
+
+    const hint = screen.getByRole('button', { name: '命中说明' })
+    act(() => hint.focus())
+    expect(await screen.findByRole('tooltip', { name: help })).toHaveTextContent(help)
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('tooltip', { name: help })).not.toBeInTheDocument())
   })
 })
