@@ -374,6 +374,7 @@ describe('editor pane of a read-only ruleset (issue #137)', () => {
     expect(setRulesSpy).not.toHaveBeenCalled()
     expect(rowSwitch).toBeChecked()
     expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByRole('alertdialog')).toBeNull()
 
     // Rule inputs: read-only, full-strength text, still selectable.
     const ruleInput = screen.getByDisplayValue('locked.example.com')

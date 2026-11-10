@@ -41,6 +41,7 @@ import { createMockFromLog, type CreateMockFromLogData } from '@/utils/mock-fact
 import { MOCK_OPEN_CREATE_EVENT, type MockOpenCreateDetail } from '@/lib/mock-config-events'
 import { GlobalPanelProvider } from '@/components/global-panel/global-panel-context'
 import { toast } from '@/components/ui/toast'
+import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog'
 import type { CommandAction, GlobalPanelApi, GlobalPanelRoute } from '@/components/global-panel/types'
 import type { MockRule, ProxyRecord, ResourceType } from '@/types'
 import { getPathForTab, getShellMode, getTabFromPath, type ShellTab } from '@/lib/shell-mode'
@@ -140,6 +141,7 @@ function App() {
   )
   const [recording, setRecording] = useState(true)
   const [autoScroll, setAutoScroll] = useState(true)
+  const [clearLogsOpen, setClearLogsOpen] = useState(false)
 
   const activeTab = getTabFromPath(location.pathname)
   const shellMode = getShellMode(activeTab)
@@ -332,8 +334,11 @@ function App() {
           section: '日志',
           icon: Trash2,
           danger: true,
-          confirm: '确定要清空当前日志列表吗？',
-          run: store.clearRecords,
+          // The command palette closes before the dialog opens, so Escape and
+          // focus belong to the confirm dialog instead of the palette.
+          run: () => {
+            window.setTimeout(() => setClearLogsOpen(true), 0)
+          },
         },
         {
           id: 'logs.toggle-auto-scroll',
@@ -745,7 +750,7 @@ function App() {
         },
       ]
     },
-    [autoScroll, handleReplay, navigate, recording, setResourceTypeFilter, store],
+    [autoScroll, handleReplay, navigate, recording, setClearLogsOpen, setResourceTypeFilter, store],
   )
 
   const renderPanel = useCallback(
@@ -954,7 +959,7 @@ function App() {
                         setClientSourceFilter={setClientSourceFilter}
                         totalCount={store.records.length}
                         filteredCount={filteredRecords.length}
-                        onClear={store.clearRecords}
+                        onClear={() => setClearLogsOpen(true)}
                         recording={recording}
                         onToggleRecording={() => setRecording((r) => !r)}
                       />
@@ -1094,6 +1099,16 @@ function App() {
           )}
         </main>
       </div>
+      <ConfirmDeleteDialog
+        open={clearLogsOpen}
+        onOpenChange={setClearLogsOpen}
+        title="清空流量日志"
+        description="确定要清空当前日志列表吗？只清除当前界面中的记录。"
+        confirmLabel="清空"
+        onConfirm={() => {
+          store.clearRecords()
+        }}
+      />
     </GlobalPanelProvider>
   )
 }
