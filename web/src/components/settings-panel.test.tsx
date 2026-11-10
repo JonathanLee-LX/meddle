@@ -49,6 +49,11 @@ describe('SettingsPanel navigation', () => {
     expect(navigation).toHaveAttribute('data-orientation', 'vertical')
     expect(navigation).toHaveClass('group-data-[orientation=vertical]/tabs:!h-full')
     expect(within(navigation).getAllByRole('tab')).toHaveLength(4)
+    for (const name of ['偏好设置', '配置文件', '客户端', 'AI 配置']) {
+      const tab = within(navigation).getByRole('tab', { name })
+      expect(tab).toHaveAttribute('aria-label', name)
+      expect(tab.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+    }
     expect(screen.getByText('主题')).toBeInTheDocument()
     expect(screen.getByRole('tabpanel', { name: '偏好设置' })).toHaveClass('app-panel-content')
 

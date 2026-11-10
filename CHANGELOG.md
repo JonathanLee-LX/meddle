@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- 390px layout (#166). The traffic empty state stays in the visible pane instead of centering in the wide table track. Rule pattern, exclusion, and target fields keep a rem minimum width; the rule header and rows share one scroller so the vertical bar stays on the visible edge. The Mock list uses fixed columns so 「状态」 and 「延迟」 are not cropped, and the row can scroll to the action cell. Below 640px the Mock editor adds a section-gap of bottom padding under 「启用此规则」, and the response editor still fills leftover height down to 150px with one outer scrollbar. Settings sub-tabs keep an accessible name when the label is hidden.
+- 390 宽布局（#166）。流量空状态留在可见区域内，不再居中到超宽表格轨道里。规则的匹配、排除、目标输入框保留随缩放变化的最小宽度；表头和行共用一个滚动层，纵向滚动条留在可见边缘。Mock 列表用固定列宽，避免「状态」和「延迟」被裁掉，操作列可以横向滚到。640px 以下，Mock 编辑器在「启用此规则」下方多留一段区块间距；响应编辑器仍撑满剩余高度，最低 150px，并且只有一层外层滚动条。设置子 Tab 在文字隐藏时仍有可访问名称。
+
 ## [0.5.2] - 2026-11-10
 
 ### 从 0.5.1 升级需要注意
@@ -19,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- Web zoom (`--app-scale`) now scales traffic-table type, row height, and column min-widths. Dense badges in the log table, hit column, command palette, rule overview, and related Badge call sites use rem instead of hardcoded px. The virtualizer remasures when the scale changes (#167).
+- Web zoom (`--app-scale`) now scales traffic-table type, row height, and column min-widths. Dense badges in the log table, hit column, command palette, rule overview, and related Badge call sites use rem instead of hardcoded px. The virtualizer remeasures when the scale changes (#167).
 - Mock 「响应内容」 editor fills remaining pane height by default (minimum 150px) instead of a fixed 300px. Dragging the handle keeps a custom height; double-click restores fill. The editor pane uses a single outer overflow layer so the form does not stack a second scrollbar (#167).
 - Badge and status colors meet WCAG AA. Filled badges use a soft accent background with dark text instead of white on `--primary`. Shared success, warning, and error tokens cover 2xx, health 「正常」, 4xx, and 5xx in light and dark. `--primary` and `--destructive` values are unchanged (#168).
 - Deleting a route-table row, an AI model, or a device name, and clearing the traffic log, now asks in a confirm dialog first. Closing it, 取消, or Escape leaves the data in place. Only the 删除 or 清空 button applies the change, and a failed confirm stays open instead of looking successful (#169).

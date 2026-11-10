@@ -209,16 +209,24 @@ export function MockConfig({
             </Button>
           )}
         </PaneBar>
-        <div className="meddle-thin-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
-            <Table>
+        <div data-testid="mock-rule-table-scroll" className="meddle-thin-scroll min-h-0 flex-1 overflow-auto">
+            <Table className="table-fixed min-w-[calc(378/14*1rem)]">
+              <colgroup>
+                <col style={{ width: '3rem' }} />
+                <col style={{ width: '4rem' }} />
+                <col />
+                <col style={{ width: '3.5rem' }} />
+                <col style={{ width: '4rem' }} />
+                <col style={{ width: '4.5rem' }} />
+              </colgroup>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-12">启用</TableHead>
-                  <TableHead className="w-16">方法</TableHead>
-                  <TableHead>名称 / 匹配</TableHead>
-                  <TableHead className="w-14">状态</TableHead>
-                  <TableHead className="w-14">延迟</TableHead>
-                  <TableHead className="w-12" />
+                  <TableHead className="overflow-hidden">启用</TableHead>
+                  <TableHead className="overflow-hidden">方法</TableHead>
+                  <TableHead className="overflow-hidden">名称 / 匹配</TableHead>
+                  <TableHead className="overflow-hidden">状态</TableHead>
+                  <TableHead className="overflow-hidden">延迟</TableHead>
+                  <TableHead className="overflow-hidden" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -264,7 +272,7 @@ export function MockConfig({
                             {rule.method || '*'}
                           </Badge>
                         </TableCell>
-                        <TableCell className="max-w-[220px]">
+                        <TableCell className="min-w-0">
                           <div className="truncate text-sm font-medium">
                             {rule.name || <span className="italic text-muted-foreground">未命名</span>}
                           </div>

@@ -50,6 +50,25 @@ describe('MockConfig list|edit (P3 / #90)', () => {
     vi.restoreAllMocks()
   })
 
+  it('gives 状态 and 延迟 fixed columns so a narrow list does not crop them (#166)', () => {
+    renderMock()
+    const status = screen.getByRole('columnheader', { name: '状态' })
+    const delay = screen.getByRole('columnheader', { name: '延迟' })
+    const table = status.closest('table')
+    expect(table).toHaveClass('table-fixed', 'min-w-[calc(378/14*1rem)]')
+    expect(delay.closest('table')).toBe(table)
+    const cols = table?.querySelectorAll('col')
+    expect(cols?.[3]).toHaveStyle({ width: '3.5rem' })
+    expect(cols?.[4]).toHaveStyle({ width: '4rem' })
+    expect(status).toHaveClass('overflow-hidden')
+    expect(delay).toHaveClass('overflow-hidden')
+    const scroller = screen.getByTestId('mock-rule-table-scroll')
+    expect(scroller).toContainElement(table)
+    expect(scroller.className).not.toContain('overflow-x-hidden')
+    expect(screen.getByText('200')).toBeInTheDocument()
+    expect(screen.getByText('0ms')).toBeInTheDocument()
+  })
+
   it('renders list and idle edit pane without Sheet', () => {
     renderMock()
     expect(screen.getByTestId('mock-config-layout')).toHaveAttribute('data-layout', 'list-edit')

@@ -481,20 +481,20 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
           aria-label="设置分类"
           className="h-full w-14 shrink-0 self-stretch justify-start gap-1 rounded-none border-r bg-muted/25 p-2 group-data-[orientation=vertical]/tabs:!h-full sm:w-44 sm:p-3"
         >
-          <TabsTrigger value="preferences" className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
-            <Settings />
+          <TabsTrigger value="preferences" aria-label="偏好设置" className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
+            <Settings aria-hidden="true" />
             <span className="hidden sm:inline">偏好设置</span>
           </TabsTrigger>
-          <TabsTrigger value="config" className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
-            <FileText />
+          <TabsTrigger value="config" aria-label="配置文件" className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
+            <FileText aria-hidden="true" />
             <span className="hidden sm:inline">配置文件</span>
           </TabsTrigger>
-          <TabsTrigger value="clients" className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
-            <Smartphone />
+          <TabsTrigger value="clients" aria-label="客户端" className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
+            <Smartphone aria-hidden="true" />
             <span className="hidden sm:inline">客户端</span>
           </TabsTrigger>
-          <TabsTrigger value="ai" className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
-            <Sparkles />
+          <TabsTrigger value="ai" aria-label="AI 配置" className="h-9 w-full flex-none justify-start px-2.5 sm:px-3">
+            <Sparkles aria-hidden="true" />
             <span className="hidden sm:inline">AI 配置</span>
           </TabsTrigger>
         </TabsList>

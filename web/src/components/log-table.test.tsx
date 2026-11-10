@@ -359,6 +359,31 @@ describe('LogTable application source', () => {
   })
 })
 
+describe('LogTable empty state at a narrow viewport (#166)', () => {
+  it('keeps the empty copy in the visible pane, not in the 960px track', () => {
+    render(
+      <LogTable
+        records={[]}
+        selectedRecordId={null}
+        onSelect={vi.fn()}
+        autoScroll={false}
+      />,
+    )
+
+    const empty = screen.getByTestId('log-table-empty')
+    const title = screen.getByText('暂无请求记录')
+    const description = screen.getByText('打开需要调试的页面后，请求会实时显示在这里。')
+    expect(empty).toContainElement(title)
+    expect(empty).toContainElement(description)
+    expect(empty).toHaveClass('inset-x-0', 'top-7')
+    expect(title.closest('[data-slot="empty-header"]')).toHaveClass('max-w-full')
+
+    const track = screen.getByTestId('log-table-track')
+    expect(track).toHaveClass('min-w-[calc(960/14*1rem)]')
+    expect(track).not.toContainElement(empty)
+  })
+})
+
 describe('LogTable zoom row height', () => {
   it('scales the virtualizer estimate and remeasures when zoom changes', () => {
     const props = {

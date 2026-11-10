@@ -155,8 +155,9 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
   }, [records.length, autoScroll, timeSortOrder])
 
   return (
+    <div data-testid="log-table" className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
     <div className="meddle-thin-scroll relative flex min-h-0 flex-1 overflow-x-auto">
-      <div className="flex min-h-0 min-w-[calc(960/14*1rem)] flex-1 flex-col">
+      <div data-testid="log-table-track" className="flex min-h-0 min-w-[calc(960/14*1rem)] flex-1 flex-col">
         {/* Header - Sticky */}
         <div className="z-10 flex h-7 shrink-0 items-stretch border-b bg-muted/70 text-[calc(11/14*1rem)] font-medium backdrop-blur supports-[backdrop-filter]:bg-muted/90">
           <div className={cn(headerCellClassName, 'w-16')}>方法</div>
@@ -185,15 +186,7 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
           <div className="min-w-full">
             {/* Virtual List */}
             {records.length === 0 ? (
-              <Empty className="min-h-72 border-0">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <Inbox />
-                  </EmptyMedia>
-                  <EmptyTitle>暂无请求记录</EmptyTitle>
-                  <EmptyDescription>打开需要调试的页面后，请求会实时显示在这里。</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
+              <div className="min-h-72 flex-1" />
             ) : (
               <div
                 style={{
@@ -293,6 +286,23 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
           </div>
         </ScrollArea>
       </div>
+    </div>
+    {records.length === 0 && (
+      <div
+        data-testid="log-table-empty"
+        className="pointer-events-none absolute inset-x-0 top-7 overflow-hidden"
+      >
+        <Empty className="min-h-72 w-full min-w-0 max-w-full border-0 px-[var(--ui-section-gap)]">
+          <EmptyHeader className="w-full min-w-0 max-w-full">
+            <EmptyMedia variant="icon">
+              <Inbox />
+            </EmptyMedia>
+            <EmptyTitle>暂无请求记录</EmptyTitle>
+            <EmptyDescription>打开需要调试的页面后，请求会实时显示在这里。</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      </div>
+    )}
     </div>
   )
 }
