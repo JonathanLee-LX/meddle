@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-10
+
+### 从 0.5.0 升级需要注意
+
+0.5.1 是补丁版。配置目录、默认端口、命令和标志都没变。0.5.0 文末 Known issues 里的三条，在这一版已经修好（0.5.0 那段原文不改，仍是发布时的记录）：
+
+1. 未知命令的帮助改打到 stderr；走 `output.error` 的 `--json` 失败会在 stdout 打 `{"success":false,"error":{"message"}}`，同一段 message 在 stderr（没有 `✗`）。
+2. `meddle doctor` 解析 `mocksFilePath` 的方式和代理相同：展开 `~`，相对路径相对 `MEDDLE_HOME`。
+3. 能解析但形状不对的 `mocks.json`（例如顶层数组）不再当成空列表覆盖。CLI / API 与损坏文件一样拒绝写入，原文件字节不变。
+
+### Upgrading from 0.5.0
+
+0.5.1 is a patch release. The config directory, default port, commands, and flags are unchanged. The three items in the 0.5.0 Known issues section are fixed here (that 0.5.0 text is left as the published snapshot):
+
+1. Unknown-command help goes to stderr. `--json` failures that go through `output.error` print `{"success":false,"error":{"message"}}` on stdout and the same message on stderr (no `✗`).
+2. `meddle doctor` resolves `mocksFilePath` the same way the proxy does (`~` expand, relative to `MEDDLE_HOME`).
+3. Valid JSON with the wrong `mocks.json` shape (for example a top-level array) is no longer treated as an empty list and overwritten. CLI / API refuse the write the same way as a corrupt file; original file bytes stay unchanged.
+
 ### Fixed
 
 - Valid JSON with the wrong `mocks.json` shape (for example a top-level array, or an object without a `rules` array) is no longer treated as an empty list and overwritten (#160). CLI mock writes, `mock list`, and the API refuse the same way as a corrupt file: HTTP **409** / CLI exit 1, stderr, file left byte-for-byte unchanged. Empty and whitespace-only files are still an empty list.
