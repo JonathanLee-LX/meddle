@@ -1,6 +1,7 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { installViewport } from '@/test/viewport'
 import { SettingsPanel } from './settings-panel'
 import { updateSettings } from '@/lib/settings-store'
 
@@ -32,8 +33,11 @@ vi.mock('@/lib/settings-store', () => ({
   updateSettings: vi.fn().mockResolvedValue(undefined),
 }))
 
+const realMatchMedia = window.matchMedia
+
 afterEach(() => {
   vi.unstubAllGlobals()
+  window.matchMedia = realMatchMedia
 })
 
 describe('SettingsPanel navigation', () => {
@@ -67,6 +71,41 @@ describe('SettingsPanel navigation', () => {
 
     await user.click(within(navigation).getByRole('tab', { name: 'AI 配置' }))
     expect(screen.getByRole('tabpanel', { name: 'AI 配置' })).toHaveClass('app-panel-content')
+  })
+
+  it('puts the accent explanation on a help hint and tooltips icon tabs at 390', async () => {
+    const user = userEvent.setup()
+    installViewport(390)
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('[]', {
+      headers: { 'Content-Type': 'application/json' },
+    })))
+
+    render(<SettingsPanel embedded />)
+
+    const help = '统一按钮、状态、选中项和焦点样式。自动模式会根据明暗主题选择合适的颜色。'
+    expect(screen.queryByText(help)).not.toBeInTheDocument()
+    const hint = screen.getByRole('button', { name: '强调色说明' })
+    act(() => hint.focus())
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(help)
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument())
+
+    const tab = screen.getByRole('tab', { name: '偏好设置' })
+    await user.hover(tab)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('偏好设置')
+  })
+
+  it('does not tooltip settings tabs when their labels are visible', async () => {
+    const user = userEvent.setup()
+    installViewport(1440)
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('[]', {
+      headers: { 'Content-Type': 'application/json' },
+    })))
+
+    render(<SettingsPanel embedded />)
+
+    await user.hover(screen.getByRole('tab', { name: '偏好设置' }))
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
 })
 

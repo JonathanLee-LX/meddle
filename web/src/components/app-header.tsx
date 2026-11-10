@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { IconButton } from '@/components/icon-button'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { AIConfigBadge } from '@/components/ai-settings'
 import { useTheme } from '@/components/theme-provider'
@@ -321,15 +322,16 @@ export function AppHeader({ onCommandClick }: AppHeaderProps) {
         <div data-testid="app-shell-utilities" className="ml-auto flex shrink-0 items-center gap-2">
           <AIConfigBadge />
           <SessionSwitcher />
-          <Button
+          <IconButton
             variant="ghost"
             size="icon-sm"
             onClick={toggleTheme}
-            aria-label={`当前主题: ${theme}，点击切换`}
-            title={`主题: ${theme === 'system' ? '跟随系统' : theme === 'light' ? '浅色' : '深色'}`}
+            label={`当前主题: ${theme}，点击切换`}
+            tooltip="切换主题"
+            tooltipSide="bottom"
           >
             {theme === 'light' ? <Moon /> : theme === 'dark' ? <Sun /> : <Monitor />}
-          </Button>
+          </IconButton>
         </div>
       </div>
     </header>
