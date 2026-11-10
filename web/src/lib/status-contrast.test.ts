@@ -177,7 +177,7 @@ describe('status color contrast', () => {
     expect(table).toContain("if (code >= 500) return 'destructive'")
     expect(table).toContain("if (code >= 400) return 'warning'")
     expect(table).toContain("if (code >= 200) return 'success'")
-    expect(table).toContain("const tableBadgeClassName = 'h-[16px] px-[4px] py-0 font-mono text-[10px] leading-none'")
+    expect(table).toContain("const tableBadgeClassName = 'h-[calc(16/14*1rem)] px-[calc(4/14*1rem)] py-0 font-mono text-[calc(10/14*1rem)] leading-none'")
 
     const mocks = readSource('../components/mock-config.tsx')
     expect(mocks).toContain("rule.statusCode >= 500 ? 'destructive' : rule.statusCode >= 400 ? 'warning' : rule.statusCode >= 300 ? 'secondary' : 'success'")
