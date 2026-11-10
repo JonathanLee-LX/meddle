@@ -1,18 +1,21 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { LogTable, scaledLogRowHeight } from './log-table'
+import { LogTable, LOG_CARD_ROW_HEIGHT, scaledLogRowHeight } from './log-table'
+import { installViewport } from '@/test/viewport'
 
-const { scrollToOffsetMock, measureMock, useVirtualizerMock, zoomState } = vi.hoisted(() => {
+const { scrollToOffsetMock, scrollToIndexMock, measureMock, useVirtualizerMock, zoomState } = vi.hoisted(() => {
   const zoomState = { zoom: 1 }
   const scrollToOffsetMock = vi.fn()
+  const scrollToIndexMock = vi.fn()
   const measureMock = vi.fn()
   const useVirtualizerMock = vi.fn((opts: { estimateSize: () => number }) => ({
     getVirtualItems: () => [{ index: 0, key: 0, size: opts.estimateSize(), start: 0 }],
     getTotalSize: () => opts.estimateSize(),
     scrollToOffset: scrollToOffsetMock,
+    scrollToIndex: scrollToIndexMock,
     measure: measureMock,
   }))
-  return { scrollToOffsetMock, measureMock, useVirtualizerMock, zoomState }
+  return { scrollToOffsetMock, scrollToIndexMock, measureMock, useVirtualizerMock, zoomState }
 })
 
 vi.mock('@tanstack/react-virtual', () => ({
@@ -32,9 +35,13 @@ vi.mock('@/components/theme-provider', () => ({
   }),
 }))
 
+const originalMatchMedia = window.matchMedia
+
 beforeEach(() => {
   zoomState.zoom = 1
+  window.matchMedia = originalMatchMedia
   scrollToOffsetMock.mockClear()
+  scrollToIndexMock.mockClear()
   measureMock.mockClear()
   useVirtualizerMock.mockClear()
 })
@@ -356,6 +363,139 @@ describe('LogTable application source', () => {
     )
     expect(screen.getByText('500')).toHaveAttribute('data-variant', 'destructive')
     expect(screen.getByText('DELETE')).toHaveAttribute('data-variant', 'destructive')
+  })
+})
+
+const profileRecord = {
+  id: 1,
+  method: 'GET',
+  statusCode: 200,
+  source: 'http://api.example.com/user/profile',
+  target: 'http://127.0.0.1:8930/user/profile',
+  time: '5:46:42 PM',
+  duration: 121,
+  protocol: 'h1.1',
+  clientType: 'local' as const,
+  clientName: '本机',
+  mock: true,
+}
+
+describe('LogTable narrow cards', () => {
+  it('shows the source URL on a two-line row without the wide track', () => {
+    installViewport(390)
+    const onSelect = vi.fn()
+    render(
+      <LogTable
+        records={[
+          profileRecord,
+          { id: 2, method: 'POST', source: 'http://api.example.com/other', target: 'other', time: '5:46:43 PM', statusCode: 201 },
+        ]}
+        selectedRecordId={null}
+        onSelect={onSelect}
+        autoScroll={false}
+      />,
+    )
+
+    const row = screen.getByRole('row', { name: 'GET 200 http://api.example.com/user/profile' })
+    expect(row).toHaveAttribute('aria-selected', 'false')
+    expect(screen.getByTestId('log-table')).toHaveAttribute('data-layout', 'cards')
+    expect(screen.getByTestId('log-table-track').className).not.toContain('min-w-[calc(960/14*1rem)]')
+    expect(screen.getByTestId('log-table-track').parentElement).toHaveClass('overflow-x-hidden')
+
+    const url = screen.getByText('http://api.example.com/user/profile')
+    expect(url).toHaveAttribute('title', 'http://api.example.com/user/profile')
+    expect(url).toHaveClass('truncate')
+    expect(screen.getByText('GET')).toBeInTheDocument()
+    expect(screen.getByText('200')).toBeInTheDocument()
+
+    fireEvent.click(row)
+    expect(onSelect).toHaveBeenCalledWith(1)
+
+    fireEvent.keyDown(row, { key: 'Enter' })
+    fireEvent.keyDown(row, { key: ' ' })
+    expect(onSelect).toHaveBeenCalledTimes(3)
+
+    fireEvent.keyDown(row, { key: 'ArrowDown' })
+    expect(scrollToIndexMock).toHaveBeenCalledWith(1, { align: 'auto' })
+    expect(useVirtualizerMock.mock.calls.at(-1)?.[0].estimateSize()).toBe(LOG_CARD_ROW_HEIGHT)
+  })
+
+  it('keeps the card layout when the detail sheet is open on a narrow viewport', () => {
+    installViewport(390)
+    render(
+      <LogTable
+        records={[profileRecord]}
+        selectedRecordId={1}
+        onSelect={vi.fn()}
+        autoScroll={false}
+        detailOpen
+      />,
+    )
+
+    expect(screen.getByTestId('log-table')).toHaveAttribute('data-layout', 'cards')
+    const row = screen.getByRole('row', { name: /http:\/\/api\.example\.com\/user\/profile/ })
+    expect(row).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('columnheader', { name: '协议' })).not.toBeInTheDocument()
+  })
+})
+
+describe('LogTable columns while the detail pane is open', () => {
+  it('hides secondary columns and keeps method, status, and the source URL', () => {
+    installViewport(1440)
+    const onSelect = vi.fn()
+    render(
+      <LogTable
+        records={[profileRecord]}
+        selectedRecordId={null}
+        onSelect={onSelect}
+        autoScroll={false}
+        detailOpen
+      />,
+    )
+
+    expect(screen.getByTestId('log-table')).toHaveAttribute('data-layout', 'compact')
+    expect(screen.getByRole('columnheader', { name: '方法' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '状态' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '源地址' })).toBeInTheDocument()
+    for (const name of ['来源', '应用', '目标地址', '协议', '耗时', '时间', '命中']) {
+      expect(screen.queryByRole('columnheader', { name })).not.toBeInTheDocument()
+    }
+    expect(screen.queryByRole('button', { name: /时间/ })).not.toBeInTheDocument()
+
+    const row = screen.getByRole('row', { name: 'GET 200 http://api.example.com/user/profile' })
+    const url = screen.getByText('http://api.example.com/user/profile')
+    expect(url).toHaveAttribute('title', 'http://api.example.com/user/profile')
+    expect(url).toHaveClass('min-w-0', 'truncate')
+    expect(screen.getByTestId('log-table-track').className).not.toContain('min-w-[calc(960/14*1rem)]')
+    expect(screen.queryByText('h1.1')).not.toBeInTheDocument()
+    expect(screen.queryByText('121ms')).not.toBeInTheDocument()
+
+    fireEvent.click(row)
+    expect(onSelect).toHaveBeenCalledWith(1)
+    fireEvent.keyDown(row, { key: 'Enter' })
+    expect(onSelect).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps the full column set on a wide viewport when detail is closed', () => {
+    installViewport(1440)
+    render(
+      <LogTable
+        records={[profileRecord]}
+        selectedRecordId={null}
+        onSelect={vi.fn()}
+        autoScroll={false}
+        detailOpen={false}
+      />,
+    )
+
+    expect(screen.getByTestId('log-table')).toHaveAttribute('data-layout', 'full')
+    expect(screen.getByRole('columnheader', { name: '协议' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '耗时' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '命中' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '目标地址' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /时间/ })).toBeInTheDocument()
+    expect(screen.getByTestId('log-table-track')).toHaveClass('min-w-[calc(960/14*1rem)]')
+    expect(screen.getByText('http://api.example.com/user/profile')).toBeInTheDocument()
   })
 })
 

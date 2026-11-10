@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -55,6 +56,9 @@ export function LogFilter({
   recording,
   onToggleRecording,
 }: LogFilterProps) {
+  const chipRowRef = useRef<HTMLDivElement>(null)
+  const chipFade = useChipRowFade(chipRowRef)
+
   return (
     <div className="flex flex-col gap-1.5">
       {/* Search + actions — single dense row */}
@@ -102,50 +106,101 @@ export function LogFilter({
       </div>
 
       {/* Source Select + resource types — one compact filter row (scroll on narrow) */}
-      <div
-        data-testid="log-filter-source-type-row"
-        className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto"
-      >
-        <Select
-          value={clientSourceFilter}
-          onValueChange={(value) => setClientSourceFilter(value as ClientSourceFilter)}
+      <div className="relative min-w-0">
+        <div
+          ref={chipRowRef}
+          data-testid="log-filter-source-type-row"
+          className="meddle-thin-scroll flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto"
         >
-          <SelectTrigger
-            className="h-8 w-auto max-w-[8rem] shrink-0 text-xs"
-            aria-label="流量来源"
-            data-testid="log-filter-source-select"
+          <Select
+            value={clientSourceFilter}
+            onValueChange={(value) => setClientSourceFilter(value as ClientSourceFilter)}
           >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              {CLIENT_SOURCES.map((source) => (
-                <SelectItem key={source.value} value={source.value} className="text-xs">
-                  {source.label}
-                </SelectItem>
+            <SelectTrigger
+              className="h-8 w-auto max-w-[8rem] shrink-0 text-xs"
+              aria-label="流量来源"
+              data-testid="log-filter-source-select"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {CLIENT_SOURCES.map((source) => (
+                  <SelectItem key={source.value} value={source.value} className="text-xs">
+                    {source.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <div className="w-max shrink-0">
+            <ToggleGroup
+              type="single"
+              value={resourceTypeFilter}
+              onValueChange={(value) => {
+                if (value) setResourceTypeFilter(value as ResourceType)
+              }}
+              variant="outline"
+              size="sm"
+              spacing={1}
+              className="min-w-0 flex-1 flex-nowrap justify-start"
+              aria-label="资源类型"
+            >
+              {RESOURCE_TYPES.map((type) => (
+                <ToggleGroupItem key={type.value} value={type.value} className="shrink-0">
+                  {type.label}
+                </ToggleGroupItem>
               ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-        <ToggleGroup
-          type="single"
-          value={resourceTypeFilter}
-          onValueChange={(value) => {
-            if (value) setResourceTypeFilter(value as ResourceType)
-          }}
-          variant="outline"
-          size="sm"
-          spacing={1}
-          className="min-w-0 flex-1 flex-nowrap justify-start"
-          aria-label="资源类型"
-        >
-          {RESOURCE_TYPES.map((type) => (
-            <ToggleGroupItem key={type.value} value={type.value} className="shrink-0">
-              {type.label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+            </ToggleGroup>
+          </div>
+        </div>
+        {chipFade.left && (
+          <div
+            aria-hidden
+            data-testid="log-filter-fade-left"
+            className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-6 bg-gradient-to-r from-card to-transparent"
+          />
+        )}
+        {chipFade.right && (
+          <div
+            aria-hidden
+            data-testid="log-filter-fade-right"
+            className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-6 bg-gradient-to-l from-card to-transparent"
+          />
+        )}
       </div>
     </div>
   )
 }
+
+function useChipRowFade(ref: RefObject<HTMLDivElement | null>) {
+  const [fade, setFade] = useState({ left: false, right: false })
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+
+    const update = () => {
+      const max = el.scrollWidth - el.clientWidth
+      setFade({
+        left: el.scrollLeft > 1,
+        right: max - el.scrollLeft > 1,
+      })
+    }
+
+    update()
+    el.addEventListener('scroll', update, { passive: true })
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    for (const child of el.children) observer.observe(child)
+    window.addEventListener('resize', update)
+    return () => {
+      el.removeEventListener('scroll', update)
+      observer.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [ref])
+
+  return fade
+}
+

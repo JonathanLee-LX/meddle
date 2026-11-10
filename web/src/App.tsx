@@ -970,6 +970,7 @@ function App() {
                         selectedRecordId={store.selectedRecordId}
                         onSelect={handleSelectRecord}
                         autoScroll={autoScroll}
+                        detailOpen={store.selectedRecordId != null}
                       />
                     </div>
                   </div>

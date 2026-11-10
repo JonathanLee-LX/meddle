@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - 390px layout (#166). The traffic empty state stays in the visible pane instead of centering in the wide table track. Rule pattern, exclusion, and target fields keep a rem minimum width; the rule header and rows share one scroller so the vertical bar stays on the visible edge. The Mock list uses fixed columns so 「状态」 and 「延迟」 are not cropped, and the row can scroll to the action cell. Below 640px the Mock editor adds a section-gap of bottom padding under 「启用此规则」, and the response editor still fills leftover height down to 150px with one outer scrollbar. Settings sub-tabs keep an accessible name when the label is hidden.
 - 390 宽布局（#166）。流量空状态留在可见区域内，不再居中到超宽表格轨道里。规则的匹配、排除、目标输入框保留随缩放变化的最小宽度；表头和行共用一个滚动层，纵向滚动条留在可见边缘。Mock 列表用固定列宽，避免「状态」和「延迟」被裁掉，操作列可以横向滚到。640px 以下，Mock 编辑器在「启用此规则」下方多留一段区块间距；响应编辑器仍撑满剩余高度，最低 150px，并且只有一层外层滚动条。设置子 Tab 在文字隐藏时仍有可访问名称。
+- Traffic list at narrow widths (≤900px, same breakpoint as the detail sheet). Each row is a two-line card: method, status, and a short meta line, then the source URL truncated with an ellipsis. The full URL is the row’s accessible name and the URL tooltip, so it no longer sits behind a horizontal scroll. Row click, Enter / Space, and arrow keys still select; the virtualizer uses a taller row that scales with app zoom.
+- 窄屏流量列表（≤900px，与详情改为抽屉的断点相同）。每一行是两行卡片：第一行是方法、状态和一小段元信息，第二行是源地址，超出部分省略。完整 URL 写在行的可访问名称和 tooltip 上，不再要横向滚动才看得到。点击、Enter / Space 和方向键仍能选中行；虚拟列表用更高的行高，并随界面缩放变化。
+- Traffic list with the detail pane open. Secondary columns (client, app, target, protocol, duration, time, hit) hide, and the row keeps method, status, and the source URL in the remaining width, without the 960px-wide track. Resource-type chips stay on one horizontal row; when they overflow, the clipped edge fades into the card surface.
+- 流量详情分栏打开时。次要列（来源、应用、目标、协议、耗时、时间、命中）收起，行里保留方法、状态和源地址，并去掉 960px 的最小宽度，左侧列表不再被撑出面板。资源类型筛选仍是单行，装不下时可以横向滚动，被挡住的一侧渐隐到卡片底色。
 
 ## [0.5.2] - 2026-11-10
 
