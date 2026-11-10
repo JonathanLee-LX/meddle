@@ -38,10 +38,11 @@ function getMethodVariant(method: string): 'default' | 'secondary' | 'destructiv
   }
 }
 
-function getStatusVariant(code: number): 'default' | 'secondary' | 'destructive' | 'outline' {
-  if (code >= 400) return 'destructive'
+function getStatusVariant(code: number): 'success' | 'secondary' | 'warning' | 'destructive' | 'outline' {
+  if (code >= 500) return 'destructive'
+  if (code >= 400) return 'warning'
   if (code >= 300) return 'secondary'
-  if (code >= 200) return 'default'
+  if (code >= 200) return 'success'
   return 'outline'
 }
 

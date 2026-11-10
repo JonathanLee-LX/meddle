@@ -922,7 +922,7 @@ export function PluginTestDialog({
                                   <Badge variant="outline" className="text-xs text-blue-600 border-blue-300">路由已改写</Badge>
                                 )}
                                 {testResults.realRequest.usedMock && (
-                                  <Badge variant="outline" className="text-xs text-orange-600 border-orange-300">已使用 Mock</Badge>
+                                  <Badge variant="warning" className="text-xs">已使用 Mock</Badge>
                                 )}
                               </div>
                             )}
@@ -1125,7 +1125,7 @@ export function PluginTestDialog({
                         响应 Body
                         {testResults.modifiedResponse.bodyChanged ? (
                           <>
-                            <Badge className="text-xs bg-orange-100 text-orange-700 border-orange-300">已修改</Badge>
+                            <Badge variant="warning" className="text-xs">已修改</Badge>
                             <span className="text-[10px] text-muted-foreground">
                               （差异 {testResults.modifiedResponse.bodyLength - testResults.originalResponse.bodyLength > 0 ? '+' : ''}
                               {testResults.modifiedResponse.bodyLength - testResults.originalResponse.bodyLength} 字符）

@@ -39,23 +39,23 @@ interface DetailPanelProps {
 }
 
 function getStatusColor(code: number) {
-  if (code >= 200 && code < 300) return 'bg-green-100 text-green-800'
-  if (code >= 300 && code < 400) return 'bg-blue-100 text-blue-800'
-  if (code >= 400 && code < 500) return 'bg-amber-100 text-amber-800'
-  if (code >= 500) return 'bg-red-100 text-red-800'
+  if (code >= 200 && code < 300) return 'bg-success text-success-foreground'
+  if (code >= 300 && code < 400) return 'bg-secondary text-secondary-foreground'
+  if (code >= 400 && code < 500) return 'bg-warning text-warning-foreground'
+  if (code >= 500) return 'bg-error text-error-foreground'
   return ''
 }
 
 function getStatusBadgeVariant(status: InspectionStage['status']) {
   switch (status) {
     case 'ok':
-      return 'bg-green-100 text-green-800 border-green-200'
+      return 'border-transparent bg-success text-success-foreground'
     case 'error':
-      return 'bg-red-100 text-red-800 border-red-200'
+      return 'border-transparent bg-error text-error-foreground'
     case 'skipped':
-      return 'bg-amber-100 text-amber-800 border-amber-200'
+      return 'border-transparent bg-warning text-warning-foreground'
     case 'short-circuited':
-      return 'bg-blue-100 text-blue-800 border-blue-200'
+      return 'border-transparent bg-secondary text-secondary-foreground'
     default:
       return ''
   }

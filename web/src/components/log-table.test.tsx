@@ -289,4 +289,47 @@ describe('LogTable application source', () => {
     )
     expect(document.querySelector('[data-application-icon="safari"]')).toBeInTheDocument()
   })
+
+  it('paints HTTP status badges with success, warning, and error variants', () => {
+    const { rerender } = render(
+      <LogTable
+        records={[{ id: 1, method: 'GET', source: 'https://ok.example', target: 'ok', time: '10:00:01', statusCode: 200 }]}
+        selectedRecordId={null}
+        onSelect={vi.fn()}
+        autoScroll={false}
+      />,
+    )
+    expect(screen.getByText('200')).toHaveAttribute('data-variant', 'success')
+
+    rerender(
+      <LogTable
+        records={[{ id: 1, method: 'GET', source: 'https://go.example', target: 'go', time: '10:00:01', statusCode: 302 }]}
+        selectedRecordId={null}
+        onSelect={vi.fn()}
+        autoScroll={false}
+      />,
+    )
+    expect(screen.getByText('302')).toHaveAttribute('data-variant', 'secondary')
+
+    rerender(
+      <LogTable
+        records={[{ id: 1, method: 'GET', source: 'https://miss.example', target: 'miss', time: '10:00:01', statusCode: 404 }]}
+        selectedRecordId={null}
+        onSelect={vi.fn()}
+        autoScroll={false}
+      />,
+    )
+    expect(screen.getByText('404')).toHaveAttribute('data-variant', 'warning')
+
+    rerender(
+      <LogTable
+        records={[{ id: 1, method: 'DELETE', source: 'https://down.example', target: 'down', time: '10:00:01', statusCode: 500 }]}
+        selectedRecordId={null}
+        onSelect={vi.fn()}
+        autoScroll={false}
+      />,
+    )
+    expect(screen.getByText('500')).toHaveAttribute('data-variant', 'destructive')
+    expect(screen.getByText('DELETE')).toHaveAttribute('data-variant', 'destructive')
+  })
 })
