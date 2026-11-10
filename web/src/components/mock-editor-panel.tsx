@@ -253,7 +253,11 @@ export function MockEditorPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="app-panel-content" onScroll={onBodyScroll} data-slot="mock-editor-scroll">
+      <div
+        className="app-panel-content max-[640px]:pb-[calc(var(--ui-panel-padding)+var(--ui-section-gap))]"
+        onScroll={onBodyScroll}
+        data-slot="mock-editor-scroll"
+      >
         {/* Issue #125: collapse instead of mount/unmount so the form below
             does not jump ~26px. The parent's flex gap is pulled into the
             collapsing wrapper so a hidden notice leaves no gap. */}

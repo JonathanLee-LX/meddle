@@ -115,6 +115,12 @@ describe('HealthPanel', () => {
     expect(screen.getByText('watchdog:runtime-health')).toBeInTheDocument()
     expect(screen.getByText('退出重启')).toBeInTheDocument()
     expect(screen.getByRole('switch', { name: '自动刷新健康信息' })).toBeChecked()
+
+    const checks = screen.getByText('健康检查').closest('[data-slot="card"]')
+    const policy = screen.getByText('守护策略').closest('[data-slot="card"]')
+    expect(checks?.parentElement).toBe(policy?.parentElement)
+    expect(checks?.parentElement).toHaveClass('grid', 'xl:grid-cols-[minmax(0,1.3fr)_minmax(360px,0.7fr)]')
+    expect(checks?.parentElement?.className).not.toMatch(/(^|\s)grid-cols-2(\s|$)/)
   })
 
   it('shows a recoverable error when the health API is unavailable', async () => {

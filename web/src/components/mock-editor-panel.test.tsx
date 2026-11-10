@@ -67,6 +67,12 @@ describe('MockEditorPanel actions', () => {
     expect(frame).toHaveClass('flex-1', 'min-h-[150px]')
     expect(frame).not.toHaveAttribute('style')
 
+    const scroll = document.querySelector('[data-slot="mock-editor-scroll"]')
+    expect(scroll).toHaveClass('app-panel-content')
+    expect(scroll).toHaveClass('max-[640px]:pb-[calc(var(--ui-panel-padding)+var(--ui-section-gap))]')
+    expect(scroll).toContainElement(frame)
+    expect(scroll).toContainElement(screen.getByText('启用此规则'))
+
     Object.defineProperty(frame, 'getBoundingClientRect', {
       configurable: true,
       value: () => ({ height: 280, width: 400, top: 0, left: 0, bottom: 280, right: 400, x: 0, y: 0, toJSON: () => {} }),

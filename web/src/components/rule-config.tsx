@@ -84,6 +84,8 @@ export const RULESET_LOCKED_HINT = '规则集已锁定，解锁后可编辑'
 const LOCKED_CONTROL_CLASS = 'cursor-not-allowed opacity-50'
 /** Read-only rule inputs: flat --muted fill, default arrow, so they don't read as editable. */
 const LOCKED_INPUT_CLASS = 'h-8 cursor-default bg-muted shadow-none'
+/** At 390px a table-fixed row was squeezing each field to ~3 characters. */
+const RULE_FIELD_MIN_CLASS = 'min-w-[calc(140/14*1rem)]'
 /**
  * Locked ruleset switch: still shows its real state (no opacity). On = primary
  * desaturated toward the muted grey; off = the grey track. Both keep >= 3:1
@@ -174,7 +176,7 @@ const ExclusionsInput = memo(function ExclusionsInput({ exclusions, onCommit, lo
           }
         }}
         placeholder="!/api !/ws"
-        className={locked ? LOCKED_INPUT_CLASS : 'h-8'}
+        className={`${locked ? LOCKED_INPUT_CLASS : 'h-8'} ${RULE_FIELD_MIN_CLASS}`}
       />
     </LockedHint>
   )
@@ -218,17 +220,17 @@ function RuleRowCells({
           />
         </LockedHint>
       </TableCell>
-      <TableCell>
+      <TableCell className={RULE_FIELD_MIN_CLASS}>
         <LockedHint locked={locked}>
-          <Input value={item.rule} readOnly={locked} onChange={locked ? undefined : onUpdateRule('rule')} placeholder="example.com" className={locked ? LOCKED_INPUT_CLASS : 'h-8'} />
+          <Input value={item.rule} readOnly={locked} onChange={locked ? undefined : onUpdateRule('rule')} placeholder="example.com" className={`${locked ? LOCKED_INPUT_CLASS : 'h-8'} ${RULE_FIELD_MIN_CLASS}`} />
         </LockedHint>
       </TableCell>
-      <TableCell>
+      <TableCell className={RULE_FIELD_MIN_CLASS}>
         <ExclusionsInput key={JSON.stringify(item.exclusions || [])} exclusions={item.exclusions || []} onCommit={onCommitExclusions} locked={locked} />
       </TableCell>
-      <TableCell>
+      <TableCell className={RULE_FIELD_MIN_CLASS}>
         <LockedHint locked={locked}>
-          <Input value={item.target} readOnly={locked} onChange={locked ? undefined : onUpdateRule('target')} placeholder="127.0.0.1:3000" className={locked ? LOCKED_INPUT_CLASS : 'h-8'} />
+          <Input value={item.target} readOnly={locked} onChange={locked ? undefined : onUpdateRule('target')} placeholder="127.0.0.1:3000" className={`${locked ? LOCKED_INPUT_CLASS : 'h-8'} ${RULE_FIELD_MIN_CLASS}`} />
         </LockedHint>
       </TableCell>
       <TableCell className="w-24">
@@ -1707,10 +1709,15 @@ export function RuleConfig(props: RuleConfigProps) {
               </div>
             </div>
           ) : viewMode === 'table' || !FEATURE_FLAGS.ruleGraphView ? (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <ScrollArea
+                data-testid="rule-table-scroll"
+                className="meddle-thin-scroll min-h-0 flex-1"
+                viewportProps={{ onScroll: editorScroll.onScroll }}
+              >
+              <div data-testid="rule-table-track" className="min-w-[calc(640/14*1rem)]">
               <div
                 data-slot="rule-table-header"
-                className="meddle-thin-scroll z-10 shrink-0 overflow-x-auto bg-card"
+                className="sticky top-0 z-10 shrink-0 bg-card"
               >
                 <Table className="table-fixed">
                   <RuleTableColGroup showDragColumn={showDragColumn} />
@@ -1719,7 +1726,6 @@ export function RuleConfig(props: RuleConfigProps) {
                   </TableHeader>
                 </Table>
               </div>
-              <ScrollArea className="min-h-0 flex-1" viewportProps={{ onScroll: editorScroll.onScroll }}>
                 <Table className="table-fixed">
                   <RuleTableColGroup showDragColumn={showDragColumn} />
                   <TableBody>
@@ -1793,8 +1799,8 @@ export function RuleConfig(props: RuleConfigProps) {
                   )}
                 </TableBody>
               </Table>
-            </ScrollArea>
-            </div>
+              </div>
+              </ScrollArea>
           ) : (
             <ScrollArea className="min-h-0 flex-1" viewportProps={{ onScroll: editorScroll.onScroll }}>
               <div className="flex flex-col gap-[var(--ui-section-gap)] p-[var(--ui-section-gap)]">
