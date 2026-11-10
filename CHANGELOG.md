@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-11-10
+
+### 从 0.5.2 升级需要注意
+
+0.5.3 是补丁版。配置目录、默认端口、命令和标志都没变。这一版只改 Web 界面。
+
+### Upgrading from 0.5.2
+
+0.5.3 is a patch release. The config directory, default port, commands, and flags are unchanged. This release only changes the Web UI.
+
 ### Changed
 
 - Rules and Mock pages disclose secondary actions and short field notes on demand (#166). The rules editor heading shows the rule-file name. 「筛选」「从文件加载」and「文本导入」are icon buttons with an accessible name and tooltip; 「添加规则」and「保存」keep their labels. Mock「代码格式化」and「AI修复」are icon buttons. 「URL 匹配」and「Query 匹配」keep the label, and the parenthetical note opens from a “?”.
