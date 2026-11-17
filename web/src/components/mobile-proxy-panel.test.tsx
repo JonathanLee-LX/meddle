@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { toast } from '@/components/ui/toast'
 import { copyText } from '@/utils/clipboard'
@@ -59,9 +59,49 @@ describe('MobileProxyPanel', () => {
     expect(screen.getByRole('link', { name: '下载根证书' }))
       .toHaveAttribute('href', 'http://192.168.1.10:8989/_meddle/ca.crt')
     expect(screen.getByRole('button', { name: '复制手机配置地址' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '复制手机配置地址' })).not.toHaveTextContent('复制')
     expect(screen.queryByRole('button', { name: '复制地址' })).not.toBeInTheDocument()
     expect(screen.queryByText('手机配置地址')).not.toBeInTheDocument()
     expect(screen.queryByText('http://192.168.1.10:8989/')).not.toBeInTheDocument()
+    expect(screen.getByText('1. 扫码打开手机配置页。')).toBeInTheDocument()
+    expect(screen.getByText('2. 在手机 Wi-Fi 设置中填写页面显示的代理地址。')).toBeInTheDocument()
+    expect(screen.getByText('3. 安装并完全信任根证书后，即可查看 HTTPS 请求。')).toBeInTheDocument()
+  })
+
+  it('moves card-header subtitles into help hints', async () => {
+    const user = userEvent.setup()
+    const response = {
+      enabled: true,
+      interceptHttps: true,
+      authenticationRequired: false,
+      proxyPort: 8989,
+      localSetupPath: '/_meddle/setup',
+      targets: [{
+        address: '192.168.1.10',
+        proxyUrl: 'http://192.168.1.10:8989',
+        setupUrl: 'http://192.168.1.10:8989/',
+        certificateUrl: 'http://192.168.1.10:8989/_meddle/ca.crt',
+      }],
+    }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(response), {
+      headers: { 'Content-Type': 'application/json' },
+    })))
+
+    render(<MobileProxyPanel />)
+    expect(await screen.findByText('192.168.1.10:8989')).toBeInTheDocument()
+
+    const scanHelp = '使用手机相机或 Safari 扫描。'
+    const configHelp = '手机与电脑连接同一局域网后，扫描二维码打开配置页并安装 HTTPS 根证书。'
+    expect(screen.queryByText(scanHelp)).not.toBeInTheDocument()
+    expect(screen.queryByText(configHelp)).not.toBeInTheDocument()
+
+    const hint = screen.getByRole('button', { name: '扫码说明' })
+    act(() => hint.focus())
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(scanHelp)
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument())
+
+    expect(screen.getByRole('button', { name: '手机代理配置说明' })).toBeInTheDocument()
   })
 
   it('copies the selected setup URL and confirms the action', async () => {
