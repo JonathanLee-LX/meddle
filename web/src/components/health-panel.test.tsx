@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { HealthPanel } from './health-panel'
 
 const now = Date.UTC(2026, 5, 17, 10, 30, 0)
@@ -115,12 +116,49 @@ describe('HealthPanel', () => {
     expect(screen.getByText('watchdog:runtime-health')).toBeInTheDocument()
     expect(screen.getByText('退出重启')).toBeInTheDocument()
     expect(screen.getByRole('switch', { name: '自动刷新健康信息' })).toBeChecked()
+    expect(screen.getByRole('button', { name: '刷新' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '刷新' })).not.toHaveTextContent('刷新')
 
     const checks = screen.getByText('健康检查').closest('[data-slot="card"]')
     const policy = screen.getByText('守护策略').closest('[data-slot="card"]')
     expect(checks?.parentElement).toBe(policy?.parentElement)
     expect(checks?.parentElement).toHaveClass('grid', 'xl:grid-cols-[minmax(0,1.3fr)_minmax(360px,0.7fr)]')
     expect(checks?.parentElement?.className).not.toMatch(/(^|\s)grid-cols-2(\s|$)/)
+  })
+
+  it('moves card explanations into help hints and drops empty-state subtitles', async () => {
+    const user = userEvent.setup()
+    const response = createHealthResponse()
+    response.mitmServers = { count: 0, activeSockets: 0, items: [] }
+    response.logs = { windowMs: 60000, maxPerWindow: 20, suppressedTotal: 0, keys: [] }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(response), {
+      headers: { 'Content-Type': 'application/json' },
+    })))
+
+    render(<HealthPanel />)
+    expect(await screen.findByText('运行健康')).toBeInTheDocument()
+
+    const watchdogHelp = '阈值来自当前进程的 MEDDLE_WATCHDOG 配置。'
+    const policyHelp = '连续命中严重阈值后按策略处理。'
+    const mitmHelp = '0 个动态 HTTPS 服务。'
+    const logHelp = '已抑制 0 条重复日志。'
+    for (const text of [watchdogHelp, policyHelp, mitmHelp, logHelp]) {
+      expect(screen.queryByText(text)).not.toBeInTheDocument()
+    }
+    expect(screen.queryByText('当前没有活跃的 MITM 目标。')).not.toBeInTheDocument()
+    expect(screen.queryByText('当前没有被抑制的重复日志。')).not.toBeInTheDocument()
+    expect(screen.getByText('暂无动态 HTTPS 服务')).toBeInTheDocument()
+    expect(screen.getByText('暂无限流记录')).toBeInTheDocument()
+
+    const hint = screen.getByRole('button', { name: '健康检查说明' })
+    act(() => hint.focus())
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(watchdogHelp)
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument())
+
+    expect(screen.getByRole('button', { name: '守护策略说明' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'MITM 服务池说明' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '日志限流说明' })).toBeInTheDocument()
   })
 
   it('shows a recoverable error when the health API is unavailable', async () => {

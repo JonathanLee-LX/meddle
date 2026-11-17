@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Health and Mobile proxy pages disclose section help on demand (#166). Card descriptions open from a “?” on hover, keyboard focus, or a touch tap, and Escape closes them. Health empty states keep a one-line title. Health refresh and Mobile copy are icon buttons with an accessible name and tooltip. 「浏览器打开」 and 「下载根证书」 keep their labels, and the three-step Mobile setup list stays visible.
+- 健康页和手机代理页把分区说明收进按需提示（#166）。卡片说明从「?」悬停、键盘焦点或触屏点按打开，Escape 关闭。健康页空状态只保留一行标题。健康页刷新和手机代理复制改为带可访问名称和提示的图标按钮。「浏览器打开」「下载根证书」仍显示文字，右侧三步指引保留可见。
+
 ## [0.5.3] - 2026-11-10
 
 ### 从 0.5.2 升级需要注意
