@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { Check, Copy, Download, ExternalLink, Globe, Loader2, QrCode, RefreshCw, ShieldCheck, ShieldOff, Smartphone, Wifi } from 'lucide-react'
+import { HelpHint } from '@/components/help-hint'
+import { IconButton } from '@/components/icon-button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from '@/components/ui/toast'
@@ -240,8 +242,8 @@ export function MobileProxyPanel() {
             <CardTitle className="flex items-center gap-2">
               <QrCode />
               扫码打开配置页
+              <HelpHint label="扫码说明">使用手机相机或 Safari 扫描。</HelpHint>
             </CardTitle>
-            <CardDescription>使用手机相机或 Safari 扫描。</CardDescription>
             <CardAction>
               {isPublicTarget ? <Badge variant="secondary">公网入口</Badge> : <Badge variant="secondary">局域网</Badge>}
             </CardAction>
@@ -260,8 +262,10 @@ export function MobileProxyPanel() {
             <CardTitle className="flex items-center gap-2">
               <Smartphone />
               手机代理配置
+              <HelpHint label="手机代理配置说明">
+                手机与电脑连接同一局域网后，扫描二维码打开配置页并安装 HTTPS 根证书。
+              </HelpHint>
             </CardTitle>
-            <CardDescription>手机与电脑连接同一局域网后，扫描二维码打开配置页并安装 HTTPS 根证书。</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-5 p-5">
             <div className="flex flex-wrap gap-2">
@@ -270,16 +274,15 @@ export function MobileProxyPanel() {
                   {isPublicTarget ? <Globe /> : <Wifi />}
                   {formatProxyAddress(selectedTarget, info.proxyPort)}
                 </Badge>
-                <Button
+                <IconButton
                   variant="ghost"
-                  size="icon-sm"
+                  size="icon-xs"
                   onClick={() => void copySetupUrl()}
-                  aria-label={copied ? '地址已复制' : '复制手机配置地址'}
-                  title={copied ? '已复制' : '复制地址'}
-                  className="size-6"
+                  label={copied ? '地址已复制' : '复制手机配置地址'}
+                  tooltip={copied ? '已复制' : '复制地址'}
                 >
                   {copied ? <Check /> : <Copy />}
-                </Button>
+                </IconButton>
               </div>
               <Badge variant={info.interceptHttps ? 'default' : 'secondary'} className="gap-1.5">
                 {info.interceptHttps ? <ShieldCheck /> : <ShieldOff />}

@@ -16,11 +16,13 @@ import {
   Wifi,
   XCircle,
 } from 'lucide-react'
+import { HelpHint } from '@/components/help-hint'
+import { IconButton } from '@/components/icon-button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -417,10 +419,14 @@ export function HealthPanel() {
             <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} aria-label="自动刷新健康信息" />
             <span>自动刷新</span>
           </div>
-          <Button variant="outline" size="sm" onClick={() => void loadHealth(true)} disabled={refreshing}>
-            <RefreshCw data-icon="inline-start" className={cn(refreshing && 'animate-spin')} />
-            刷新
-          </Button>
+          <IconButton
+            label={refreshing ? '刷新中…' : '刷新'}
+            onClick={() => void loadHealth(true)}
+            disabled={refreshing}
+            aria-busy={refreshing}
+          >
+            <RefreshCw className={cn(refreshing && 'animate-spin')} />
+          </IconButton>
         </div>
       </div>
 
@@ -443,8 +449,8 @@ export function HealthPanel() {
             <CardTitle className="flex items-center gap-2">
               <ListChecks />
               健康检查
+              <HelpHint label="健康检查说明">阈值来自当前进程的 MEDDLE_WATCHDOG 配置。</HelpHint>
             </CardTitle>
-            <CardDescription>阈值来自当前进程的 MEDDLE_WATCHDOG 配置。</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -477,8 +483,8 @@ export function HealthPanel() {
             <CardTitle className="flex items-center gap-2">
               <ShieldCheck />
               守护策略
+              <HelpHint label="守护策略说明">连续命中严重阈值后按策略处理。</HelpHint>
             </CardTitle>
-            <CardDescription>连续命中严重阈值后按策略处理。</CardDescription>
             <CardAction>
               <Badge variant={health.watchdog.config.enabled ? 'default' : 'secondary'}>
                 {health.watchdog.config.enabled ? '已启用' : '已关闭'}
@@ -513,8 +519,8 @@ export function HealthPanel() {
             <CardTitle className="flex items-center gap-2">
               <Wifi />
               MITM 服务池
+              <HelpHint label="MITM 服务池说明">{health.mitmServers.count} 个动态 HTTPS 服务。</HelpHint>
             </CardTitle>
-            <CardDescription>{health.mitmServers.count} 个动态 HTTPS 服务。</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             {health.mitmServers.items.length > 0 ? (
@@ -547,7 +553,6 @@ export function HealthPanel() {
                     <Server />
                   </EmptyMedia>
                   <EmptyTitle>暂无动态 HTTPS 服务</EmptyTitle>
-                  <EmptyDescription>当前没有活跃的 MITM 目标。</EmptyDescription>
                 </EmptyHeader>
               </Empty>
             )}
@@ -559,10 +564,10 @@ export function HealthPanel() {
             <CardTitle className="flex items-center gap-2">
               <Clock />
               日志限流
+              <HelpHint label="日志限流说明">
+                已抑制 {logStats?.suppressedTotal ?? 0} 条重复日志。
+              </HelpHint>
             </CardTitle>
-            <CardDescription>
-              已抑制 {logStats?.suppressedTotal ?? 0} 条重复日志。
-            </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             {logStats && logStats.keys.length > 0 ? (
@@ -599,7 +604,6 @@ export function HealthPanel() {
                     <Clock />
                   </EmptyMedia>
                   <EmptyTitle>暂无限流记录</EmptyTitle>
-                  <EmptyDescription>当前没有被抑制的重复日志。</EmptyDescription>
                 </EmptyHeader>
               </Empty>
             )}
