@@ -37,4 +37,18 @@ describe('IconButton', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent('切换主题')
     expect(button).toHaveAccessibleDescription('切换主题')
   })
+
+  it('stays closed when tooltipOpen is false', async () => {
+    const user = userEvent.setup()
+    render(
+      <IconButton label="更多操作" tooltipOpen={false}>
+        <span />
+      </IconButton>,
+    )
+
+    const button = screen.getByRole('button', { name: '更多操作' })
+    await user.hover(button)
+    act(() => button.focus())
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  })
 })

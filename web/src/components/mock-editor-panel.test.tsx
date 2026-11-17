@@ -107,6 +107,8 @@ describe('MockEditorPanel actions', () => {
     expect(scroll).toHaveClass('max-[640px]:pb-[calc(var(--ui-panel-padding)+var(--ui-section-gap))]')
     expect(scroll).toContainElement(frame)
     expect(scroll).toContainElement(screen.getByText('启用此规则'))
+    const enabled = screen.getByRole('checkbox', { name: '启用此规则' })
+    expect(screen.getByText('启用此规则')).toHaveAttribute('for', enabled.id)
 
     Object.defineProperty(frame, 'getBoundingClientRect', {
       configurable: true,

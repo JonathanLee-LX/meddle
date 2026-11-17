@@ -845,12 +845,13 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
 
           <div className={settingsGroupClassName}>
             <Label className="text-sm">添加设备</Label>
-            <div className="flex items-center gap-2">
+            <div data-testid="settings-add-device" className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
               <Input
                 value={newClientIp}
                 onChange={(event) => setNewClientIp(event.target.value)}
                 placeholder="客户端 IP，例如 10.13.232.187"
-                className="h-8 flex-1 font-mono text-xs"
+                aria-label="客户端 IP"
+                className="h-8 w-full min-w-0 font-mono text-xs sm:flex-1"
               />
               <Input
                 value={newClientName}
@@ -859,9 +860,10 @@ export function SettingsPanel({ open = false, onOpenChange, embedded = false }: 
                   if (event.key === 'Enter') handleAddClientAlias()
                 }}
                 placeholder="设备名称，例如 iPhone"
-                className="h-8 flex-1 text-sm"
+                aria-label="设备名称"
+                className="h-8 w-full min-w-0 text-sm sm:flex-1"
               />
-              <Button variant="outline" size="sm" className="h-8" onClick={handleAddClientAlias} disabled={!newClientIp.trim() || !newClientName.trim()}>
+              <Button variant="outline" size="sm" className="h-8 shrink-0 self-start sm:self-auto" onClick={handleAddClientAlias} disabled={!newClientIp.trim() || !newClientName.trim()}>
                 <Plus className="h-4 w-4 mr-1" />
                 添加
               </Button>

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Trash2, FileText, Code } from 'lucide-react'
+import { Plus, Trash2, FileText, Code, MoreHorizontal } from 'lucide-react'
 import type { MockRule } from '@/types'
 import type { MockWriteOptions } from '@/hooks/use-mocks'
 import { MockEditorPanel } from '@/components/mock-editor-panel'
@@ -21,8 +21,40 @@ import { mockPaneSplit } from '@/lib/mock-pane-split'
 import { MocksFileInvalidEmptyState, MocksFileMissingEmptyState } from '@/components/mocks-file-missing-note'
 import { MOCKS_FILE_STATUS_CHANGED_EVENT, formatMocksParseLocation, isMocksFileInvalid, shouldShowMocksFileMissing, useMocksFileStatus } from '@/hooks/use-mocks-file-status'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { IconButton, useMenuTriggerTooltip } from '@/components/icon-button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog'
+import { useMediaQuery } from '@/hooks/use-media-query'
+import { CONFIG_NARROW_QUERY } from '@/lib/config-narrow'
+import { cn } from '@/lib/utils'
 
 const INVALID_FILE_CREATE_HINT = 'Mock 文件格式错误，修复后才能新增'
+
+function MockRowMenu({ rule, onDelete }: { rule: MockRule; onDelete: () => void }) {
+  const { menuOpen, tooltipOpen, onMenuOpenChange, onTooltipOpenChange } = useMenuTriggerTooltip()
+  return (
+    <DropdownMenu open={menuOpen} onOpenChange={onMenuOpenChange}>
+      <DropdownMenuTrigger asChild>
+        <IconButton
+          label={`更多操作 ${rule.name || rule.urlPattern}`}
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground"
+          tooltipOpen={tooltipOpen}
+          onTooltipOpenChange={onTooltipOpenChange}
+        >
+          <MoreHorizontal />
+        </IconButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={onDelete}>
+          <Trash2 />
+          删除
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
 
 export { MOCK_OPEN_CREATE_EVENT }
 export type { MockOpenCreateDetail }
@@ -146,21 +178,19 @@ export function MockConfig({
     [updateMock],
   )
 
-  const handleDelete = useCallback(
-    async (id: number) => {
-      if (!window.confirm('确定删除这条 Mock 规则？')) return
-      const ok = await deleteMock(id)
-      if (ok) {
-        toast.success('已删除 Mock 规则')
-        if (editor.kind === 'edit' && editor.ruleId === id) {
-          closeEditor()
-        }
-      } else {
-        toast.error('删除失败')
-      }
-    },
-    [closeEditor, deleteMock, editor],
-  )
+  const [pendingDelete, setPendingDelete] = useState<MockRule | null>(null)
+  const narrowList = useMediaQuery(CONFIG_NARROW_QUERY)
+
+  const confirmDelete = useCallback(async () => {
+    if (!pendingDelete) return
+    const id = pendingDelete.id
+    const ok = await deleteMock(id)
+    if (!ok) throw new Error('删除失败')
+    toast.success('已删除 Mock 规则')
+    if (editor.kind === 'edit' && editor.ruleId === id) {
+      closeEditor()
+    }
+  }, [closeEditor, deleteMock, editor, pendingDelete])
 
   const handleSaved = useCallback(() => {
     void fetchMocks()
@@ -176,6 +206,7 @@ export function MockConfig({
   const editorScroll = useEditorScrolled(editorKey)
 
   return (
+    <>
     <SplitPane
       testId="mock-config-layout"
       layout="list-edit"
@@ -209,15 +240,24 @@ export function MockConfig({
             </Button>
           )}
         </PaneBar>
-        <div data-testid="mock-rule-table-scroll" className="meddle-thin-scroll min-h-0 flex-1 overflow-auto">
-            <Table className="table-fixed min-w-[calc(378/14*1rem)]">
+        <div
+          data-testid="mock-rule-table-scroll"
+          data-layout={narrowList ? 'menu' : 'columns'}
+          className={cn(
+            'meddle-thin-scroll min-h-0 flex-1',
+            narrowList
+              ? 'overflow-x-hidden overflow-y-auto [&_[data-slot=table-container]]:overflow-x-hidden'
+              : 'overflow-auto',
+          )}
+        >
+            <Table className={cn('table-fixed w-full', !narrowList && 'min-w-[calc(378/14*1rem)]')}>
               <colgroup>
                 <col style={{ width: '3rem' }} />
                 <col style={{ width: '4rem' }} />
                 <col />
                 <col style={{ width: '3.5rem' }} />
                 <col style={{ width: '4rem' }} />
-                <col style={{ width: '4.5rem' }} />
+                <col style={{ width: narrowList ? '2.25rem' : '4.5rem' }} />
               </colgroup>
               <TableHeader>
                 <TableRow>
@@ -292,23 +332,27 @@ export function MockConfig({
                         <TableCell className="font-mono text-xs text-muted-foreground">
                           {rule.delay ? `${rule.delay}ms` : '0ms'}
                         </TableCell>
-                        <TableCell onClick={(event) => event.stopPropagation()}>
+                        <TableCell onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
+                          {narrowList ? (
+                            <MockRowMenu rule={rule} onDelete={() => setPendingDelete(rule)} />
+                          ) : (
                           <div className="flex items-center gap-0.5">
                             {rule.bodyType === 'file' ? (
                               <FileText className="size-3.5 text-muted-foreground" aria-hidden />
                             ) : (
                               <Code className="size-3.5 text-muted-foreground" aria-hidden />
                             )}
-                            <Button
+                            <IconButton
+                              label="删除 Mock 规则"
                               variant="ghost"
                               size="icon-sm"
-                              onClick={() => void handleDelete(rule.id)}
+                              onClick={() => setPendingDelete(rule)}
                               className="text-muted-foreground hover:text-destructive"
-                              aria-label="删除 Mock 规则"
                             >
                               <Trash2 />
-                            </Button>
+                            </IconButton>
                           </div>
+                          )}
                         </TableCell>
                       </TableRow>
                     )
@@ -372,5 +416,16 @@ export function MockConfig({
           </div>
           </EditorPaneActionsProvider>
     </SplitPane>
+    <ConfirmDeleteDialog
+      open={pendingDelete != null}
+      onOpenChange={(next) => {
+        if (!next) setPendingDelete(null)
+      }}
+      title="删除 Mock 规则"
+      description={`确定删除 Mock「${pendingDelete?.name || pendingDelete?.urlPattern || '未命名'}」吗？`}
+      confirmLabel="删除"
+      onConfirm={confirmDelete}
+    />
+    </>
   )
 }

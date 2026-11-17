@@ -1,5 +1,7 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, act } from '@testing-library/react'
+import { describe, expect, it, vi, beforeAll, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { installViewport } from '@/test/viewport'
 import { MockConfig, MOCK_OPEN_CREATE_EVENT } from './mock-config'
 import type { MockRule } from '@/types'
 import { MOCK_LIST_STORAGE_KEY } from '@/lib/mock-pane-split'
@@ -42,11 +44,22 @@ function renderMock(extra: Partial<Parameters<typeof MockConfig>[0]> = {}) {
   )
 }
 
+const originalMatchMedia = window.matchMedia
+
 describe('MockConfig list|edit (P3 / #90)', () => {
-  beforeEach(() => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+  beforeAll(() => {
+    Element.prototype.hasPointerCapture ??= () => false
+    Element.prototype.setPointerCapture ??= () => {}
+    Element.prototype.releasePointerCapture ??= () => {}
+    Element.prototype.scrollIntoView ??= () => {}
   })
+
+  beforeEach(() => {
+    window.matchMedia = originalMatchMedia
+  })
+
   afterEach(() => {
+    window.matchMedia = originalMatchMedia
     vi.restoreAllMocks()
   })
 
@@ -136,6 +149,47 @@ describe('MockConfig list|edit (P3 / #90)', () => {
     expect(layout).toHaveAttribute('data-mock-list-width', '560')
     expect(list).toHaveStyle({ width: '560px' })
     localStorage.removeItem(MOCK_LIST_STORAGE_KEY)
+  })
+
+  it('asks in ConfirmDeleteDialog before deleting a row', async () => {
+    const user = userEvent.setup()
+    const deleteMock = vi.fn(async () => true)
+    renderMock({ deleteMock })
+
+    await user.click(screen.getByRole('button', { name: '删除 Mock 规则' }))
+    const dialog = await screen.findByRole('alertdialog', { name: '删除 Mock 规则' })
+    expect(deleteMock).not.toHaveBeenCalled()
+
+    await user.click(within(dialog).getByRole('button', { name: '取消' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(deleteMock).not.toHaveBeenCalled()
+    expect(screen.getByText('cart')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '删除 Mock 规则' }))
+    const again = await screen.findByRole('alertdialog', { name: '删除 Mock 规则' })
+    await user.click(within(again).getByRole('button', { name: '删除' }))
+    await waitFor(() => expect(deleteMock).toHaveBeenCalledWith(1))
+  })
+
+  it('puts row delete in a menu at 390 so the list does not need a horizontal scroller', async () => {
+    installViewport(390)
+    const user = userEvent.setup()
+    renderMock()
+
+    const scroller = screen.getByTestId('mock-rule-table-scroll')
+    expect(scroller).toHaveAttribute('data-layout', 'menu')
+    expect(scroller.className).toContain('overflow-x-hidden')
+    const table = screen.getByRole('columnheader', { name: '延迟' }).closest('table')
+    expect(table?.className).not.toContain('min-w-[calc(378/14*1rem)]')
+    expect(screen.getByRole('columnheader', { name: '延迟' })).toBeInTheDocument()
+    expect(screen.getByText('0ms')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '删除 Mock 规则' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '更多操作 cart' }))
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    await user.click(await screen.findByRole('menuitem', { name: '删除' }))
+    expect(await screen.findByRole('alertdialog', { name: '删除 Mock 规则' })).toBeInTheDocument()
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
 })
 

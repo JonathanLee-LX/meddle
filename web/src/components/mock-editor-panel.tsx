@@ -75,6 +75,7 @@ export function MockEditorPanel({
 }: MockEditorPanelProps) {
   const fileInvalid = fileInvalidLocation != null
   const methodId = useId()
+  const enabledFieldId = useId()
   const urlPatternId = useId()
   const queryId = useId()
   // Keep the last location while the notice collapses so its text does not vanish mid-animation.
@@ -446,8 +447,12 @@ export function MockEditorPanel({
         )}
 
         <div className="flex shrink-0 items-center gap-2">
-          <Checkbox checked={form.enabled} onCheckedChange={(checked) => updateField('enabled', !!checked)} />
-          <Label className="text-sm">启用此规则</Label>
+          <Checkbox
+            id={enabledFieldId}
+            checked={form.enabled}
+            onCheckedChange={(checked) => updateField('enabled', !!checked)}
+          />
+          <Label htmlFor={enabledFieldId} className="text-sm">启用此规则</Label>
         </div>
       </div>
 

@@ -12,6 +12,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Health and Mobile proxy pages disclose section help on demand (#166). Card descriptions open from a “?” on hover, keyboard focus, or a touch tap, and Escape closes them. Health empty states keep a one-line title. Health refresh and Mobile copy are icon buttons with an accessible name and tooltip. 「浏览器打开」 and 「下载根证书」 keep their labels, and the three-step Mobile setup list stays visible.
 - 健康页和手机代理页把分区说明收进按需提示（#166）。卡片说明从「?」悬停、键盘焦点或触屏点按打开，Escape 关闭。健康页空状态只保留一行标题。健康页刷新和手机代理复制改为带可访问名称和提示的图标按钮。「浏览器打开」「下载根证书」仍显示文字，右侧三步指引保留可见。
 
+### Fixed
+
+- Narrow rule table (≤767px, #166). Each rule is a stacked card: the pattern, exclusion, and target use the full row, and 置顶 / 删除规则 sit in a “更多操作” menu, so 目标 and 操作 are on screen without a horizontal scroller. Wider layouts keep the columns. Deleting a row still confirms in ConfirmDeleteDialog.
+- 窄屏规则表（≤767px，#166）。每条规则改成纵向卡片：匹配、排除、目标各占满一行，置顶和删除收进行尾「更多操作」菜单，「目标」和「操作」不用横向滚动。宽屏仍是表格。删除仍先弹出确认框。
+- Narrow Mock list (#166). Row delete moves into a “更多操作” menu and still confirms with ConfirmDeleteDialog before the rule is removed. The 延迟 column stays. The list no longer forces a 378px minimum width, so the menu is on screen at 390px.
+- 窄屏 Mock 列表（#166）。行删除收进「更多操作」，确认后才删除。延迟列保留。列表不再强制 378px 最小宽度，390 下菜单在屏内。
+- Settings “添加设备” fields stack below the `sm` breakpoint so the full placeholders stay visible. The hit-mock code block breaks after `/` `.` `:` and uses `overflow-wrap: break-word` instead of `break-all`, so a URL does not leave its last letter alone on the next line. Mock response-header values keep a 16ch minimum and wrap onto their own line when the row is tight, so `application/json` stays fully visible. The “启用此规则” checkbox is named by its label (`htmlFor`).
+- 设置「添加设备」在 `sm` 以下改成上下排列，placeholder 完整可见。命中 Mock 代码块在 `/` `.` `:` 后折行，并用 `overflow-wrap: break-word` 代替 `break-all`，URL 末尾字母不会单独掉到下一行。Mock 响应头的值至少 16ch，一行放不下时换行，`application/json` 完整显示。「启用此规则」复选框用 `htmlFor` 关联标签。
+- Traffic list with the detail pane open (#166). The source URL truncates with an ellipsis (`min-w-0` and `overflow: hidden` on the row and cell) and the full URL stays on the cell’s title.
+- 流量详情分栏打开时（#166）。源地址超出以省略号截断（行和单元格 `min-w-0`、`overflow: hidden`），完整 URL 仍写在 title 上。
+- Narrow traffic cards omit the dashed “—” hit badge when the request was not mocked and the address was not rewritten. Mock and Rule badges stay.
+- 窄屏流量卡片在未命中 Mock、也未改写地址时不再显示虚线「—」。Mock 和 Rule 徽章保留。
+- The 更多操作 tooltip stays closed while its menu is open, and the focus restored to the trigger when the menu closes does not reopen it over ConfirmDeleteDialog. The menu itself paints above tooltips.
+- 「更多操作」菜单打开时提示保持关闭；菜单关上后焦点回到按钮也不会把提示盖到确认框上。菜单层级高于提示。
+
 ## [0.5.3] - 2026-11-10
 
 ### 从 0.5.2 升级需要注意

@@ -107,6 +107,22 @@ describe('SettingsPanel navigation', () => {
     await user.hover(screen.getByRole('tab', { name: '偏好设置' }))
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
+
+  it('stacks the add-device fields so the full placeholders fit', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('[]', {
+      headers: { 'Content-Type': 'application/json' },
+    })))
+
+    render(<SettingsPanel embedded />)
+    await user.click(screen.getByRole('tab', { name: '客户端' }))
+
+    const ip = screen.getByRole('textbox', { name: '客户端 IP' })
+    const name = screen.getByRole('textbox', { name: '设备名称' })
+    expect(ip).toHaveAttribute('placeholder', '客户端 IP，例如 10.13.232.187')
+    expect(name).toHaveAttribute('placeholder', '设备名称，例如 iPhone')
+    expect(screen.getByTestId('settings-add-device')).toHaveClass('flex-col', 'sm:flex-row')
+  })
 })
 
 describe('SettingsPanel about section (#112)', () => {

@@ -249,4 +249,34 @@ describe('DetailPanel embedded mode (layout B / #92)', () => {
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('tooltip', { name: help })).not.toBeInTheDocument())
   })
+
+  it('wraps a hit-mock URL on punctuation instead of breaking every character', () => {
+    const record: ProxyRecord = {
+      id: 9,
+      method: 'GET',
+      source: 'http://api.example.com/user/profile',
+      target: 'http://api.example.com/user/profile',
+      time: '12:00:00',
+      statusCode: 200,
+      mock: true,
+    }
+    const detail: RecordDetail = {
+      requestHeaders: {},
+      requestBody: '',
+      responseHeaders: {},
+      responseBody: '',
+      statusCode: 200,
+      statusMessage: 'OK (Mock)',
+    }
+
+    render(
+      <DetailPanel embedded detail={detail} loading={false} selectedRecord={record} />,
+    )
+
+    const box = screen.getByTestId('detail-hit-box')
+    expect(box).toHaveClass('break-words', 'overflow-hidden')
+    expect(box.className).not.toContain('break-all')
+    expect(box).toHaveTextContent('mock: true · http://api.example.com/user/profile')
+    expect(box.querySelectorAll('wbr').length).toBeGreaterThanOrEqual('http://api.example.com/user/profile'.split(/[/.:]/).length - 1)
+  })
 })
