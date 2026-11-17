@@ -303,16 +303,28 @@ function RuleRowMenu({
   onDelete: () => void
   onMoveToTop: () => void
 }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [tipOpen, setTipOpen] = useState(false)
   const guard = (fn: () => void) => () => {
     if (!locked) fn()
   }
   const name = ruleLabel ? `更多操作 ${ruleLabel}` : '更多操作'
   return (
-    <DropdownMenu>
+    <DropdownMenu
+      open={menuOpen}
+      onOpenChange={(next) => {
+        setMenuOpen(next)
+        if (next) setTipOpen(false)
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <IconButton
           label={name}
           tooltip={locked ? RULESET_LOCKED_HINT : '更多操作'}
+          tooltipOpen={menuOpen ? false : tipOpen}
+          onTooltipOpenChange={(next) => {
+            if (!menuOpen) setTipOpen(next)
+          }}
           variant="ghost"
           size="icon-sm"
           aria-disabled={locked || undefined}

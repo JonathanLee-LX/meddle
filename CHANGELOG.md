@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 流量详情分栏打开时（#166）。源地址超出以省略号截断（行和单元格 `min-w-0`、`overflow: hidden`），完整 URL 仍写在 title 上。
 - Narrow traffic cards omit the dashed “—” hit badge when the request was not mocked and the address was not rewritten. Mock and Rule badges stay.
 - 窄屏流量卡片在未命中 Mock、也未改写地址时不再显示虚线「—」。Mock 和 Rule 徽章保留。
+- The 更多操作 tooltip closes while its menu is open, and the menu sits above tooltips, so the tip cannot cover 置顶 or 删除.
+- 「更多操作」菜单打开时提示会收起，菜单层级也高于提示，避免挡住「置顶」或「删除」。
 
 ## [0.5.3] - 2026-11-10
 

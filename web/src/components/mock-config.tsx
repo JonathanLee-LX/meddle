@@ -30,6 +30,41 @@ import { cn } from '@/lib/utils'
 
 const INVALID_FILE_CREATE_HINT = 'Mock 文件格式错误，修复后才能新增'
 
+function MockRowMenu({ rule, onDelete }: { rule: MockRule; onDelete: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [tipOpen, setTipOpen] = useState(false)
+  return (
+    <DropdownMenu
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (next) setTipOpen(false)
+      }}
+    >
+      <DropdownMenuTrigger asChild>
+        <IconButton
+          label={`更多操作 ${rule.name || rule.urlPattern}`}
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground"
+          tooltipOpen={open ? false : tipOpen}
+          onTooltipOpenChange={(next) => {
+            if (!open) setTipOpen(next)
+          }}
+        >
+          <MoreHorizontal />
+        </IconButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={onDelete}>
+          <Trash2 />
+          删除
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 export { MOCK_OPEN_CREATE_EVENT }
 export type { MockOpenCreateDetail }
 
@@ -308,27 +343,7 @@ export function MockConfig({
                         </TableCell>
                         <TableCell onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
                           {narrowList ? (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <IconButton
-                                  label={`更多操作 ${rule.name || rule.urlPattern}`}
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  className="text-muted-foreground"
-                                >
-                                  <MoreHorizontal />
-                                </IconButton>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent>
-                                <DropdownMenuItem
-                                  className="text-destructive focus:text-destructive"
-                                  onSelect={() => setPendingDelete(rule)}
-                                >
-                                  <Trash2 />
-                                  删除
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            <MockRowMenu rule={rule} onDelete={() => setPendingDelete(rule)} />
                           ) : (
                           <div className="flex items-center gap-0.5">
                             {rule.bodyType === 'file' ? (

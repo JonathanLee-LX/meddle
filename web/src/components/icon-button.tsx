@@ -10,6 +10,13 @@ export interface IconButtonProps extends Omit<ComponentProps<typeof Button>, 'ar
   /** Hover and focus tooltip. Defaults to `label`. */
   tooltip?: string
   tooltipSide?: TooltipSide
+  /**
+   * Control the tooltip. Pass a boolean for the whole lifetime of the button
+   * (for example `false` while its menu is open). Omit it to let hover and
+   * focus open the tooltip.
+   */
+  tooltipOpen?: boolean
+  onTooltipOpenChange?: (open: boolean) => void
   children: ReactNode
 }
 
@@ -22,6 +29,8 @@ export function IconButton({
   label,
   tooltip,
   tooltipSide = 'top',
+  tooltipOpen,
+  onTooltipOpenChange,
   children,
   type = 'button',
   size = 'icon-sm',
@@ -30,7 +39,7 @@ export function IconButton({
 }: IconButtonProps) {
   const tip = tooltip ?? label
   return (
-    <Tooltip>
+    <Tooltip {...(tooltipOpen === undefined ? {} : { open: tooltipOpen, onOpenChange: onTooltipOpenChange })}>
       <TooltipTrigger asChild describe={tip !== label}>
         <Button type={type} size={size} variant={variant} aria-label={label} {...props}>
           {children}
