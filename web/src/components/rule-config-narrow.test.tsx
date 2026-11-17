@@ -93,7 +93,9 @@ describe('RuleConfig narrow table (#166)', () => {
 
     await user.click(screen.getByRole('button', { name: '更多操作 example.com' }))
     expect(await screen.findByRole('menuitem', { name: '置顶' })).toBeInTheDocument()
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
     await user.click(screen.getByRole('menuitem', { name: '删除规则' }))
     expect(await screen.findByRole('alertdialog', { name: '删除规则' })).toBeInTheDocument()
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
 })

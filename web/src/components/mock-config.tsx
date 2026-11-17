@@ -21,7 +21,7 @@ import { mockPaneSplit } from '@/lib/mock-pane-split'
 import { MocksFileInvalidEmptyState, MocksFileMissingEmptyState } from '@/components/mocks-file-missing-note'
 import { MOCKS_FILE_STATUS_CHANGED_EVENT, formatMocksParseLocation, isMocksFileInvalid, shouldShowMocksFileMissing, useMocksFileStatus } from '@/hooks/use-mocks-file-status'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { IconButton } from '@/components/icon-button'
+import { IconButton, useMenuTriggerTooltip } from '@/components/icon-button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog'
 import { useMediaQuery } from '@/hooks/use-media-query'
@@ -31,26 +31,17 @@ import { cn } from '@/lib/utils'
 const INVALID_FILE_CREATE_HINT = 'Mock 文件格式错误，修复后才能新增'
 
 function MockRowMenu({ rule, onDelete }: { rule: MockRule; onDelete: () => void }) {
-  const [open, setOpen] = useState(false)
-  const [tipOpen, setTipOpen] = useState(false)
+  const { menuOpen, tooltipOpen, onMenuOpenChange, onTooltipOpenChange } = useMenuTriggerTooltip()
   return (
-    <DropdownMenu
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next)
-        if (next) setTipOpen(false)
-      }}
-    >
+    <DropdownMenu open={menuOpen} onOpenChange={onMenuOpenChange}>
       <DropdownMenuTrigger asChild>
         <IconButton
           label={`更多操作 ${rule.name || rule.urlPattern}`}
           variant="ghost"
           size="icon-sm"
           className="text-muted-foreground"
-          tooltipOpen={open ? false : tipOpen}
-          onTooltipOpenChange={(next) => {
-            if (!open) setTipOpen(next)
-          }}
+          tooltipOpen={tooltipOpen}
+          onTooltipOpenChange={onTooltipOpenChange}
         >
           <MoreHorizontal />
         </IconButton>

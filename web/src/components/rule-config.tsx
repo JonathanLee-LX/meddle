@@ -47,7 +47,7 @@ import { supportsOpenFilePicker } from '@/types/file-system-access'
 import { FEATURE_FLAGS } from '@/lib/feature-flags'
 import { ruleFilePaneSplit } from '@/lib/rule-file-split'
 import { SplitPane } from '@/components/split-pane'
-import { IconButton } from '@/components/icon-button'
+import { IconButton, useMenuTriggerTooltip } from '@/components/icon-button'
 import { EditorEmptyState, EditorSaveButton, EditorTitleBar, PaneBar, PaneTitle } from '@/components/pane-bar'
 import { useEditorScrolled } from '@/hooks/use-editor-scrolled'
 import { getEprcTextDiagnostics, normalizeImportedRuleText, parseEprcRules, rulesToEprc, rulesToEprcPreserving } from '@/utils/eprc-parser'
@@ -303,28 +303,19 @@ function RuleRowMenu({
   onDelete: () => void
   onMoveToTop: () => void
 }) {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [tipOpen, setTipOpen] = useState(false)
+  const { menuOpen, tooltipOpen, onMenuOpenChange, onTooltipOpenChange } = useMenuTriggerTooltip()
   const guard = (fn: () => void) => () => {
     if (!locked) fn()
   }
   const name = ruleLabel ? `更多操作 ${ruleLabel}` : '更多操作'
   return (
-    <DropdownMenu
-      open={menuOpen}
-      onOpenChange={(next) => {
-        setMenuOpen(next)
-        if (next) setTipOpen(false)
-      }}
-    >
+    <DropdownMenu open={menuOpen} onOpenChange={onMenuOpenChange}>
       <DropdownMenuTrigger asChild>
         <IconButton
           label={name}
           tooltip={locked ? RULESET_LOCKED_HINT : '更多操作'}
-          tooltipOpen={menuOpen ? false : tipOpen}
-          onTooltipOpenChange={(next) => {
-            if (!menuOpen) setTipOpen(next)
-          }}
+          tooltipOpen={tooltipOpen}
+          onTooltipOpenChange={onTooltipOpenChange}
           variant="ghost"
           size="icon-sm"
           aria-disabled={locked || undefined}

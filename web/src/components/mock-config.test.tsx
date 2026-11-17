@@ -186,8 +186,10 @@ describe('MockConfig list|edit (P3 / #90)', () => {
     expect(screen.queryByRole('button', { name: '删除 Mock 规则' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '更多操作 cart' }))
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
     await user.click(await screen.findByRole('menuitem', { name: '删除' }))
     expect(await screen.findByRole('alertdialog', { name: '删除 Mock 规则' })).toBeInTheDocument()
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
 })
 
