@@ -437,6 +437,45 @@ describe('LogTable narrow cards', () => {
     expect(row).toHaveAttribute('aria-selected', 'true')
     expect(screen.queryByRole('columnheader', { name: '协议' })).not.toBeInTheDocument()
   })
+
+  it('omits the dashed pass badge when a narrow card was not rewritten', () => {
+    installViewport(390)
+    render(
+      <LogTable
+        records={[{
+          id: 3,
+          method: 'GET',
+          statusCode: 200,
+          source: 'https://cdn.example/app.css',
+          target: 'https://cdn.example/app.css',
+          time: '5:46:44 PM',
+        }]}
+        selectedRecordId={null}
+        onSelect={vi.fn()}
+        autoScroll={false}
+      />,
+    )
+
+    expect(screen.getByTestId('log-table')).toHaveAttribute('data-layout', 'cards')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.queryByText('—')).not.toBeInTheDocument()
+    expect(screen.getByText('https://cdn.example/app.css')).toBeInTheDocument()
+  })
+
+  it('keeps Mock and Rule badges on narrow cards', () => {
+    installViewport(390)
+    render(
+      <LogTable
+        records={[profileRecord]}
+        selectedRecordId={null}
+        onSelect={vi.fn()}
+        autoScroll={false}
+      />,
+    )
+
+    expect(screen.getByRole('status')).toHaveAttribute('data-hit-kind', 'mock')
+    expect(screen.getByRole('status')).toHaveTextContent('Mock')
+  })
 })
 
 describe('LogTable columns while the detail pane is open', () => {
@@ -466,6 +505,9 @@ describe('LogTable columns while the detail pane is open', () => {
     const url = screen.getByText('http://api.example.com/user/profile')
     expect(url).toHaveAttribute('title', 'http://api.example.com/user/profile')
     expect(url).toHaveClass('min-w-0', 'truncate')
+    expect(url.parentElement).toHaveClass('min-w-0', 'overflow-hidden')
+    expect(row).toHaveClass('overflow-hidden')
+    expect(screen.getByTestId('log-table-track')).toHaveClass('overflow-hidden', 'min-w-0')
     expect(screen.getByTestId('log-table-track').className).not.toContain('min-w-[calc(960/14*1rem)]')
     expect(screen.queryByText('h1.1')).not.toBeInTheDocument()
     expect(screen.queryByText('121ms')).not.toBeInTheDocument()

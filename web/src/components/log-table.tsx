@@ -10,6 +10,7 @@ import { useTheme } from '@/components/theme-provider'
 import { cn } from '@/lib/utils'
 import type { ProxyRecord } from '@/types'
 import { TrafficHitBadge } from '@/components/traffic-hit-badge'
+import { getTrafficHitSummary } from '@/lib/traffic-hit'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { TRAFFIC_NARROW_MAX_WIDTH_PX } from '@/lib/traffic-split'
 
@@ -337,15 +338,16 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll, deta
           <div
             role="cell"
             key={id}
-            className={cn('flex h-full items-center truncate px-2 font-mono', width)}
-            title={record.source}
+            className={cn('flex h-full min-w-0 items-center gap-1 overflow-hidden px-2 font-mono', width)}
           >
             {record._fromPluginTest && (
-              <Badge variant="secondary" className={cn(tableBadgeClassName, 'mr-1')}>
+              <Badge variant="secondary" className={cn(tableBadgeClassName, 'mr-1 shrink-0')}>
                 插件测试
               </Badge>
             )}
-            {record.source}
+            <span className="block min-w-0 flex-1 truncate" title={record.source}>
+              {record.source}
+            </span>
           </div>
         )
       case 'target':
@@ -400,7 +402,7 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll, deta
         data-testid="log-table-track"
         className={layout === 'full'
           ? 'flex min-h-0 min-w-[calc(960/14*1rem)] flex-1 flex-col'
-          : 'flex min-h-0 w-full min-w-0 flex-1 flex-col'}
+          : 'flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden'}
       >
         {layout === 'cards' ? (
           <>
@@ -456,7 +458,7 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll, deta
                         layout === 'cards'
                           ? 'min-w-0 flex-col justify-center gap-1 overflow-hidden px-2 py-1'
                           : 'items-center',
-                        layout === 'compact' && 'min-w-0',
+                        layout === 'compact' && 'min-w-0 overflow-hidden',
                         isSelected ? 'bg-accent' : 'hover:bg-muted/50',
                       )}
                       onClick={() => record.id != null && onSelect(record.id)}
@@ -480,7 +482,9 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll, deta
                             <span className="min-w-0 truncate text-[calc(10/14*1rem)] text-muted-foreground">
                               {getClientLabel(record)}
                             </span>
-                            <TrafficHitBadge record={record} className="shrink-0" />
+                            {getTrafficHitSummary(record).kind !== 'pass' && (
+                              <TrafficHitBadge record={record} className="shrink-0" />
+                            )}
                             <span className="ml-auto shrink-0 font-mono text-[calc(10/14*1rem)] text-muted-foreground">
                               {record.duration != null ? formatDuration(record.duration) : record.time}
                             </span>

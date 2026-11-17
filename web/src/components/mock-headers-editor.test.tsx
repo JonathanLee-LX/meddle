@@ -53,6 +53,9 @@ describe('MockHeadersEditor', () => {
     render(<MockHeadersEditor value={'{\n  "X-Test": "1"\n}'} onChange={onChange} />)
 
     expect(screen.getByLabelText('响应头名称 1')).toHaveValue('X-Test')
+    const headerValue = screen.getByLabelText('响应头值 1')
+    expect(headerValue).toHaveClass('min-w-[calc(16ch+2rem)]')
+    expect(headerValue.parentElement).toHaveClass('flex-wrap', 'min-w-0')
     fireEvent.change(screen.getByLabelText('响应头值 1'), { target: { value: '2' } })
     expect(onChange).toHaveBeenLastCalledWith('{\n  "X-Test": "2"\n}')
 

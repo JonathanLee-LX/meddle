@@ -631,6 +631,29 @@ function InspectionView({ inspection }: { inspection: NonNullable<RecordDetail['
 }
 
 
+const SOFT_BREAK_AFTER = /[/.:?&=]/
+
+/** Break after URL punctuation so overflow-wrap does not leave a single letter on the next line. */
+function SoftWrapText({ text }: { text: string }) {
+  const nodes: ReactNode[] = []
+  let buf = ''
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    buf += ch
+    if (SOFT_BREAK_AFTER.test(ch)) {
+      nodes.push(
+        <Fragment key={i}>
+          {buf}
+          <wbr />
+        </Fragment>,
+      )
+      buf = ''
+    }
+  }
+  if (buf) nodes.push(<Fragment key="tail">{buf}</Fragment>)
+  return <>{nodes}</>
+}
+
 function formatDurationMs(ms: number | undefined) {
   if (ms == null) return '—'
   if (ms < 1000) return `${ms} ms`
@@ -679,11 +702,11 @@ function OverviewHitPane({ record, detail }: { record: ProxyRecord; detail: Reco
         <div className="mb-2 text-sm font-semibold">{hit.title}</div>
         {/* At most ONE equal-width code box for hit display (wireframe B). */}
         <pre
-          className="meddle-thin-scroll w-full overflow-x-auto rounded border bg-muted/30 px-2 py-1.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all"
+          className="meddle-thin-scroll min-w-0 w-full overflow-hidden rounded border bg-muted/30 px-2 py-1.5 font-mono text-[length:calc(11/14*1rem)] leading-relaxed whitespace-pre-wrap break-words"
           data-testid="detail-hit-box"
           data-hit-kind={hit.kind}
         >
-          {hitCode}
+          <SoftWrapText text={hitCode} />
         </pre>
       </div>
 

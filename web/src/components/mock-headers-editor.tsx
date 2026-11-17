@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { GripVertical, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/icon-button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -128,7 +129,7 @@ export function MockHeadersEditor({ value, onChange }: MockHeadersEditorProps) {
         ) : (
           <div className="flex flex-col gap-2" data-testid="mock-headers-list">
             {rows.map((row, index) => (
-              <div key={row.id} className="flex items-center gap-2">
+              <div key={row.id} className="flex min-w-0 flex-wrap items-center gap-2">
                 <Input
                   value={row.key}
                   onChange={(event) => {
@@ -137,7 +138,7 @@ export function MockHeadersEditor({ value, onChange }: MockHeadersEditorProps) {
                   }}
                   placeholder="名称"
                   aria-label={`响应头名称 ${index + 1}`}
-                  className="font-mono"
+                  className="min-w-[8rem] flex-1 basis-40 font-mono"
                 />
                 <Input
                   value={row.value}
@@ -147,17 +148,17 @@ export function MockHeadersEditor({ value, onChange }: MockHeadersEditorProps) {
                   }}
                   placeholder="值"
                   aria-label={`响应头值 ${index + 1}`}
-                  className="font-mono"
+                  className="min-w-[calc(16ch+2rem)] flex-1 basis-48 font-mono"
                 />
-                <Button
-                  type="button"
+                <IconButton
+                  label={`删除响应头 ${index + 1}`}
                   variant="ghost"
                   size="icon-sm"
-                  aria-label={`删除响应头 ${index + 1}`}
+                  className="shrink-0"
                   onClick={() => commitRows(rows.filter((item) => item.id !== row.id))}
                 >
                   <Trash2 />
-                </Button>
+                </IconButton>
               </div>
             ))}
             <Button

@@ -22,6 +22,7 @@ import {
   ListChecks,
   Lock,
   LockOpen,
+  MoreHorizontal,
   Plus,
   Table2,
   ToggleLeft,
@@ -60,6 +61,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { useMediaQuery } from '@/hooks/use-media-query'
+import { CONFIG_NARROW_QUERY } from '@/lib/config-narrow'
 
 interface RuleConfigProps {
   rules: RuleItem[]
@@ -126,12 +130,17 @@ interface SortableRuleRowProps {
   onMoveToTop: () => void
   /** Issue #137: the ruleset is read-only; every control is greyed and inert. */
   locked?: boolean
+  /** Stacked card: pattern, exclusion, and target fit without a horizontal scroller. */
+  compact?: boolean
 }
 
 interface ExclusionsInputProps {
   exclusions: string[]
   onCommit: (value: string[]) => void
   locked?: boolean
+  /** Overrides the wide-table minimum width (cards pass a fluid width). */
+  fieldClassName?: string
+  ariaLabel?: string
 }
 
 const RULE_ROW_HIGHLIGHT_CLASS = 'bg-primary/10 shadow-[inset_3px_0_0_var(--primary)] transition-[background-color,box-shadow]'
@@ -155,7 +164,7 @@ function getAvailableRuleFileName(files: RuleFile[], baseName: string): string {
   return `${baseName}-${index}`
 }
 
-const ExclusionsInput = memo(function ExclusionsInput({ exclusions, onCommit, locked = false }: ExclusionsInputProps) {
+const ExclusionsInput = memo(function ExclusionsInput({ exclusions, onCommit, locked = false, fieldClassName, ariaLabel }: ExclusionsInputProps) {
   const [draft, setDraft] = useState(exclusions.join(' '))
 
   const commitDraft = useCallback(() => {
@@ -167,6 +176,7 @@ const ExclusionsInput = memo(function ExclusionsInput({ exclusions, onCommit, lo
       <Input
         value={draft}
         readOnly={locked}
+        aria-label={ariaLabel}
         onChange={(e) => {
           if (!locked) setDraft(e.target.value)
         }}
@@ -177,7 +187,7 @@ const ExclusionsInput = memo(function ExclusionsInput({ exclusions, onCommit, lo
           }
         }}
         placeholder="!/api !/ws"
-        className={`${locked ? LOCKED_INPUT_CLASS : 'h-8'} ${RULE_FIELD_MIN_CLASS}`}
+        className={`${locked ? LOCKED_INPUT_CLASS : 'h-8'} ${fieldClassName ?? RULE_FIELD_MIN_CLASS}`}
       />
     </LockedHint>
   )
@@ -235,40 +245,193 @@ function RuleRowCells({
         </LockedHint>
       </TableCell>
       <TableCell className="w-24">
-        <div className="flex gap-1">
-          <LockedHint locked={locked}>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={guard(onMoveToTop)}
-              aria-disabled={locked || undefined}
-              className={locked ? `text-muted-foreground ${LOCKED_CONTROL_CLASS}` : 'text-muted-foreground hover:text-primary'}
-              title={locked ? undefined : '置顶'}
-              aria-label="置顶"
-            >
-              <ArrowUpToLine className="h-4 w-4" />
-            </Button>
-          </LockedHint>
-          <LockedHint locked={locked}>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={guard(onDelete)}
-              aria-disabled={locked || undefined}
-              className={locked ? `text-muted-foreground ${LOCKED_CONTROL_CLASS}` : 'text-muted-foreground hover:text-destructive'}
-              aria-label="删除规则"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </LockedHint>
-        </div>
+        <RuleRowActions locked={locked} onDelete={onDelete} onMoveToTop={onMoveToTop} />
       </TableCell>
     </>
   )
 }
 
+function RuleRowActions({
+  locked,
+  onDelete,
+  onMoveToTop,
+}: {
+  locked: boolean
+  onDelete: () => void
+  onMoveToTop: () => void
+}) {
+  const guard = (fn: () => void) => () => {
+    if (!locked) fn()
+  }
+  return (
+    <div className="flex gap-1">
+      <IconButton
+        label="置顶"
+        tooltip={locked ? RULESET_LOCKED_HINT : '置顶'}
+        variant="ghost"
+        size="icon-sm"
+        onClick={guard(onMoveToTop)}
+        aria-disabled={locked || undefined}
+        className={locked ? `text-muted-foreground ${LOCKED_CONTROL_CLASS}` : 'text-muted-foreground hover:text-primary'}
+      >
+        <ArrowUpToLine />
+      </IconButton>
+      <IconButton
+        label="删除规则"
+        tooltip={locked ? RULESET_LOCKED_HINT : '删除规则'}
+        variant="ghost"
+        size="icon-sm"
+        onClick={guard(onDelete)}
+        aria-disabled={locked || undefined}
+        className={locked ? `text-muted-foreground ${LOCKED_CONTROL_CLASS}` : 'text-muted-foreground hover:text-destructive'}
+      >
+        <Trash2 />
+      </IconButton>
+    </div>
+  )
+}
+
+/** Narrow rows: pattern, exclusion, and target stack, and the actions live in one menu. */
+function RuleRowMenu({
+  locked,
+  ruleLabel,
+  onDelete,
+  onMoveToTop,
+}: {
+  locked: boolean
+  ruleLabel: string
+  onDelete: () => void
+  onMoveToTop: () => void
+}) {
+  const guard = (fn: () => void) => () => {
+    if (!locked) fn()
+  }
+  const name = ruleLabel ? `更多操作 ${ruleLabel}` : '更多操作'
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <IconButton
+          label={name}
+          tooltip={locked ? RULESET_LOCKED_HINT : '更多操作'}
+          variant="ghost"
+          size="icon-sm"
+          aria-disabled={locked || undefined}
+          className={locked ? `shrink-0 ${LOCKED_CONTROL_CLASS}` : 'shrink-0 text-muted-foreground'}
+        >
+          <MoreHorizontal />
+        </IconButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuItem disabled={locked} onSelect={guard(onMoveToTop)}>
+          <ArrowUpToLine />
+          置顶
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={locked}
+          onSelect={guard(onDelete)}
+          className="text-destructive focus:text-destructive"
+        >
+          <Trash2 />
+          删除规则
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function RuleCard({
+  item,
+  locked,
+  highlighted,
+  drag,
+  onToggle,
+  onUpdateRule,
+  onCommitExclusions,
+  onDelete,
+  onMoveToTop,
+  setNodeRef,
+  style,
+}: {
+  item: RuleItem
+  locked: boolean
+  highlighted: boolean
+  drag?: React.ReactNode
+  onToggle: () => void
+  onUpdateRule: (field: 'rule' | 'target') => (e: React.ChangeEvent<HTMLInputElement>) => void
+  onCommitExclusions: (value: string[]) => void
+  onDelete: () => void
+  onMoveToTop: () => void
+  setNodeRef?: (node: HTMLDivElement | null) => void
+  style?: React.CSSProperties
+}) {
+  const guard = (fn: () => void) => () => {
+    if (!locked) fn()
+  }
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      data-testid="rule-card"
+      className={cn(
+        'min-w-0 rounded-md border bg-card p-[var(--ui-field-gap)]',
+        highlighted && RULE_ROW_HIGHLIGHT_CLASS,
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        {drag}
+        <LockedHint locked={locked}>
+          <Checkbox
+            checked={item.enabled}
+            onCheckedChange={guard(onToggle)}
+            aria-label={item.enabled ? '禁用规则' : '启用规则'}
+            aria-disabled={locked || undefined}
+            className={cn('shrink-0', locked && LOCKED_CONTROL_CLASS)}
+          />
+        </LockedHint>
+        <LockedHint locked={locked}>
+          <Input
+            value={item.rule}
+            readOnly={locked}
+            aria-label="规则"
+            onChange={locked ? undefined : onUpdateRule('rule')}
+            placeholder="example.com"
+            className={cn('h-8 min-w-0 flex-1', locked && LOCKED_INPUT_CLASS)}
+          />
+        </LockedHint>
+        <RuleRowMenu locked={locked} ruleLabel={item.rule} onDelete={onDelete} onMoveToTop={onMoveToTop} />
+      </div>
+      <div className="mt-2 grid min-w-0 gap-2">
+        <div className="min-w-0">
+          <div className="mb-1 text-xs text-muted-foreground">排除</div>
+          <ExclusionsInput
+            key={JSON.stringify(item.exclusions || [])}
+            exclusions={item.exclusions || []}
+            onCommit={onCommitExclusions}
+            locked={locked}
+            ariaLabel="排除"
+            fieldClassName="w-full min-w-0"
+          />
+        </div>
+        <div className="min-w-0">
+          <div className="mb-1 text-xs text-muted-foreground">目标</div>
+          <LockedHint locked={locked}>
+            <Input
+              value={item.target}
+              readOnly={locked}
+              aria-label="目标"
+              onChange={locked ? undefined : onUpdateRule('target')}
+              placeholder="127.0.0.1:3000"
+              className={cn('h-8 w-full min-w-0', locked && LOCKED_INPUT_CLASS)}
+            />
+          </LockedHint>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const SortableRuleRow = memo(
-  function SortableRuleRow({ id, item, highlighted, highlightRef, onToggle, onUpdateRule, onDelete, onMoveToTop, locked = false }: SortableRuleRowProps) {
+  function SortableRuleRow({ id, item, highlighted, highlightRef, onToggle, onUpdateRule, onDelete, onMoveToTop, locked = false, compact = false }: SortableRuleRowProps) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: locked })
 
     const style: React.CSSProperties = {
@@ -295,14 +458,46 @@ const SortableRuleRow = memo(
     const handleDelete = useCallback(() => onDelete(), [onDelete])
     const handleMoveToTop = useCallback(() => onMoveToTop(), [onMoveToTop])
     const setRowRef = useCallback(
-      (node: HTMLTableRowElement | null) => {
+      (node: HTMLElement | null) => {
         setNodeRef(node)
         if (highlighted && highlightRef) {
-          highlightRef.current = node
+          highlightRef.current = node as HTMLTableRowElement | null
         }
       },
       [highlightRef, highlighted, setNodeRef],
     )
+
+    if (compact) {
+      return (
+        <RuleCard
+          item={item}
+          locked={locked}
+          highlighted={highlighted}
+          onToggle={handleToggle}
+          onUpdateRule={handleUpdateRule}
+          onCommitExclusions={handleCommitExclusions}
+          onDelete={handleDelete}
+          onMoveToTop={handleMoveToTop}
+          setNodeRef={setRowRef}
+          style={style}
+          drag={
+            locked ? (
+              <span className="w-4 shrink-0" data-slot="rule-row-drag-handle" aria-hidden="true" />
+            ) : (
+              <span
+                className="shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing"
+                data-slot="rule-row-drag-handle"
+                {...attributes}
+                {...listeners}
+                aria-label="拖拽排序"
+              >
+                <GripVertical className="h-4 w-4" />
+              </span>
+            )
+          }
+        />
+      )
+    }
 
     return (
       <TableRow
@@ -341,7 +536,8 @@ const SortableRuleRow = memo(
       prevProps.item === nextProps.item &&
       prevProps.highlighted === nextProps.highlighted &&
       prevProps.id === nextProps.id &&
-      prevProps.locked === nextProps.locked
+      prevProps.locked === nextProps.locked &&
+      prevProps.compact === nextProps.compact
     )
   },
 )
@@ -355,10 +551,11 @@ interface FilteredRuleRowProps {
   onDelete: () => void
   onMoveToTop: () => void
   locked?: boolean
+  compact?: boolean
 }
 
 const FilteredRuleRow = memo(
-  function FilteredRuleRow({ item, highlighted, highlightRef, onToggle, onUpdateRule, onDelete, onMoveToTop, locked = false }: FilteredRuleRowProps) {
+  function FilteredRuleRow({ item, highlighted, highlightRef, onToggle, onUpdateRule, onDelete, onMoveToTop, locked = false, compact = false }: FilteredRuleRowProps) {
     const handleToggle = useCallback(() => onToggle(), [onToggle])
     const handleUpdateRule = useCallback(
       (field: 'rule' | 'target') => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -375,6 +572,24 @@ const FilteredRuleRow = memo(
     const handleDelete = useCallback(() => onDelete(), [onDelete])
     const handleMoveToTop = useCallback(() => onMoveToTop(), [onMoveToTop])
 
+    if (compact) {
+      return (
+        <RuleCard
+          item={item}
+          locked={locked}
+          highlighted={highlighted}
+          onToggle={handleToggle}
+          onUpdateRule={handleUpdateRule}
+          onCommitExclusions={handleCommitExclusions}
+          onDelete={handleDelete}
+          onMoveToTop={handleMoveToTop}
+          setNodeRef={(node) => {
+            if (highlighted && highlightRef) highlightRef.current = node as HTMLTableRowElement | null
+          }}
+        />
+      )
+    }
+
     return (
       <TableRow ref={highlighted ? highlightRef : undefined} className={highlighted ? RULE_ROW_HIGHLIGHT_CLASS : undefined}>
         <RuleRowCells
@@ -390,7 +605,10 @@ const FilteredRuleRow = memo(
     )
   },
   (prevProps, nextProps) =>
-    prevProps.item === nextProps.item && prevProps.highlighted === nextProps.highlighted && prevProps.locked === nextProps.locked,
+    prevProps.item === nextProps.item &&
+    prevProps.highlighted === nextProps.highlighted &&
+    prevProps.locked === nextProps.locked &&
+    prevProps.compact === nextProps.compact,
 )
 
 function RuleTableColGroup({ showDragColumn }: { showDragColumn: boolean }) {
@@ -642,6 +860,95 @@ function SortableRuleFileTab({
         </span>
       )}
     </TabsTrigger>
+  )
+}
+
+function RuleCardStack({
+  activeFileName,
+  rules,
+  filteredRules,
+  sortableRuleRows,
+  sensors,
+  highlightIndex,
+  highlightRowRef,
+  ruleFilter,
+  targetFilter,
+  locked,
+  onDragEnd,
+  onToggle,
+  onUpdate,
+  onDelete,
+  onMoveToTop,
+}: {
+  activeFileName: string | null
+  rules: RuleItem[]
+  filteredRules: { item: RuleItem; index: number }[]
+  sortableRuleRows: { item: RuleItem; index: number; id: string }[]
+  sensors: ReturnType<typeof useSensors>
+  highlightIndex: number | null
+  highlightRowRef: React.RefObject<HTMLTableRowElement | null>
+  ruleFilter: string
+  targetFilter: string
+  locked: boolean
+  onDragEnd: (event: DragEndEvent) => void
+  onToggle: (index: number) => () => void
+  onUpdate: (index: number) => (field: 'rule' | 'target' | 'exclusions', value: string | string[]) => void
+  onDelete: (index: number) => () => void
+  onMoveToTop: (index: number) => () => void
+}) {
+  if (!activeFileName) {
+    return <div className="px-3 py-8 text-center text-sm text-muted-foreground">请选择或创建一个规则文件</div>
+  }
+  if (rules.length === 0) {
+    return <div className="px-3 py-8 text-center text-sm text-muted-foreground">{'暂无规则，点击"添加规则"开始配置'}</div>
+  }
+  if (filteredRules.length === 0) {
+    return <div className="px-3 py-8 text-center text-sm text-muted-foreground">没有匹配的规则，请调整筛选条件</div>
+  }
+
+  if (ruleFilter || targetFilter) {
+    return (
+      <div className="flex min-w-0 flex-col gap-[var(--ui-field-gap)] p-[var(--ui-section-gap)]">
+        {filteredRules.map(({ item, index }) => (
+          <FilteredRuleRow
+            key={index}
+            compact
+            item={item}
+            highlighted={highlightIndex === index}
+            highlightRef={highlightRowRef}
+            onToggle={onToggle(index)}
+            onUpdateRule={onUpdate(index)}
+            onDelete={onDelete(index)}
+            onMoveToTop={onMoveToTop(index)}
+            locked={locked}
+          />
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <SortableContext items={sortableRuleRows.map((row) => row.id)} strategy={verticalListSortingStrategy}>
+        <div className="flex min-w-0 flex-col gap-[var(--ui-field-gap)] p-[var(--ui-section-gap)]">
+          {sortableRuleRows.map(({ item, index, id }) => (
+            <SortableRuleRow
+              key={id}
+              compact
+              id={id}
+              item={item}
+              highlighted={highlightIndex === index}
+              highlightRef={highlightRowRef}
+              onToggle={onToggle(index)}
+              onUpdateRule={onUpdate(index)}
+              onDelete={onDelete(index)}
+              onMoveToTop={onMoveToTop(index)}
+              locked={locked}
+            />
+          ))}
+        </div>
+      </SortableContext>
+    </DndContext>
   )
 }
 
@@ -1293,6 +1600,7 @@ export function RuleConfig(props: RuleConfigProps) {
   const textDiagnostics = useMemo(() => getEprcTextDiagnostics(displayedTextDraft), [displayedTextDraft])
   const textHasErrors = viewMode === 'text' && textDiagnostics.length > 0
   const showDragColumn = !ruleFilter && !targetFilter
+  const compactRules = useMediaQuery(CONFIG_NARROW_QUERY)
 
   const canSave = Boolean(activeFileName) && !activeReadonly && !saving && !textLoading && !textHasErrors
   useSaveShortcut({
@@ -1708,7 +2016,31 @@ export function RuleConfig(props: RuleConfigProps) {
                 className="meddle-thin-scroll min-h-0 flex-1"
                 viewportProps={{ onScroll: editorScroll.onScroll }}
               >
-              <div data-testid="rule-table-track" className="min-w-[calc(640/14*1rem)]">
+              <div
+                data-testid="rule-table-track"
+                data-layout={compactRules ? 'cards' : 'table'}
+                className={compactRules ? 'min-w-0' : 'min-w-[calc(640/14*1rem)]'}
+              >
+              {compactRules ? (
+                <RuleCardStack
+                  activeFileName={activeFileName}
+                  rules={rules}
+                  filteredRules={filteredRules}
+                  sortableRuleRows={sortableRuleRows}
+                  sensors={sensors}
+                  highlightIndex={highlightIndex}
+                  highlightRowRef={highlightRowRef}
+                  ruleFilter={ruleFilter}
+                  targetFilter={targetFilter}
+                  locked={activeReadonly}
+                  onDragEnd={handleDragEnd}
+                  onToggle={createToggleRuleCallback}
+                  onUpdate={createUpdateRuleCallback}
+                  onDelete={createDeleteRuleCallback}
+                  onMoveToTop={createMoveToTopCallback}
+                />
+              ) : (
+              <>
               <div
                 data-slot="rule-table-header"
                 className="sticky top-0 z-10 shrink-0 bg-card"
@@ -1793,6 +2125,8 @@ export function RuleConfig(props: RuleConfigProps) {
                   )}
                 </TableBody>
               </Table>
+              </>
+              )}
               </div>
               </ScrollArea>
           ) : (
